@@ -1,0 +1,7 @@
+scipy==1.13.1
+scikit-learn==1.5.0
+matplotlib==3.8.4
+seaborn==0.13.2
+gymnasium==0.29.1
+pygame==2.5.2
+tqdm==4.66.4
