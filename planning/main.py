@@ -141,10 +141,17 @@ def run(
                 print(f'Episode: {episode}, steps taken: {env.num_steps()}')
 
 
-if __name__ == '__main__':
-    if False:
+def run_dynaq(do_create_new_maze: bool = False):
+    model_steps = 5  # model planning steps
+
+    if do_create_new_maze:
         create_new_maze()
-    run(5,
+    run(model_steps,
         max_steps_per_episode=100,
         randomize_start_goal=False)
+
+
+if __name__ == '__main__':
+    run_dynaq(do_create_new_maze=False)
+
     exit(0)
