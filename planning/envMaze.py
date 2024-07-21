@@ -164,6 +164,10 @@ class ExtendedMazeEnvironment():
                 else:
                     # value = (self._agent.calValue((row, col)) * 100) // 10
                     value = (state_val_fn((row, col)) * 100) // 10
+
+                    # Clip to 9
+                    value = min(value, 9)
+
                     pygame.draw.rect(
                         self.surface,
                         pygame.Color(self.color[value]),

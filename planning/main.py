@@ -60,11 +60,13 @@ def get_environment(
     return env, s0
 
 
-def run(
+def run_dynaq(
         model_steps,
         maxEpisodes=200,
+        plus_k=None,
         max_steps_per_episode=0,
-        randomize_start_goal=False
+        randomize_start_goal=False,
+        skip_visual_confirmation=False
 ):
     """
         n: num simulation steps
@@ -84,7 +86,10 @@ def run(
             steps=(maxEpisodes // 4) * max(max_steps_per_episode, 100)
         )
 
-    env, s = get_environment(skip_visual_confirmation=False)
+    env, s = get_environment(
+        skip_visual_confirmation=skip_visual_confirmation
+    )
+
     n_actions = env.num_actions
     n_states = env.num_states
 
@@ -92,6 +97,7 @@ def run(
         action_space_dims=n_actions,
         obs_space_dims=n_states,
         update_coefficient=0.2,
+        plus_k=plus_k,
         model_steps=model_steps,
         eps=build_greedy_eps_sched(0.2)
     )
@@ -141,17 +147,46 @@ def run(
                 print(f'Episode: {episode}, steps taken: {env.num_steps()}')
 
 
-def run_dynaq(do_create_new_maze: bool = False):
+def dynaq_experiments(do_create_new_maze: bool = False):
     model_steps = 5  # model planning steps
 
     if do_create_new_maze:
         create_new_maze()
-    run(model_steps,
+
+    run_dynaq(
+        model_steps,
         max_steps_per_episode=100,
-        randomize_start_goal=False)
+        randomize_start_goal=False,
+        skip_visual_confirmation=not do_create_new_maze
+    )
+
+
+def dynaq_plus_experiments(do_create_new_maze: bool = False):
+    model_steps = 5  # model planning steps
+    plus_k = 0.01
+
+    if do_create_new_maze:
+        create_new_maze()
+
+    run_dynaq(
+        model_steps,
+        plus_k=plus_k,
+        max_steps_per_episode=100,
+        randomize_start_goal=False,
+        skip_visual_confirmation=not do_create_new_maze
+    )
 
 
 if __name__ == '__main__':
-    run_dynaq(do_create_new_maze=False)
+
+    dynaq_plus_experiments(
+        do_create_new_maze=False
+    )
+
+    dynaq_experiments(
+        do_create_new_maze=False
+    )
+
+
 
     exit(0)

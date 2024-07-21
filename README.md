@@ -46,7 +46,9 @@ intro_2_rl/
 ├── planning/          # Source code for Planning and Learning methods
 │   ├── agents.py      # MC algorithms from: Ch.8
 │   ├── main.py        # Main execution script
-│   └──  README.md      # Detailed information
+│   ├── envMaze.py     # DynaMaze environment
+│   ├── rl_glue.py     # Imported library for DynaMaze environment
+│   └── README.md      # Detailed information
 │
 ├── utils.py           # Base agents, utilities
 │
