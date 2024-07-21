@@ -8,6 +8,9 @@ from utils import (
 
 
 class MCOnPolicyFirstVisitGLIE(QEpsGreedyAgent):
+    """
+        Implementation of algorithm in 5.4: On-policy first-visit MC control
+    """
     def __init__(
             self,
             obs_space_dims: int,

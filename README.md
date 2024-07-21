@@ -7,6 +7,7 @@
 ## Table of Contents
 - [Introduction](#introduction)
 - [Features](#features)
+- [Implemented Chapters](#implemented-chapters)
 - [Code Organization](#code-organization)
 - [Dependencies](#dependencies)
 
@@ -18,7 +19,7 @@ Sutton & Barto's introductory book to RL is a fundamental reference for anyone s
 * They are encapsulated under "agent" objects. 
 * Environments come primarily from [Gymnasium], unless noted
 
-### Implemented chapters:
+## Implemented Chapters:
 - [ ] Chapter 2: Bandits (_TBD: merge from "Bandit" project_)
 - [x] Chapter 5: Monte Carlo methods
 - [x] Chapter 6: Temporal Difference methods
@@ -31,24 +32,26 @@ Sutton & Barto's introductory book to RL is a fundamental reference for anyone s
 intro_2_rl/
 │
 ├── README.md          # Project documentation
-├── requirements.txt   # Python dependencies
 │
 ├── monte_carlo/       # Source code for Monte Carlo (MC) methods
 │   ├── agents.py      # MC algorithms from: Ch.5
 │   ├── main.py        # Main execution script
-│   ├── README.md      # Detailed information
+│   └──  README.md      # Detailed information
 │
 ├── td/                # Source code for Temporal Difference (TD) methods
 │   ├── agents.py      # MC algorithms from: Ch.6,7
 │   ├── main.py        # Main execution script
-│   ├── README.md      # Detailed information
+│   └── README.md      # Detailed information
 │
 ├── planning/          # Source code for Planning and Learning methods
 │   ├── agents.py      # MC algorithms from: Ch.8
 │   ├── main.py        # Main execution script
-│   ├── README.md      # Detailed information
+│   └──  README.md      # Detailed information
 │
-└── utils.py           # Utilities
+├── utils.py           # Base agents, utilities
+│
+└── requirements.txt   # Python dependencies
+
 ```
 
 ## Dependencies

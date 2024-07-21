@@ -515,8 +515,7 @@ if __name__ == '__main__':
     T = 30
     q_init = 0.
 
-    # on_policy_experiments(num_episodes=num_episodes, T=T, q_init=q_init)
-
+    on_policy_experiments(num_episodes=num_episodes, T=T, q_init=q_init)
     off_policy_experiments(num_episodes=num_episodes, T=T, q_init=q_init)
 
     exit(0)
