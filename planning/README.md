@@ -31,8 +31,7 @@ The user can modify the grid, or simply confirm the loaded environment by pressi
 
 As the simulation runs, state (grid cell) values _V(s) = E<sub>a</sub>[Q(s, a)]_ are displayed as green colors.
 
-![grid](images/grid.png)
-
+<img src="images/grid.png" alt="Grid" width="300"/>
 
 ## Environments
 - Extension of [Dyna Maze Game], which implements the environment in _Example 8.1_: Dyna Maze in the book.
