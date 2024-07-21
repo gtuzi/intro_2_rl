@@ -31,7 +31,7 @@ simultaneously and in parallel in Dyna agents.
 
 ### Dyna-Q
 
-<img src="images/dyna_agent.png" alt="Grid" width="250"/>
+<img src="images/dyna_agent.png" alt="Grid" width="350"/>
 
 _Online planning_ agent which uses a _sample_ model (a sample model produces a possible transition). 
 Under the assumption of a deterministic environment, this model _learns_ 
@@ -70,7 +70,7 @@ The user can modify the grid, or simply confirm the loaded environment by pressi
 
 As the simulation runs, state (grid cell) values _V(s) = E<sub>a</sub>[Q(s, a)]_ are displayed as green colors.
 
-<img src="images/grid.png" alt="Grid" width="300"/>
+<img src="images/grid.png" alt="Grid" width="350"/>
 
 ## Environments
 - Extension of [Dyna Maze Game], which implements the environment in _Example 8.1_: Dyna Maze in the book.
