@@ -5,6 +5,11 @@ from utils import Experience, NoiseSchedule, QEpsGreedyAgent
 
 
 class TabularDynaQAgent(QEpsGreedyAgent):
+
+    """
+        Implementation of Tabular Dyna-Q in Section 8.2
+    """
+
     def __init__(
             self,
             obs_space_dims: int,

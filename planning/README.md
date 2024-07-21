@@ -14,7 +14,7 @@ A unified view of reinforcement learning methods that require a model of the env
 This section contains methods from Chapter 8, in [Sutton & Barto RL Book].
 
 ## Implemented Algorithms
-- [x] Tabular Dyna-Q
+- [x] Tabular Dyna-Q (Section 8.2): `agents/TabularDynaQAgent`
 
 ## Execution
 Run code in `main.py`. Each algorithm has its own `experiments` task.
