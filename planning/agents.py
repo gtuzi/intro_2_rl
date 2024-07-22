@@ -15,18 +15,18 @@ class TabularDynaQAgent(QEpsGreedyAgent):
             obs_space_dims: int,
             action_space_dims: int,
             update_coefficient: float,
-            discount: float = 0.9,
-            eps: Union[float, NoiseSchedule] = 0.01,
+            discount: float = 0.95,
+            eps: Union[float, NoiseSchedule] = 0.1,
             qval_init: float = 0.,
             model_steps: int = 0,
-            plus_k: Optional[float] = None  # Dyna-Q+ reward coefficient
+            dynaq_plus_k: Optional[float] = None,  # Dyna-Q+ exploration bonus reward coefficient
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
         assert 0. < update_coefficient < 1.
 
-        if plus_k is not None:
-            assert plus_k >= 0.
+        if dynaq_plus_k is not None:
+            assert dynaq_plus_k >= 0.
 
         if not isinstance(eps, NoiseSchedule):
             assert 0 <= eps <= 1
@@ -44,7 +44,7 @@ class TabularDynaQAgent(QEpsGreedyAgent):
         self.model: Optional[defaultdict] = None
         self.state_action_visit_time: Optional[defaultdict] = None
         self.model_steps = model_steps
-        self.plus_k = plus_k
+        self.dynaq_plus_k = dynaq_plus_k
 
     def initialize(self):
         self.t = 0
@@ -61,7 +61,7 @@ class TabularDynaQAgent(QEpsGreedyAgent):
         self.model = defaultdict(
             lambda: [(None, None)] * self.action_space_dims)
 
-        if self.plus_k is not None:
+        if self.dynaq_plus_k is not None:
             self.state_action_visit_time = defaultdict(
                 lambda: [0] * self.action_space_dims)
 
@@ -113,6 +113,7 @@ class TabularDynaQAgent(QEpsGreedyAgent):
             ]
 
             if self.state_action_visit_time is None:
+                # We're not tracking the (state,action) counts
                 # Random sample from already actions for this state (s)
                 a = visited_actions[
                     int(np.random.randint(len(visited_actions), size=1))
@@ -126,12 +127,17 @@ class TabularDynaQAgent(QEpsGreedyAgent):
                 # 2 - the initial model for such actions was that they would
                 #     lead back to the same state with a reward of zero
 
-                # Random sample from all actions
+                # Based on (1) random sample from ALL actions -
+                # not just the visited actions for this state.
                 a = int(np.random.randint(self.action_space_dims, size=1))
 
+                # If the selected action has been visited before, use the
+                # model (next-state, reward)
                 if a in visited_actions:
                     sp, r = self.model[s][a]
                 else:
+                    # Otherwise, per (2), reward is zero and next step is the
+                    # starting step
                     sp, r = s, 0
 
             if self.state_action_visit_time is not None:
@@ -139,7 +145,7 @@ class TabularDynaQAgent(QEpsGreedyAgent):
                 # For actions that have not been visited, r = 0, so
                 # the reward is purely time
                 dt = self.t - self.state_action_visit_time[s][a]
-                r += self.plus_k * math.sqrt(dt)
+                r += self.dynaq_plus_k * math.sqrt(dt)
 
             experience = Experience(
                 s=s,
@@ -171,7 +177,7 @@ class TabularDynaQAgent(QEpsGreedyAgent):
         self.t = 0
 
         # Reset the visitation counts
-        if self.plus_k is not None:
+        if self.dynaq_plus_k is not None:
             self.state_action_visit_time = defaultdict(
                 lambda: [0] * self.action_space_dims)
 

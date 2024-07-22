@@ -1,3 +1,4 @@
+import math
 import os.path
 from typing import Callable
 import pygame
@@ -96,10 +97,10 @@ def run_dynaq(
     agent = TabularDynaQAgent(
         action_space_dims=n_actions,
         obs_space_dims=n_states,
-        update_coefficient=0.2,
-        plus_k=plus_k,
+        update_coefficient=0.1,
+        dynaq_plus_k=plus_k,
         model_steps=model_steps,
-        eps=build_greedy_eps_sched(0.2)
+        eps=0.1
     )
 
     agent.initialize()
@@ -115,8 +116,8 @@ def run_dynaq(
         terminal = False
         while (not terminal and
                (
-                       (max_steps_per_episode <= 0) or
-                       (env._num_ep_steps < max_steps_per_episode)
+                   (max_steps_per_episode <= 0) or
+                   (env._num_ep_steps < max_steps_per_episode)
                ) and not env.close_clicked
         ):
 
@@ -155,7 +156,7 @@ def dynaq_experiments(do_create_new_maze: bool = False):
 
     run_dynaq(
         model_steps,
-        max_steps_per_episode=100,
+        max_steps_per_episode=math.inf,
         randomize_start_goal=False,
         skip_visual_confirmation=not do_create_new_maze
     )
@@ -163,7 +164,7 @@ def dynaq_experiments(do_create_new_maze: bool = False):
 
 def dynaq_plus_experiments(do_create_new_maze: bool = False):
     model_steps = 5  # model planning steps
-    plus_k = 0.01
+    plus_k = 0.001
 
     if do_create_new_maze:
         create_new_maze()
@@ -171,7 +172,7 @@ def dynaq_plus_experiments(do_create_new_maze: bool = False):
     run_dynaq(
         model_steps,
         plus_k=plus_k,
-        max_steps_per_episode=100,
+        max_steps_per_episode=math.inf,
         randomize_start_goal=False,
         skip_visual_confirmation=not do_create_new_maze
     )
