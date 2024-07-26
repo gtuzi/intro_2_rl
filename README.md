@@ -33,10 +33,12 @@ intro_2_rl/
 │
 ├── README.md          # Project documentation
 │
+├── LICENSE.md         # Project license (MIT)
+│
 ├── monte_carlo/       # Source code for Monte Carlo (MC) methods
 │   ├── agents.py      # MC algorithms from: Ch.5
 │   ├── main.py        # Main execution script
-│   └──  README.md      # Detailed information
+│   └──  README.md     # Detailed information
 │
 ├── td/                # Source code for Temporal Difference (TD) methods
 │   ├── agents.py      # MC algorithms from: Ch.6,7
