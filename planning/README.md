@@ -29,7 +29,7 @@ The various state-space planning methods vary in the kinds of updates they do.
 Conceptually, planning, acting, model-learning, and direct RL occur 
 simultaneously and in parallel in Dyna agents.
 
-### Dyna-Q
+### Dyna-Q (8.2)
 
 <img src="images/dyna_agent.png" alt="Grid" width="350"/>
 
@@ -42,7 +42,7 @@ and generating the (next-state, reward) simulated experiences, for a number
 of planning steps. The agent uses these simulated experiences to improve its policy, using these. 
 The Direct-RL path of Dyna-Q is Q-Learning (SarsaMax) is used to perform the policy improvement.
 
-##### Dyna-Q+
+##### Dyna-Q+ (8.3)
 When the environment is (slightly?) stochastic, our model will most likely be wrong.
 In order to promote updating of the model, Dyna-Q+ uses a model-exploration heuristic, 
 where during planning update, the simulated  reward is increased by visitation
@@ -55,6 +55,33 @@ To improve model exploration, the algorithm allows for actions that have
 not been taken before for an already visited state. Refer to section 8.3 
 (page 168) footnote in [Sutton & Barto RL Book].
 
+##### Prioritized Sweeping (8.4)
+In the Dyna agents presented in the preceding sections, simulated transitions 
+are started in state–action pairs selected uniformly at random from all 
+previously experienced pairs. But a uniform selection is usually not the best.
+In prioritized sweeping we want to work back from any state whose
+value has "significantly" changed. Typically, this implies that the 
+values of many other states should also be changed, but the only useful 
+one-step updates are those of actions that lead directly into the one state 
+whose value has been changed. If the values of these actions are updated,
+then the values of the predecessor states may change in turn. If so, 
+then actions leading into them need to be updated, and then their 
+predecessor states may have changed. This way one can work backward from 
+arbitrary states that have changed in value. 
+
+The _predecessor_ state-action pairs of those state-actions whose value 
+estimation has changed a lot are more likely  to also change a lot. 
+In a stochastic environment, variations in estimated transition probabilities
+also contribute to variations in the sizes of changes and in the urgency 
+with which pairs need to be updated. It is natural to prioritize the 
+updates according to a measure of their urgency, and perform them in 
+order of priority. This is the idea behind _prioritized sweeping_.
+
+A _queue_ is maintained of every state–action pair whose estimated value 
+would change nontrivially if updated, prioritized by the size of the 
+change. When the top pair in the queue is updated, the effect on each of its 
+predecessor pairs is computed. If the effect is greater than some small 
+threshold, then the pair is inserted in the queue with the new priority.
 
 ## Execution
 Run code in `main.py`. Each algorithm has its own `experiments` task.
