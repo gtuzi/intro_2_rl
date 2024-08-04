@@ -1,7 +1,6 @@
 from typing import Dict, List
 import random
 from collections import Counter
-import os.path
 import pygame
 import numpy as np
 
@@ -111,7 +110,7 @@ def value_plot(
 
     G0_dfs = []
     for label, r in zip(legend, G0_over_seeds_over_agent):
-        df = create_raw_df(r, 'G0' + label)
+        df = create_raw_df(r, 'G0:' + label)
         G0_dfs.append(df)
     G0_df = pd.concat(G0_dfs, ignore_index=True)
 
@@ -137,7 +136,7 @@ def value_plot(
     plt.xlabel('Episodes')
     plt.ylabel('Returns')
     plt.title(title)
-    plt.legend(title='Cumulative Returns & V[0]')
+    plt.legend(title='Sum(R) & V[0]')
     plt.show()
 
 
@@ -207,7 +206,7 @@ def rewards_vs_steps_plot(
         errorbar='sd'
     )
 
-    plt.xlim(left=-5, right=min(max_x_steps) // 4)
+    plt.xlim(left=-1, right=100)
     plt.xlabel('Steps')
     plt.ylabel('Cummulative Returns')
     plt.title(title + ': zoomed in')
@@ -700,7 +699,7 @@ def process_experiment_results(
 
 if __name__ == '__main__':
     maxEpisodes = 100
-    seeds = list(range(50))
+    seeds = list(range(20))
     max_steps_per_episode = 0
     model_steps = 5
 

@@ -23,15 +23,17 @@ These are methods in which the agent uses _state-space planning_ to improve thei
 The various state-space planning methods vary in the kinds of updates they do.
 
 ## Implemented Algorithms
-- [x] Tabular Dyna-Q/Dyna-Q+ (Section 8.2): `agents/TabularDynaQAgent`
+- [x] Tabular Dyna-Q/Dyna-Q+ (Section 8.2, 8.3): `agents/TabularDynaQAgent`
+- [x] Prioritized Sweeping (Section 8.4): `agents/TabularPrioritizedSweepingAgent`
 
 ### Dyna Agents
 Conceptually, planning, acting, model-learning, and direct RL occur 
 simultaneously and in parallel in Dyna agents.
 
-### Dyna-Q (8.2)
-
 <img src="images/dyna_agent.png" alt="Grid" width="350"/>
+
+
+### Dyna-Q (8.2)
 
 _Online planning_ agent which uses a _sample_ model (a sample model produces a possible transition). 
 Under the assumption of a deterministic environment, this model _learns_ 
@@ -41,6 +43,9 @@ The simulation consists in the random sampling of the already visited (state, ac
 and generating the (next-state, reward) simulated experiences, for a number 
 of planning steps. The agent uses these simulated experiences to improve its policy, using these. 
 The Direct-RL path of Dyna-Q is Q-Learning (SarsaMax) is used to perform the policy improvement.
+
+<img src="images/Value_DynaQ.png" alt="Grid" width="450"/>
+
 
 ##### Dyna-Q+ (8.3)
 When the environment is (slightly?) stochastic, our model will most likely be wrong.
@@ -54,6 +59,8 @@ in planning, promotes adaptation to a changing environment.
 To improve model exploration, the algorithm allows for actions that have 
 not been taken before for an already visited state. Refer to section 8.3 
 (page 168) footnote in [Sutton & Barto RL Book].
+
+<img src="images/Value_DynaQPlus.png" alt="Grid" width="450"/>
 
 ##### Prioritized Sweeping (8.4)
 In the Dyna agents presented in the preceding sections, simulated transitions 
@@ -83,6 +90,8 @@ change. When the top pair in the queue is updated, the effect on each of its
 predecessor pairs is computed. If the effect is greater than some small 
 threshold, then the pair is inserted in the queue with the new priority.
 
+<img src="images/Value_Prioritized_Sweep.png" alt="Grid" width="450"/>
+
 ## Execution
 Run code in `main.py`. Each algorithm has its own `experiments` task.
 
@@ -99,5 +108,23 @@ As the simulation runs, state (grid cell) values _V(s) = E<sub>a</sub>[Q(s, a)]_
 
 <img src="images/grid.png" alt="Grid" width="350"/>
 
-## Environments
+### Simulations
+In the sections above, the algorithms are described along with their simulation 
+performance. An episode ended when the goal was reached. The number of
+steps for each episode could vary significantly. The environment was the same 
+for all episodes. The shortest path (optimal) was 8 steps. Simulations were run
+over 20 random seeds for each agent. For each seed, there were 100 episodes. 
+Moreover, for each new seed, the agent was unlearned.
+
+* __Values__ graph  
+  * _G[0]_ defined as the sum of actual discounted rewards from the start of the start of the simulations
+  * _V[0]_ is the value function for S[0], i.e. the first state of the environment.
+
+
+* __Cumulative Rewards__ graph depicts the cummulative reward accumulated over the terminal steps, across the episodes, over different seeds.
+
+<img src="images/Cumulative_Rewards.png" alt="Grid" width="450"/>
+
+
+## Environment
 - Extension of [Dyna Maze Game], which implements the environment in _Example 8.1_: Dyna Maze in the book.

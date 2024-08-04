@@ -36,17 +36,17 @@ intro_2_rl/
 ├── LICENSE.md         # Project license (MIT)
 │
 ├── monte_carlo/       # Source code for Monte Carlo (MC) methods
-│   ├── agents.py      # MC algorithms from: Ch.5
+│   ├── agents.py      # Algorithms from: Ch.5
 │   ├── main.py        # Main execution script
 │   └──  README.md     # Detailed information
 │
 ├── td/                # Source code for Temporal Difference (TD) methods
-│   ├── agents.py      # MC algorithms from: Ch.6,7
+│   ├── agents.py      # Algorithms from: Ch.6,7
 │   ├── main.py        # Main execution script
 │   └── README.md      # Detailed information
 │
 ├── planning/          # Source code for Planning and Learning methods
-│   ├── agents.py      # MC algorithms from: Ch.8
+│   ├── agents.py      # Algorithms from: Ch.8
 │   ├── main.py        # Main execution script
 │   ├── envMaze.py     # DynaMaze environment
 │   ├── rl_glue.py     # Imported library for DynaMaze environment
