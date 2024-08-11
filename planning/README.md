@@ -42,7 +42,11 @@ During the _planning_ phase, the agent simulates the experience from the model.
 The simulation consists in the random sampling of the already visited (state, actions)
 and generating the (next-state, reward) simulated experiences, for a number 
 of planning steps. The agent uses these simulated experiences to improve its policy, using these. 
-The Direct-RL path of Dyna-Q is Q-Learning (SarsaMax) is used to perform the policy improvement.
+The Direct-RL path, to perform TD(0) policy improvement, for Dyna-Q agent 
+supports:
+- [x] Q-Learning (SarsaMax); same as in the book
+- [x] Sarsa (added from TD chapter)
+- [x] Expected Sarsa (added from TD chapter)
 
 <img src="images/Value_DynaQ.png" alt="Grid" width="450"/>
 

@@ -8,6 +8,14 @@ from utils import Experience, NoiseSchedule, QEpsGreedyAgent
 class TabularDynaQAgent(QEpsGreedyAgent):
     """
         Implementation of Tabular Dyna-Q in Section 8.2
+        The method in the book uses QLearning / SarsaMax.
+
+        Authors claim that other one-step sample updates can also be used
+        (Section 8.5)
+
+        Added support for the Direct RL path:
+         - Sarsa
+         - ExpectedSarsa
     """
 
     def __init__(
@@ -20,6 +28,7 @@ class TabularDynaQAgent(QEpsGreedyAgent):
             qval_init: float = 0.,
             model_steps: int = 0,
             dynaq_plus_k: Optional[float] = None,  # Dyna-Q+ exploration bonus reward coefficient
+            td_update_type: str = 'qlearning'
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
@@ -45,6 +54,20 @@ class TabularDynaQAgent(QEpsGreedyAgent):
         self.state_action_visit_count: Optional[defaultdict] = None
         self.model_steps = model_steps
         self.dynaq_plus_k = dynaq_plus_k
+
+        self.td_update_type = td_update_type
+        self.requires_next_step_before_update = False
+        self._agent_requires_next_step()
+
+    def _agent_requires_next_step(self):
+        if self.td_update_type.lower() == 'qlearning':
+            self.requires_next_step_before_update = False
+        elif self.td_update_type.lower() == 'sarsa':
+            self.requires_next_step_before_update = True
+        elif self.td_update_type.lower() == 'expected_sarsa':
+            self.requires_next_step_before_update = False
+        else:
+            raise NotImplementedError(f'{self.td_update_type} not supported')
 
     def initialize(self):
         self.t = 0
@@ -146,11 +169,19 @@ class TabularDynaQAgent(QEpsGreedyAgent):
                 dt = self.t - self.state_action_visit_count[s][a]
                 r += self.dynaq_plus_k * math.sqrt(dt)
 
+            # Algos, such as sarsa, require the next step the policy
+            # would have taken.
+            ap, pp = None, None
+            if self.requires_next_step_before_update:
+                ap, pp = self.act(sp)
+
             experience = Experience(
                 s=s,
                 a=a,
                 r=r,
                 sp=sp,
+                ap=ap,
+                pp=pp,
                 done=done
             )
 
@@ -158,6 +189,16 @@ class TabularDynaQAgent(QEpsGreedyAgent):
             self.direct_rl_learn(experience)
 
     def _td_update(self, experience: Experience, **kwargs):
+        if self.td_update_type == 'qlearning':
+            self._q_learning(experience)
+        elif self.td_update_type == 'sarsa':
+            self._sarsa(experience)
+        elif self.td_update_type == 'expected_sarsa':
+            self._expected_sarsa(experience)
+        else:
+            raise NotImplementedError
+
+    def _q_learning(self,  experience: Experience, **kwargs):
         s, a, r, sp, done = (
             experience.s, experience.a,
             experience.r, experience.sp,
@@ -171,7 +212,41 @@ class TabularDynaQAgent(QEpsGreedyAgent):
         self.Q[s][a] += self.update_coefficient * td_error
         self.Q_update_count[s][a] += 1
 
-    def reset(self):
+    def _sarsa(self, experience: Experience, **kwargs):
+        s, a, r, sp, ap, done = (
+            experience.s, experience.a,
+            experience.r, experience.sp,
+            experience.ap, experience.done
+        )
+
+        tgt = r + self.discount * self.Q[sp][ap] * (1 - done)
+        td_error = tgt - self.Q[s][a]
+
+        self.Q[s][a] += self.update_coefficient * td_error
+        self.Q_update_count[s][a] += 1
+
+    def _expected_sarsa(self,  experience: Experience, **kwargs):
+        s, a, r, sp, done = (
+            experience.s, experience.a,
+            experience.r, experience.sp,
+            experience.done
+        )
+
+        qp_expected = sum(
+            [
+                self.get_sa_probability(s=sp, a=_a) * self.Q[sp][_a]
+                for _a in range(self.action_space_dims)
+            ]
+        )
+
+        tgt = r + self.discount * qp_expected * (1 - done)
+
+        td_error = tgt - self.Q[s][a]
+
+        self.Q[s][a] += self.update_coefficient * td_error
+        self.Q_update_count[s][a] += 1
+
+def reset(self):
         # The agent here is prepared for a new episode
         self.t = 0
 
@@ -316,6 +391,7 @@ class TabularPrioritizedSweepingAgent(QEpsGreedyAgent):
         self.model_steps = model_steps
         self.priority_threshold = priority_threshold
         self.queue: Optional[PrioritizedQueue] = None
+        self.requires_next_step_before_update = False
 
     def initialize(self):
         self.t = 0

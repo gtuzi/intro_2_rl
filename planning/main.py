@@ -345,9 +345,11 @@ def run_maze_env(
             skip_visual_confirmation=True
         )
 
-        state_0 = s
         G0 = 0.
         terminal = False
+
+        state_0 = s
+        a, p = agent.act(s)
 
         while (not terminal and
                (
@@ -362,8 +364,16 @@ def run_maze_env(
             env.drawGrid(state_val_fn=agent.state_value)
             env.showChar()
 
-            a, p = agent.act(s)
             r, sp, terminal = env.step(a)
+
+            ap, pp = None, None
+
+            # Some update methods need the next action before they
+            # update. Some other do not, so the next step should
+            # be taken after the update
+            if agent.requires_next_step_before_update:
+                # Take the next step
+                ap, pp = agent.act(sp)
 
             env.drawBlackBox(sp)
             pygame.display.update()
@@ -372,12 +382,18 @@ def run_maze_env(
                 Experience(
                     s=s,
                     a=a,
+                    p=p,
                     r=r,
                     sp=sp,
-                    p=p,
+                    ap=ap,
+                    pp=pp,
                     done=int(terminal)
                 )
             )
+
+            if not agent.requires_next_step_before_update:
+                # Take the next step after agent update
+                ap, pp = agent.act(sp)
 
             t = env.num_steps() - 1
             G0 += (agent.discount ** t) * r
@@ -388,6 +404,9 @@ def run_maze_env(
 
             if not terminal:
                 s = sp
+                # Move these over for the next "current" part of the experience
+                a = ap
+                p = pp
             else:
                 print(
                     f'{title} - Episode: {episode}, steps taken: {env.num_steps()}')
@@ -418,6 +437,7 @@ def run_dynaq(
         max_steps_per_episode=0,
         randomize_start_goal=False,
         skip_visual_confirmation=False,
+        td_update_type='qlearning',
         title: str = ''
 ):
     """
@@ -451,7 +471,8 @@ def run_dynaq(
         update_coefficient=0.1,
         dynaq_plus_k=plus_k,
         model_steps=model_steps,
-        eps=0.1
+        eps=0.1,
+        td_update_type=td_update_type
     )
 
     agent.initialize()
@@ -475,6 +496,7 @@ def dynaq_experiments(
         skip_visual_confirmation=False,
         model_steps=5,
         seeds=(1, 2, 3),
+        td_update_type='qlearning',
         title: str = ''
 ) -> dict:
     if do_create_new_maze:
@@ -492,6 +514,7 @@ def dynaq_experiments(
             max_steps_per_episode=max_steps_per_episode,
             randomize_start_goal=randomize_start_goal,
             skip_visual_confirmation=skip_visual_confirmation,
+            td_update_type=td_update_type,
             title=f'{title} - Seed: {seed}'
         )
 
@@ -508,6 +531,7 @@ def dynaq_plus_experiments(
         skip_visual_confirmation=False,
         model_steps=5,
         seeds=(1, 2, 3),
+        td_update_type='qlearning',
         title: str = ''
 ) -> dict:
     plus_k = 0.001
@@ -528,6 +552,7 @@ def dynaq_plus_experiments(
             randomize_start_goal=randomize_start_goal,
             plus_k=plus_k,
             skip_visual_confirmation=skip_visual_confirmation,
+            td_update_type=td_update_type,
             title=f'{title} - Seed: {seed}'
         )
 
@@ -699,7 +724,7 @@ def process_experiment_results(
 
 if __name__ == '__main__':
     maxEpisodes = 100
-    seeds = list(range(20))
+    seeds = list(range(2))
     max_steps_per_episode = 0
     model_steps = 5
 
@@ -717,13 +742,16 @@ if __name__ == '__main__':
     results_over_agents.append(results)
     agent_names.append('Prioritized Sweep')
 
+    td_update_type = 'expected_sarsa'
+
     results = dynaq_experiments(
         maxEpisodes=maxEpisodes,
         max_steps_per_episode=max_steps_per_episode,
         seeds=seeds,
         model_steps=model_steps,
         skip_visual_confirmation=True,
-        do_create_new_maze=False
+        do_create_new_maze=False,
+        td_update_type=td_update_type
     )
     results_over_agents.append(results)
     agent_names.append('DynaQ')
@@ -734,7 +762,8 @@ if __name__ == '__main__':
         seeds=seeds,
         model_steps=model_steps,
         skip_visual_confirmation=True,
-        do_create_new_maze=False
+        do_create_new_maze=False,
+        td_update_type=td_update_type
     )
     results_over_agents.append(results)
     agent_names.append('DynaQPlus')
