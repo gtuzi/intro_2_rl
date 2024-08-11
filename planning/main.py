@@ -724,7 +724,7 @@ def process_experiment_results(
 
 if __name__ == '__main__':
     maxEpisodes = 100
-    seeds = list(range(2))
+    seeds = list(range(20))
     max_steps_per_episode = 0
     model_steps = 5
 
@@ -742,7 +742,7 @@ if __name__ == '__main__':
     results_over_agents.append(results)
     agent_names.append('Prioritized Sweep')
 
-    td_update_type = 'expected_sarsa'
+    td_update_type = 'qlearning'
 
     results = dynaq_experiments(
         maxEpisodes=maxEpisodes,
