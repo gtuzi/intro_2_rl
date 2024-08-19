@@ -177,6 +177,59 @@ The following parameters used for the Sarsa algorithm
 | Taxi (v3)         | <img src="images/QLearningTrainValue_Taxi.png" alt="Grid" width="200"/>         | <img src="images/QLearningEvalValue_Taxi.png" alt="Grid" width="200"/>         | <img src="images/QLearningEvalCumSumRewards_Taxi.png" alt="Grid" width="200"/>         |
 
 
+### nStep Sarsa
+
+<img src="images/nStepSarsa.png" alt="Grid" width="2002"/>
+
+#### Experiments
+
+###### Algorithm Parameters
+The following parameters used for the Sarsa algorithm
+* &epsilon; = 0.1
+* n (num steps) = 2
+
+###### Environment Setup
+* FrozenLake - stochastic: 
+  * Reward
+    * Reach goal: +1
+    * Reach hole: 0
+    * Reach frozen: 0
+    * Slippery: True (stochastic)
+    * Map: 4x4
+  * &alpha; = 0.2
+  * Initial _Q(*, *)_ = 0 
+  * seeds = {1, 2, 3.., 7} 
+  * num_episodes = 2000 
+  * Max episode steps = 50 
+
+* CliffWalking - is not stochastic
+  * Reward
+    * Each time step incurs -1 reward 
+    * Player stepped into the cliff incurs -100 reward
+  * &alpha; = 0.2
+  * Initial _Q(*, *)_ = -100, to show the effect of learning the Value function
+  * seeds = {1, 2, 3.., 7} 
+  * num_episodes = 50 
+  * Max episode steps = 10 
+
+* Taxi - taxi is not stochastic.
+  * Reward
+    * -1 per step unless other reward is triggered
+    * +20 delivering passenger
+    * -10 executing “pickup” and “drop-off” actions illegally.
+  * &alpha; = 0.5. This (deterministic) environment showed that for smaller values V[s(0)] did not converge well to G[s(0)]. Requires further investigation.
+  * Initial _Q(*, *)_ = -100, to show the effect of learning the Value function
+  * seeds = {1, 2, 3.., 7} 
+  * num_episodes = 100 
+  * Max episode steps = 50  
+
+| Environment       | Train Value                                                                      | Evaluation Value                                                                | Evaluation Cummulative Sum                                                              |
+|-------------------|----------------------------------------------------------------------------------|---------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
+| Frozen Lake (v1)  | <img src="images/nStepSarsaTrainValue_FrozenLake.png" alt="Grid" width="200"/>   | <img src="images/nStepSarsaEvalValue_FrozenLake.png" alt="Grid" width="200"/>   | <img src="images/nStepSarsaEvalCumSumRewards_FrozenLake.png" alt="Grid" width="200"/>   |
+| CliffWalking (v0) | <img src="images/nStepSarsaTrainValue_CliffWalking.png" alt="Grid" width="200"/> | <img src="images/nStepSarsaEvalValue_CliffWalking.png" alt="Grid" width="200"/> | <img src="images/nStepSarsaEvalCumSumRewards_CliffWalking.png" alt="Grid" width="200"/> |
+| Taxi (v3)         | <img src="images/nStepSarsaTrainValue_Taxi.png" alt="Grid" width="200"/>         | <img src="images/nStepSarsaEvalValue_Taxi.png" alt="Grid" width="200"/>         | <img src="images/nStepSarsaEvalCumSumRewards_Taxi.png" alt="Grid" width="200"/>         |
+
+
 
 ## Execution
 Run code in `main.py`. Each algorithm has its own `experiments` task.

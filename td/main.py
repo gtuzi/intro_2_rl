@@ -1185,10 +1185,10 @@ def build_env(render: bool = False) -> Env:
 
 if __name__ == '__main__':
 
-    epses = (0.1,)
+    epses = (0.1, )
     do_random = False
     seeds = (1, 2, 3, 4, 5, 6, 7)
-    alpha = 0.2
+    alpha = 0.5
 
     # env_name = 'FrozenLake'
     # env_name = 'CliffWalking'
@@ -1244,7 +1244,7 @@ if __name__ == '__main__':
         )
 
     # --------- Q-Learning -------- #
-    if 1:
+    if 0:
         qlearning_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1256,7 +1256,7 @@ if __name__ == '__main__':
             train_seeds=seeds)
 
     # -------- nStep Sarsa -------- #
-    if 0:
+    if 1:
         nstep_sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
