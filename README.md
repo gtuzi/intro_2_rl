@@ -21,10 +21,10 @@ Sutton & Barto's introductory book to RL is a fundamental reference for anyone s
 
 ## Implemented Chapters:
 - [ ] Chapter 2: Bandits (_TBD: merge from "Bandit" project_)
-- [x] Chapter 5: Monte Carlo methods
-- [x] Chapter 6: Temporal Difference methods
-- [x] Chapter 7: n-Step Bootstrapping
-- [x] Chapter 8: Planning (ongoing)
+- [x] Chapter 5: [Monte Carlo (MC)](monte_carlo/README.md) methods
+- [x] Chapter 6: [Temporal Difference (TD)](td/README.md) methods
+- [x] Chapter 7: [n-Step Bootstrapping](td/README.md)
+- [x] Chapter 8: [Planning](planning/README.md) (ongoing)
 
 
 ## Code Organization
@@ -40,7 +40,7 @@ intro_2_rl/
 │   ├── main.py        # Main execution script
 │   └──  README.md     # Detailed information
 │
-├── td/                # Source code for Temporal Difference (TD) methods
+├── td/                # Source code for Temporal Difference (TD) & nStep bootstrapping methods
 │   ├── agents.py      # Algorithms from: Ch.6,7
 │   ├── main.py        # Main execution script
 │   └── README.md      # Detailed information

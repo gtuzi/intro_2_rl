@@ -112,7 +112,8 @@ def value_plot(
         V0_over_seeds_over_agent: List,
         G0_over_seeds_over_agent: List,
         legend: List[str],
-        title: str = 'Algo'
+        title: str = 'Algo',
+        alpha = 0.5
 ):
     def create_raw_df(sequences, group_name):
         num_seeds = len(sequences)
@@ -127,13 +128,13 @@ def value_plot(
 
     V0_dfs = []
     for label, r in zip(legend, V0_over_seeds_over_agent):
-        df = create_raw_df(r, 'V0:' + label)
+        df = create_raw_df(r, 'V0: ' + label)
         V0_dfs.append(df)
     V0_df = pd.concat(V0_dfs, ignore_index=True)
 
     G0_dfs = []
     for label, r in zip(legend, G0_over_seeds_over_agent):
-        df = create_raw_df(r, 'G0' + label)
+        df = create_raw_df(r, 'G0: ' + label)
         G0_dfs.append(df)
     G0_df = pd.concat(G0_dfs, ignore_index=True)
 
@@ -144,17 +145,19 @@ def value_plot(
         x='episodes',
         y='returns',
         hue='group',
-        data=V0_df,
+        data=G0_df,
         errorbar='sd',
-        palette=("red",))
+        palette=("blue",),
+        alpha=0.5 * alpha)
 
     sns.lineplot(
         x='episodes',
         y='returns',
         hue='group',
-        data=G0_df,
+        data=V0_df,
         errorbar='sd',
-        palette=("blue",))
+        palette=("red",),
+        alpha=alpha)
 
     plt.xlabel('Episodes')
     plt.ylabel('Returns')
@@ -162,35 +165,6 @@ def value_plot(
     plt.legend(title='Agent')
     plt.show()
 
-
-def build_env(render: bool = False) -> Env:
-    global env_name
-
-    if env_name == 'FrozenLake':
-        env = gym.make(
-            'FrozenLake-v1',
-            render_mode="human" if render else None,
-            desc=None,
-            map_name="4x4",
-            is_slippery=False)
-
-    elif env_name == 'Taxi':
-        env = gym.make(
-            'Taxi-v3',
-            render_mode="human" if render else None
-        )
-    elif env_name == 'CliffWalking':
-        env = gym.make(
-            "CliffWalking-v0",
-            # render_mode="human",
-            # max_episode_steps=100,
-            render_mode = "human" if render else None
-        )
-
-    else:
-        raise NotImplementedError
-
-    return env
 
 
 def evaluate_agent(
@@ -521,7 +495,6 @@ def sarsa_experiments(
             env,
             agent,
             greedy_eval=True,
-            evaluate_frequency=max(1, num_episodes // 2),
             T=T,
             num_episodes=num_episodes,
             reward_shaper=reward_shaper,
@@ -548,13 +521,16 @@ def sarsa_experiments(
             V0_over_seeds_over_agent=train_V0_returns_over_seeds_over_over_agent,
             G0_over_seeds_over_agent=train_G0_returns_over_seeds_over_over_agent,
             legend=legend,
-            title=f'Train - Sarsa Returns\nQinit: {q_init}'
+            title=f'Train - Sarsa Returns\nQinit: {q_init}',
+            alpha=0.7
         )
+
         value_plot(
             V0_over_seeds_over_agent=eval_V0_returns_over_seeds_over_over_agent,
             G0_over_seeds_over_agent=eval_G0_returns_over_seeds_over_over_agent,
             legend=legend,
-            title=f'Eval - Sarsa Returns\nQinit: {q_init}'
+            title=f'Eval - Sarsa Returns\nQinit: {q_init}',
+            alpha=0.9
         )
 
     if do_performance_plot:
@@ -1177,21 +1153,61 @@ def offpolicy_nstep_qsigma_experiments(
              title=f'Off-Policy nStep QSigma Eval\nQinit: {q_init}')
 
 
+def build_env(render: bool = False) -> Env:
+    global env_name
+
+    if env_name == 'FrozenLake':
+        env = gym.make(
+            'FrozenLake-v1',
+            render_mode="human" if render else None,
+            desc=None,
+            map_name="4x4",
+            is_slippery=True)
+
+    elif env_name == 'Taxi':
+        env = gym.make(
+            'Taxi-v3',
+            render_mode="human" if render else None
+        )
+    elif env_name == 'CliffWalking':
+        env = gym.make(
+            "CliffWalking-v0",
+            # render_mode="human",
+            # max_episode_steps=100,
+            render_mode = "human" if render else None
+        )
+
+    else:
+        raise NotImplementedError
+
+    return env
+
+
 if __name__ == '__main__':
-    num_episodes = 500
 
-    T = 100
-    # T = 50
-
-    q_init = 0.0
     epses = (0.1,)
     do_random = False
-    seeds = (1, 2)
+    seeds = (1, 2, 3, 4, 5, 6, 7)
     alpha = 0.2
 
-    # env_name = 'Taxi'
     # env_name = 'FrozenLake'
-    env_name = 'CliffWalking'
+    # env_name = 'CliffWalking'
+    env_name = 'Taxi'
+
+    if env_name == 'FrozenLake':
+        q_init = 0.0
+        num_episodes = 2000
+        T = 50
+    elif env_name == 'CliffWalking':
+        q_init = -100.0  # to show how it learns
+        num_episodes = 50
+        T = 10
+    elif env_name == 'Taxi':
+        q_init = -100.
+        num_episodes = 100
+        T = 50
+    else:
+        raise NotImplementedError
 
 
     # def reward_shaper(reward: float, done: bool, t: int):
@@ -1201,8 +1217,8 @@ if __name__ == '__main__':
     def reward_shaper(reward: float, done: bool, t: int):
         return reward
 
-
-    if 1:
+    # ----------- Sarsa ------------ #
+    if 0:
         sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1214,6 +1230,7 @@ if __name__ == '__main__':
             train_seeds=seeds
         )
 
+    # ------ Expected Sarsa ------- #
     if 0:
         expected_sarsa_experiments(
             num_episodes=num_episodes,
@@ -1226,7 +1243,8 @@ if __name__ == '__main__':
             train_seeds=seeds
         )
 
-    if 0:
+    # --------- Q-Learning -------- #
+    if 1:
         qlearning_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1237,6 +1255,7 @@ if __name__ == '__main__':
             do_random=do_random,
             train_seeds=seeds)
 
+    # -------- nStep Sarsa -------- #
     if 0:
         nstep_sarsa_experiments(
             num_episodes=num_episodes,
@@ -1250,6 +1269,7 @@ if __name__ == '__main__':
             train_seeds=seeds
         )
 
+    # -------- Offpolicy nStepSarsa ------ #
     if 0:
         # Note: behavioral agent is random (U), so expect
         # the training returns to be bad.
@@ -1267,7 +1287,8 @@ if __name__ == '__main__':
             do_performance_plot=True
         )
 
-    if 1:
+    # -------- Offpolicy Q(sigma) -------- #
+    if 0:
         # TODO: not tuned at all
         # Note: behavioral agent is random (U), so expect
         # the training returns to be bad.
