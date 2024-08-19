@@ -231,6 +231,9 @@ The following parameters used for the Sarsa algorithm
 
 
 
+### Offpolicy - nStepSarsa &  Q(&sigma;)
+As of this writing, these implementations are not yielding good results. Further work is necessary. 
+
 ## Execution
 Run code in `main.py`. Each algorithm has its own `experiments` task.
 

@@ -1184,15 +1184,14 @@ def build_env(render: bool = False) -> Env:
 
 
 if __name__ == '__main__':
-
     epses = (0.1, )
     do_random = False
-    seeds = (1, 2, 3, 4, 5, 6, 7)
-    alpha = 0.5
+    seeds = (1, 2, 3 , 4, 5, 6, 7)
+    alpha = 0.2
 
-    # env_name = 'FrozenLake'
+    env_name = 'FrozenLake'
     # env_name = 'CliffWalking'
-    env_name = 'Taxi'
+    # env_name = 'Taxi'
 
     if env_name == 'FrozenLake':
         q_init = 0.0
@@ -1218,7 +1217,7 @@ if __name__ == '__main__':
         return reward
 
     # ----------- Sarsa ------------ #
-    if 0:
+    if 1:
         sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1231,7 +1230,7 @@ if __name__ == '__main__':
         )
 
     # ------ Expected Sarsa ------- #
-    if 0:
+    if 1:
         expected_sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1244,7 +1243,7 @@ if __name__ == '__main__':
         )
 
     # --------- Q-Learning -------- #
-    if 0:
+    if 1:
         qlearning_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1292,14 +1291,16 @@ if __name__ == '__main__':
         # TODO: not tuned at all
         # Note: behavioral agent is random (U), so expect
         # the training returns to be bad.
+
         # sigma_fn = lambda t: 0.5
         sigma_fn = lambda t: 0 if (t % 2 == 0) else 1.
+
         offpolicy_nstep_qsigma_experiments(
             num_episodes=num_episodes,
             T=T,
             q_init=q_init,
             reward_shaper=reward_shaper,
-            n=5,
+            n=3,
             sigma_fn=sigma_fn,
             epses=epses,
             alpha=alpha,
