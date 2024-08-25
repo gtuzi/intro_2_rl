@@ -731,42 +731,48 @@ if __name__ == '__main__':
     results_over_agents = []
     agent_names = []
 
-    results = prioritized_sweeping_experiments(
-        maxEpisodes=maxEpisodes,
-        max_steps_per_episode=max_steps_per_episode,
-        seeds=seeds,
-        model_steps=model_steps,
-        skip_visual_confirmation=True,
-        do_create_new_maze=False
-    )
-    results_over_agents.append(results)
-    agent_names.append('Prioritized Sweep')
+    if 0:
+        results = prioritized_sweeping_experiments(
+            maxEpisodes=maxEpisodes,
+            max_steps_per_episode=max_steps_per_episode,
+            seeds=seeds,
+            model_steps=model_steps,
+            skip_visual_confirmation=True,
+            do_create_new_maze=False
+        )
+        results_over_agents.append(results)
+        agent_names.append('Prioritized Sweep')
 
-    td_update_type = 'qlearning'
+    if 1:
+        # Select from: {qlearning | sarsa | expected_sarsa}
+        td_update_type = 'expected_sarsa'
 
-    results = dynaq_experiments(
-        maxEpisodes=maxEpisodes,
-        max_steps_per_episode=max_steps_per_episode,
-        seeds=seeds,
-        model_steps=model_steps,
-        skip_visual_confirmation=True,
-        do_create_new_maze=False,
-        td_update_type=td_update_type
-    )
-    results_over_agents.append(results)
-    agent_names.append('DynaQ')
+        results = dynaq_experiments(
+            maxEpisodes=maxEpisodes,
+            max_steps_per_episode=max_steps_per_episode,
+            seeds=seeds,
+            model_steps=model_steps,
+            skip_visual_confirmation=True,
+            do_create_new_maze=False,
+            td_update_type=td_update_type
+        )
+        results_over_agents.append(results)
+        agent_names.append('DynaQ')
 
-    results = dynaq_plus_experiments(
-        maxEpisodes=maxEpisodes,
-        max_steps_per_episode=max_steps_per_episode,
-        seeds=seeds,
-        model_steps=model_steps,
-        skip_visual_confirmation=True,
-        do_create_new_maze=False,
-        td_update_type=td_update_type
-    )
-    results_over_agents.append(results)
-    agent_names.append('DynaQPlus')
+    if 0:
+        # Select from: {qlearning | sarsa | expected_sarsa}
+        td_update_type = 'qlearning'
+        results = dynaq_plus_experiments(
+            maxEpisodes=maxEpisodes,
+            max_steps_per_episode=max_steps_per_episode,
+            seeds=seeds,
+            model_steps=model_steps,
+            skip_visual_confirmation=True,
+            do_create_new_maze=False,
+            td_update_type=td_update_type
+        )
+        results_over_agents.append(results)
+        agent_names.append('DynaQPlus')
 
     process_experiment_results(
         results_over_agents=results_over_agents,

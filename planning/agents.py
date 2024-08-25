@@ -246,17 +246,17 @@ class TabularDynaQAgent(QEpsGreedyAgent):
         self.Q[s][a] += self.update_coefficient * td_error
         self.Q_update_count[s][a] += 1
 
-def reset(self):
-        # The agent here is prepared for a new episode
-        self.t = 0
+    def reset(self):
+            # The agent here is prepared for a new episode
+            self.t = 0
 
-        # Reset the visitation counts
-        if self.dynaq_plus_k is not None:
-            self.state_action_visit_count = defaultdict(
-                lambda: [0] * self.action_space_dims)
+            # Reset the visitation counts
+            if self.dynaq_plus_k is not None:
+                self.state_action_visit_count = defaultdict(
+                    lambda: [0] * self.action_space_dims)
 
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
+            if isinstance(self.eps, NoiseSchedule):
+                self.eps.reset()
 
 
 class PrioritizedQueue:
