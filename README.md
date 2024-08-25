@@ -4,7 +4,7 @@
 
 # Intro 2 RL: Implemented Algorithms from "Reinforcement Learning - An Introduction" [Sutton & Barto, 2nd Edition, 2020]
 
-<img src="BookCover.png" alt="Grid" width="700"/>
+<img src="BookCover.png" alt="Grid" width="500"/>
 
 ## Table of Contents
 - [Introduction](#introduction)
