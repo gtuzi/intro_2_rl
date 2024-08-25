@@ -56,11 +56,11 @@ supports:
 
 ###### Estimated Value vs Sum of Discounted Rewards at initial state
 
-| DynaQ Update Method   | Train Value                                                               |
+| DynaQ Update Method   | Values                                                                    |
 |-----------------------|---------------------------------------------------------------------------|
-| Q-Learning (SarsaMax) | <img src="images/Value_DynaQ.png" alt="Grid" width="300"/>                |
-| Sarsa                 | <img src="images/Value_DynaQ_Sarsa.png" alt="Grid" width="300"/>          |
-| Expected Sarsa        | <img src="images/Value_DynaQ_Expected_Sarsa.png" alt="Grid" width="300"/> |
+| Q-Learning (SarsaMax) | <img src="images/Value_DynaQ.png" alt="Grid" width="400"/>                |
+| Sarsa                 | <img src="images/Value_DynaQ_Sarsa.png" alt="Grid" width="400"/>          |
+| Expected Sarsa        | <img src="images/Value_DynaQ_Expected_Sarsa.png" alt="Grid" width="400"/> |
 
 
 ##### Dyna-Q+ (8.3)
@@ -78,7 +78,7 @@ not been taken before for an already visited state. Refer to section 8.3
 
 
 ###### Estimated Value vs Sum of Discounted Rewards at initial state 
-<img src="images/Value_DynaQPlus.png" alt="Grid" width="300"/>
+<img src="images/Value_DynaQPlus.png" alt="Grid" width="400"/>
 
 ##### Prioritized Sweeping (8.4)
 In the Dyna agents presented in the preceding sections, simulated transitions 
@@ -112,7 +112,7 @@ threshold, then the pair is inserted in the queue with the new priority.
 <img src="images/Prioritized_Sweeping_Algo.png" alt="Grid" width="800"/>
 
 ###### Estimated Value vs Sum of Discounted Rewards at initial state
-<img src="images/Value_Prioritized_Sweep.png" alt="Grid" width="300"/>
+<img src="images/Value_Prioritized_Sweep.png" alt="Grid" width="400"/>
 
 ## Execution
 Run code in `main.py`. Each algorithm has its own `experiments` task.
@@ -128,7 +128,7 @@ The user can modify the grid, or simply confirm the loaded environment by pressi
 
 As the simulation runs, state (grid cell) values _V(s) = E<sub>a</sub>[Q(s, a)]_ are displayed as green colors.
 
-<img src="images/grid.png" alt="Grid" width="350"/>
+<img src="images/grid.png" alt="Grid" width="550"/>
 
 ### Simulations
 In the sections above, the algorithms are described along with their simulation 
