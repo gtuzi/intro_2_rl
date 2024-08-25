@@ -62,6 +62,9 @@ supports:
 | Sarsa                 | <img src="images/Value_DynaQ_Sarsa.png" alt="Grid" width="400"/>          |
 | Expected Sarsa        | <img src="images/Value_DynaQ_Expected_Sarsa.png" alt="Grid" width="400"/> |
 
+  * _G[0]_ defined as the sum of actual discounted rewards from the start of the start of the simulations
+  * _V[0]_ is the value function for S[0], i.e. the first state of the environment.
+  * Refer to "Simulations" below
 
 ##### Dyna-Q+ (8.3)
 When the environment is (slightly?) stochastic, our model will most likely be wrong.
@@ -77,8 +80,12 @@ not been taken before for an already visited state. Refer to section 8.3
 (page 168) footnote in [Sutton & Barto RL Book].
 
 
-###### Estimated Value vs Sum of Discounted Rewards at initial state 
+###### Estimated Value vs Sum of Discounted Rewards at initial state
 <img src="images/Value_DynaQPlus.png" alt="Grid" width="400"/>
+
+  * _G[0]_ defined as the sum of actual discounted rewards from the start of the start of the simulations
+  * _V[0]_ is the value function for S[0], i.e. the first state of the environment.
+  * Refer to "Simulations" below
 
 ##### Prioritized Sweeping (8.4)
 In the Dyna agents presented in the preceding sections, simulated transitions 
@@ -114,6 +121,10 @@ threshold, then the pair is inserted in the queue with the new priority.
 ###### Estimated Value vs Sum of Discounted Rewards at initial state
 <img src="images/Value_Prioritized_Sweep.png" alt="Grid" width="400"/>
 
+  * _G[0]_ defined as the sum of actual discounted rewards from the start of the start of the simulations
+  * _V[0]_ is the value function for S[0], i.e. the first state of the environment.
+  * Refer to "Simulations" below
+
 ## Execution
 Run code in `main.py`. Each algorithm has its own `experiments` task.
 
@@ -137,16 +148,6 @@ steps for each episode could vary significantly. The environment was the same
 for all episodes. The shortest path (optimal) was 8 steps. Simulations were run
 over 20 random seeds for each agent. For each seed, there were 100 episodes. 
 Moreover, for each new seed, the agent was unlearned.
-
-* __Values__ graph  
-  * _G[0]_ defined as the sum of actual discounted rewards from the start of the start of the simulations
-  * _V[0]_ is the value function for S[0], i.e. the first state of the environment.
-
-
-* __Cumulative Rewards__ graph depicts the cummulative reward accumulated over the terminal steps, across the episodes, over different seeds.
-
-<img src="images/Cumulative_Rewards.png" alt="Grid" width="450"/>
-
 
 ## Environment
 - Extension of [Dyna Maze Game], which implements the environment in _Example 8.1_: Dyna Maze in the book.
