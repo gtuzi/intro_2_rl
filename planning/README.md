@@ -43,7 +43,10 @@ The simulation consists in the random sampling of the already visited (state, ac
 and generating the (next-state, reward) simulated experiences, for a number 
 of planning steps. The agent uses these simulated experiences to improve its policy, using these. 
 
-<img src="images/DynaQ_Algo.png" alt="Grid" width="2208"/>
+
+###### Algorithm
+<img src="images/DynaQ_Algo.png" alt="Grid" width="800"/>
+
 
 The Direct-RL path, to perform TD(0) policy improvement, for Dyna-Q agent 
 supports:
@@ -51,11 +54,13 @@ supports:
 - [x] Sarsa (added from TD chapter)
 - [x] Expected Sarsa (added from TD chapter)
 
+###### Estimated Value vs Sum of Discounted Rewards at initial state
+
 | DynaQ Update Method   | Train Value                                                               |
 |-----------------------|---------------------------------------------------------------------------|
-| Q-Learning (SarsaMax) | <img src="images/Value_DynaQ.png" alt="Grid" width="230"/>                |
-| Sarsa                 | <img src="images/Value_DynaQ_Sarsa.png" alt="Grid" width="230"/>          |
-| Expected Sarsa        | <img src="images/Value_DynaQ_Expected_Sarsa.png" alt="Grid" width="230"/> |
+| Q-Learning (SarsaMax) | <img src="images/Value_DynaQ.png" alt="Grid" width="300"/>                |
+| Sarsa                 | <img src="images/Value_DynaQ_Sarsa.png" alt="Grid" width="300"/>          |
+| Expected Sarsa        | <img src="images/Value_DynaQ_Expected_Sarsa.png" alt="Grid" width="300"/> |
 
 
 ##### Dyna-Q+ (8.3)
@@ -71,7 +76,9 @@ To improve model exploration, the algorithm allows for actions that have
 not been taken before for an already visited state. Refer to section 8.3 
 (page 168) footnote in [Sutton & Barto RL Book].
 
-<img src="images/Value_DynaQPlus.png" alt="Grid" width="450"/>
+
+###### Estimated Value vs Sum of Discounted Rewards at initial state 
+<img src="images/Value_DynaQPlus.png" alt="Grid" width="300"/>
 
 ##### Prioritized Sweeping (8.4)
 In the Dyna agents presented in the preceding sections, simulated transitions 
@@ -101,10 +108,11 @@ change. When the top pair in the queue is updated, the effect on each of its
 predecessor pairs is computed. If the effect is greater than some small 
 threshold, then the pair is inserted in the queue with the new priority.
 
-<img src="images/Prioritized_Sweeping_Algo.png" alt="Grid" width="2214"/>
+###### Algorithm
+<img src="images/Prioritized_Sweeping_Algo.png" alt="Grid" width="800"/>
 
-
-<img src="images/Value_Prioritized_Sweep.png" alt="Grid" width="450"/>
+###### Estimated Value vs Sum of Discounted Rewards at initial state
+<img src="images/Value_Prioritized_Sweep.png" alt="Grid" width="300"/>
 
 ## Execution
 Run code in `main.py`. Each algorithm has its own `experiments` task.
