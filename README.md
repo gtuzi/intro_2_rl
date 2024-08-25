@@ -4,6 +4,8 @@
 
 # Intro 2 RL: Implemented Algorithms from "Reinforcement Learning - An Introduction" [Sutton & Barto, 2nd Edition, 2020]
 
+<img src="BookCover.png" alt="Grid" width="700"/>
+
 ## Table of Contents
 - [Introduction](#introduction)
 - [Features](#features)
@@ -24,7 +26,7 @@ Sutton & Barto's introductory book to RL is a fundamental reference for anyone s
 - [x] Chapter 5: [Monte Carlo (MC)](monte_carlo/README.md) methods
 - [x] Chapter 6: [Temporal Difference (TD)](td/README.md) methods
 - [x] Chapter 7: [n-Step Bootstrapping](td/README.md)
-- [x] Chapter 8: [Planning](planning/README.md) (ongoing)
+- [x] Chapter 8: [Planning](planning/README.md)
 
 
 ## Code Organization
