@@ -2,7 +2,7 @@ import math
 from typing import Union, Optional, List, Tuple, Iterable, Any
 from collections import defaultdict
 import numpy as np
-from utils import Experience, NoiseSchedule, QEpsGreedyAgent
+from tabular_methods.utils import Experience, NoiseSchedule, QEpsGreedyAgent
 
 
 class TabularDynaQAgent(QEpsGreedyAgent):

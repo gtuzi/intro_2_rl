@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
 from collections import defaultdict
-from utils import (
+from tabular_methods.utils import (
     Experience,
     NoiseSchedule,
     QEpsGreedyAgent

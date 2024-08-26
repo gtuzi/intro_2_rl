@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from planning.agents import TabularDynaQAgent, TabularPrioritizedSweepingAgent
+from tabular_methods.planning.agents import TabularDynaQAgent, TabularPrioritizedSweepingAgent
 from envMaze import ExtendedMazeEnvironment
 
-from utils import Experience, LinearEpsSchedule, QEpsGreedyAgent
+from tabular_methods.utils import Experience, LinearEpsSchedule, QEpsGreedyAgent
 
 
 ###############################################

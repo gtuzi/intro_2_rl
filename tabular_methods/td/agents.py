@@ -3,7 +3,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from utils import Experience, NoiseSchedule, QEpsGreedyAgent
+from tabular_methods.utils import Experience, NoiseSchedule, QEpsGreedyAgent
 
 
 class Sarsa(QEpsGreedyAgent):

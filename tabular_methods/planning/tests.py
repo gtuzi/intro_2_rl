@@ -1,7 +1,7 @@
 import unittest
 from random import randint, random
 from agents import PrioritizedQueue, DeterministicTabularModel
-from utils import Experience
+from tabular_methods.utils import Experience
 from collections import defaultdict
 
 class QueueTest(unittest.TestCase):

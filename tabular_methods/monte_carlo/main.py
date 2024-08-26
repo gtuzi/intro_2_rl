@@ -11,7 +11,7 @@ from gymnasium import Env
 
 from agents import MCOnPolicyFirstVisitGLIE, MCOffPolicy
 
-from utils import (
+from tabular_methods.utils import (
     LinearEpsSchedule,
     Experience,
     DiscreteActionAgent,
@@ -242,6 +242,8 @@ def on_policy_experiments(num_episodes, T, q_init):
     def build_eps_sched(start):
         return LinearEpsSchedule(start, end=0.0, steps=num_episodes)
 
+    # ------------ Step size is averaged over (s,a) visits ---------------- #
+
     eps = 0.0
     step_size = None
     agent1 = MCOnPolicyFirstVisitGLIE(
@@ -260,7 +262,7 @@ def on_policy_experiments(num_episodes, T, q_init):
         num_episodes=num_episodes,
         reward_shaper=reward_shaper)
     returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}, step: {step_size}')
+    legend.append(f'MC eps: {eps}')
 
     eps = 0.1
     step_size = None
@@ -280,7 +282,7 @@ def on_policy_experiments(num_episodes, T, q_init):
         reward_shaper=reward_shaper)
 
     returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}, step: {step_size}')
+    legend.append(f'MC eps: {eps}')
 
     eps = 0.2
     step_size = None
@@ -300,7 +302,7 @@ def on_policy_experiments(num_episodes, T, q_init):
         num_episodes=num_episodes,
         reward_shaper=reward_shaper)
     returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}, step: {step_size}')
+    legend.append(f'MC eps: {eps}')
 
 
     eps = 0.4
@@ -321,7 +323,7 @@ def on_policy_experiments(num_episodes, T, q_init):
         num_episodes=num_episodes,
         reward_shaper=reward_shaper)
     returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}, step: {step_size}')
+    legend.append(f'MC eps: {eps}')
 
 
     eps = 0.6
@@ -342,7 +344,7 @@ def on_policy_experiments(num_episodes, T, q_init):
         num_episodes=num_episodes,
         reward_shaper=reward_shaper)
     returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}, step: {step_size}')
+    legend.append(f'MC eps: {eps}')
 
 
     eps = 0.8
@@ -363,12 +365,12 @@ def on_policy_experiments(num_episodes, T, q_init):
         num_episodes=num_episodes,
         reward_shaper=reward_shaper)
     returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}, step: {step_size}')
+    legend.append(f'MC eps: {eps}')
 
     plot(returns_over_seeds_over_over_agent, legend=legend,
          title=f'Qinit: {q_init}')
 
-    # -------------- Using the step size ------------ #
+    # -------------- Using fixed step size ------------ #
     # returns_over_seeds_over_over_agent = []
     # eps = 0.1
     # step_size = 0.01
@@ -500,7 +502,7 @@ def off_policy_experiments(num_episodes, T, q_init):
             train_returns_over_seeds)
         eval_returns_over_seeds_over_over_agent.append(
             eval_returns_over_seeds)
-        legend.append(f'MC eps: {eps}, step: {step_size}')
+        legend.append(f'MC eps: {eps}')
 
     # -------- Final Plots ----------- #
     plot(train_returns_over_seeds_over_over_agent,

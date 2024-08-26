@@ -9,7 +9,7 @@ from scipy.stats import randint
 import gymnasium as gym
 from gymnasium import Env
 
-from utils import (
+from tabular_methods.utils import (
     LinearEpsSchedule,
     Experience,
     DiscreteActionAgent,
