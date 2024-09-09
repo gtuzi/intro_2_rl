@@ -14,7 +14,12 @@
 - [Dependencies](#dependencies)
 
 ## Introduction
-Sutton & Barto's introductory book to RL is a fundamental reference for anyone starting off in RL or any RL practictioner. In this project I implement several of the "boxed algorithms" - the algorithms shown in the grey boxes in the book.
+Sutton & Barto's introductory book to RL is a fundamental reference for anyone starting off in RL or any RL practictioner. 
+In this project I implement several (a selection) of the "boxed algorithms" - the algorithms shown in the grey boxes in the book.
+The environments used are not necessarily that used in the book. I try to 
+leverage existing environments (e.g. [Gymnasium]), and wrap the algorithms into
+agents which adhere to its interface. The idea here is these agents should work 
+accross environments providing they provide Gymnasium-like front end.
 
 ## Features
 * Algorithms are implemented in Python/Numpy. 
@@ -27,6 +32,7 @@ Sutton & Barto's introductory book to RL is a fundamental reference for anyone s
 - [x] Chapter 6: [Temporal Difference (TD)](tabular_methods/td/README.md) methods
 - [x] Chapter 7: [n-Step Bootstrapping](tabular_methods/td/README.md)
 - [x] Chapter 8: [Planning](tabular_methods/planning/README.md)
+- [x] Chapter 10: [On-Policy Approximation](approximate_methods/on_policy/README.md)
 
 
 ## Code Organization
@@ -56,6 +62,15 @@ intro_2_rl/
 │   │   └── README.md      # Detailed information
 │   │
 │   └── utils.py           # Base agents, utilities
+│
+├── approximate_methods/   # Approximate Methods directory
+│   ├── on_policy/         # Source code for on_policy methods
+│   │   ├── agents.py      # Algorithms from: Ch.10
+│   │   ├── main.py        # Main execution script
+│   │   └── README.md      # Detailed information
+│   │
+│   ├── tiles3.py          # Source code for tile-coding
+│   └── utils.py           # Utilities
 │
 └── requirements.txt   # Python dependencies
 
