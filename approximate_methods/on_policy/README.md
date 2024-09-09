@@ -60,9 +60,9 @@ The following parameters are used:
   * end = 1 / (10 * num_tilings) = 1 / (10 * 8)
 
   
-| Train                                                                                         | Evaluation                                                                                   | 
-|-----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
-| <img src="images/Base Reward: SemiGradientSarsa_Train_eps: 0.01.png" alt="Grid" width="400"/> | <img src="images/Base Reward: SemiGradientSarsa_Eval_eps: 0.01.png" alt="Grid" width="400"/> | 
+| Train                                                                                       | Evaluation                                                                                 | 
+|---------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
+| <img src="images/Base Reward_SemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/Base Reward_SemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> | 
 
 
 Three reward shaping functions were also tried to encourage the car to reach the flag.

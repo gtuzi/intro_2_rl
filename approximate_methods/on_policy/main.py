@@ -676,7 +676,7 @@ if __name__ == '__main__':
                 start=1 / (2 * 8), end=1 / (10 * 8)),
             epses=epses,
             seeds=seeds,
-            base_name='Base Reward: '
+            base_name='Base Reward_'
         )
 
     # Position reward shaping
@@ -693,7 +693,7 @@ if __name__ == '__main__':
                 start=1 / (2 * 8), end=1 / (10 * 8)),
             epses=epses,
             seeds=seeds,
-            base_name='Position Reward: ')
+            base_name='Position Reward_')
 
     # Position + velocity reward shaping
     if 1:
@@ -709,7 +709,7 @@ if __name__ == '__main__':
                 start=1/(2 * 8), end=1/(10 * 8)),
             epses=epses,
             seeds=seeds,
-            base_name='Position + Velocity Reward: ')
+            base_name='Position_and_Velocity Reward_')
 
     # Velocity reward shaping
     if 1:
@@ -726,7 +726,7 @@ if __name__ == '__main__':
                 start= 1 / (2 * 8), end=1 / (10 * 8)),
             epses=epses,
             seeds=seeds,
-            base_name='Velocity Reward: ')
+            base_name='Velocity Reward_')
 
     exit(0)
 
