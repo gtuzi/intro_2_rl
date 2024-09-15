@@ -79,10 +79,15 @@ The integrated algorithm is shown below:
 #### Experiments
 The same MountainCar environment is used for this experiment, with the same parameters as the Semi-Gradient Sarsa experiment (above)
 
+Paremeters pertaining to nStep-Semi-Gradient Sarsa for the shown results are:
+* n = 4
+* &epsilon; = 0.05
   
 | Train                                                                                            | Evaluation                                                                                      | 
 |--------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
 | <img src="images/Base Reward_nStepSemiGradientSarsa_Train_eps_0.05.png" alt="Grid" width="400"/> | <img src="images/Base Reward_nStepSemiGradientSarsa_Eval_eps_0.05.png" alt="Grid" width="400"/> | 
+
+Results for other parameters and reward shaping functions are located under `images/results` folder.
 
 
 ### Reward Shaping
