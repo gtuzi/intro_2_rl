@@ -31,6 +31,7 @@ in this case are:
 
 ## Implemented Algorithms
 - [x]  Semi-gradient Sarsa (Section: 10.1): `agents.py/SemiGradientSarsa`
+- [x]  n-Step Semi-gradient Sarsa (Section: 10.2): `agents.py/nStepSemiGradientSarsa`
 
 
 ## Algorithms
@@ -65,6 +66,30 @@ The following parameters are used:
 | <img src="images/Base Reward_SemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/Base Reward_SemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> | 
 
 
+### n-Step Semi-Gradient Sarsa
+An n-step version of episodic semi-gradient Sarsa by using an n-step return as the update target in the semi-gradient Sarsa update equation.
+The n-step return immediately generalizes from its tabular form to a function approximation form.
+
+$G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n \hat{q}(S_{t+n}, A_{t+n}, \mathbf{w}_{t+n-1}), \ t + n < T$
+
+where the n-step update equation becomes:
+
+$\mathbf{w}_{t+n} \overset{\cdot}{=} \mathbf{w}_{t+n-1} + \alpha (G_{t:t+n} - \hat{q}(S_t, A_t, \mathbf{w}_{t+n-1})) \nabla \hat{q}(S_t, A_t, \mathbf{w}_{t+n-1})$
+
+The integrated algorithm is shown below:
+
+<img src="images/nStep_Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
+
+#### Experiments
+The same MountainCar environment is used for this experiment, with the same parameters as the Semi-Gradient Sarsa experiment (above)
+
+  
+| Train                                                                                            | Evaluation                                                                                      | 
+|--------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
+| <img src="images/Base Reward_nStepSemiGradientSarsa_Train_eps_0.05.png" alt="Grid" width="400"/> | <img src="images/Base Reward_nStepSemiGradientSarsa_Eval_eps_0.05.png" alt="Grid" width="400"/> | 
+
+
+### Reward Shaping
 Three reward shaping functions were also tried to encourage the car to reach the flag.
 The results for these methods are located under `images/results` folder.
 

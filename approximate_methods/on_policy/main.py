@@ -11,7 +11,9 @@ import seaborn as sns
 import gymnasium as gym
 from gymnasium import Env
 
-from approximate_methods.on_policy.agents import SemiGradientSarsa
+from approximate_methods.on_policy.agents import (
+    SemiGradientSarsa, nStepSemiGradientSarsa)
+
 from approximate_methods.tiles3 import IHT, tiles
 from approximate_methods.utils import (
     DiscreteActionAgent,
@@ -21,74 +23,6 @@ from approximate_methods.utils import (
 from shared.utils import LinearEpsSchedule
 
 global env_name
-
-def plot_1(
-        returns_over_seeds_over_agent: List,
-        legend: List[str],
-        title: str = 'Algo'
-):
-
-    # -------  Raw ------ #
-    def create_raw_df(sequences, group_name):
-        num_seeds = len(sequences)
-        num_episodes = len(sequences[0])
-        df = pd.DataFrame({
-            'episodes': np.tile(np.arange(num_episodes), num_seeds),
-            'returns': np.concatenate(sequences),
-            'seed': np.repeat(np.arange(num_seeds), num_episodes),
-            'group': group_name
-        })
-        return df
-
-    dfs = []
-    for label, return_ in zip(legend, returns_over_seeds_over_agent):
-        df = create_raw_df(return_, label)
-        dfs.append(df)
-
-    df = pd.concat(dfs, ignore_index=True)
-
-    # Plot using Seaborn
-    plt.figure(figsize=(10, 6))
-    sns.lineplot(
-        x='episodes', y='returns', hue='group', data=df, errorbar='sd')
-    plt.xlabel('Episodes')
-    plt.ylabel('Returns = Sum(Rewards)')
-    plt.title(title)
-    plt.legend(title='Agent')
-    plt.show()
-
-    # ------ Cummulative Sum --------- #
-    # def create_cumsum_df(sequences, group_name):
-    #     num_seeds = len(sequences)
-    #     num_episodes = len(sequences[0])
-    #
-    #     # Compute the cumulative sum for each sequence
-    #     cumulative_sums = [list(pd.Series(seq).cumsum()) for seq in sequences]
-    #
-    #     df = pd.DataFrame({
-    #         'episodes': [t for t in range(num_episodes)] * num_seeds,
-    #         'returns': [value for seq in cumulative_sums for value in seq],
-    #         'seed': [i for i in range(num_seeds) for _ in range(num_episodes)],
-    #         'group': group_name
-    #     })
-    #     return df
-    #
-    # dfs = []
-    # for label, return_ in zip(legend, returns_over_seeds_over_agent):
-    #     df = create_cumsum_df(return_, label)
-    #     dfs.append(df)
-    #
-    # df = pd.concat(dfs, ignore_index=True)
-    #
-    # # Plot using Seaborn
-    # plt.figure(figsize=(10, 6))
-    # sns.lineplot(x='episodes', y='returns', hue='group', data=df,
-    #              errorbar='sd')
-    # plt.xlabel('Episodes')
-    # plt.ylabel('CumSum Returns')
-    # plt.title(title)
-    # plt.legend(title='Agent')
-    # plt.show()
 
 
 def plot(
@@ -634,7 +568,109 @@ def semigradient_sarsa_experiments(
         legend.clear()
 
 
+def nstep_semigradient_sarsa_experiments(
+        num_episodes,
+        T,
+        n,
+        reward_shaper: Callable,
+        eps_builder: Callable = lambda x: x,
+        update_coefficient: Optional[Union[float, LinearEpsSchedule]] = None,
+        epses=(0.01, 0.1, 1.),
+        seeds=(1, 2),
+        do_performance_plot=True,
+        base_name: str = ''):
+    train_returns_over_seeds_over_over_agent = []
+    eval_returns_over_seeds_over_over_agent = []
+    train_V0_returns_over_seeds_over_over_agent = []
+    eval_V0_returns_over_seeds_over_over_agent = []
+    train_G0_returns_over_seeds_over_over_agent = []
+    eval_G0_returns_over_seeds_over_over_agent = []
+
+    legend = []
+
+    env = build_env(False)
+
+    num_tilings = 8
+    num_tiles = 8
+    max_size = 4096
+
+    x0_low, x1_low = env.observation_space.low
+    x0_high, x1_high = env.observation_space.high
+
+    '''
+        From Section 10.1:
+            We used 8 tilings, with each tile covering 1/8th of 
+            the bounded distance in each dimension
+    '''
+    feature_fn = TileCodingFeature(
+        max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
+
+    if update_coefficient is None:
+        update_coefficient = 1 / (3 * num_tilings)
+
+    for eps in epses:
+        agent = nStepSemiGradientSarsa(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            n=n,
+            update_coefficient=update_coefficient,
+            feature_fn=feature_fn,
+            discount=0.99,
+            eps=eps_builder(eps)
+        )
+
+        (
+            train_returns_over_seeds,
+            eval_returns_over_seeds,
+            train_V0_over_seeds,
+            eval_V0_over_seeds,
+            train_G0_over_seeds,
+            eval_G0_over_seeds
+        ) = run_env(
+            env=env,
+            behavioral_agent=agent,
+            reward_shaper=reward_shaper,
+            num_episodes=num_episodes,
+            T=T,
+            eval_num_episodes=1,
+            train_seeds=seeds)
+
+        train_returns_over_seeds_over_over_agent.append(
+            train_returns_over_seeds)
+        eval_returns_over_seeds_over_over_agent.append(
+            eval_returns_over_seeds)
+        train_V0_returns_over_seeds_over_over_agent.append(
+            train_V0_over_seeds)
+        eval_V0_returns_over_seeds_over_over_agent.append(
+            eval_V0_over_seeds)
+        train_G0_returns_over_seeds_over_over_agent.append(
+            train_G0_over_seeds)
+        eval_G0_returns_over_seeds_over_over_agent.append(
+            eval_G0_over_seeds)
+
+        legend.append(f'eps: {eps}')
+
+        if do_performance_plot:
+            plot(train_returns_over_seeds_over_over_agent,
+                 legend=legend,
+                 title=base_name + f'nStepSemiGradientSarsa_Train')
+
+            plot(eval_returns_over_seeds_over_over_agent,
+                 legend=legend,
+                 title=base_name + f'nStepSemiGradientSarsa_Eval')
+
+        train_returns_over_seeds_over_over_agent.clear()
+        eval_returns_over_seeds_over_over_agent.clear()
+        train_V0_returns_over_seeds_over_over_agent.clear()
+        eval_V0_returns_over_seeds_over_over_agent.clear()
+        train_G0_returns_over_seeds_over_over_agent.clear()
+        eval_G0_returns_over_seeds_over_over_agent.clear()
+        legend.clear()
+
 if __name__ == '__main__':
+    do_sarsa = False
+    do_nstep_sarsa = True
+
     epses = (0.01, 0.05, 0.1)
 
     seeds = tuple(range(0, 10))
@@ -646,7 +682,7 @@ if __name__ == '__main__':
         # Environment truncates the length of the episode at 999.
         T = 999
     else:
-        raise NotImplementedError('Enviroment not implemented')
+        raise NotImplementedError('Environment not implemented')
 
 
     def build_greedy_eps_sched(start):
@@ -662,22 +698,39 @@ if __name__ == '__main__':
     def build_update_coefficient_sched(start, end, steps = (num_episodes // 8) * T):
         return LinearEpsSchedule(start, end=end, steps=steps)
 
+    n_steps = 4
+
     # Base Reward
     if 1:
         def base_reward(reward: float,  state:np.ndarray, done: bool, t: int):
             return reward
 
-        semigradient_sarsa_experiments(
-            num_episodes=num_episodes,
-            T=T,
-            reward_shaper=base_reward,
-            eps_builder=build_greedy_eps_sched,
-            update_coefficient=build_update_coefficient_sched(
-                start=1 / (2 * 8), end=1 / (10 * 8)),
-            epses=epses,
-            seeds=seeds,
-            base_name='Base Reward_'
-        )
+        if do_sarsa:
+            semigradient_sarsa_experiments(
+                num_episodes=num_episodes,
+                T=T,
+                reward_shaper=base_reward,
+                eps_builder=build_greedy_eps_sched,
+                update_coefficient=build_update_coefficient_sched(
+                    start=1 / (2 * 8), end=1 / (10 * 8)),
+                epses=epses,
+                seeds=seeds,
+                base_name='Base Reward_'
+            )
+
+        if do_nstep_sarsa:
+            nstep_semigradient_sarsa_experiments(
+                num_episodes=num_episodes,
+                T=T,
+                n=n_steps,
+                reward_shaper=base_reward,
+                eps_builder=build_greedy_eps_sched,
+                update_coefficient=build_update_coefficient_sched(
+                    start=1 / (2 * 8), end=1 / (10 * 8)),
+                epses=epses,
+                seeds=seeds,
+                base_name='Base Reward_'
+            )
 
     # Position reward shaping
     if 1:
@@ -685,15 +738,30 @@ if __name__ == '__main__':
             k = 0.1
             return reward + k * (state[0] - 0.45)
 
-        semigradient_sarsa_experiments(
-            num_episodes=num_episodes,
-            T=T,
-            reward_shaper=reward_shaper_position,
-            update_coefficient=build_update_coefficient_sched(
-                start=1 / (2 * 8), end=1 / (10 * 8)),
-            epses=epses,
-            seeds=seeds,
-            base_name='Position Reward_')
+        if do_sarsa:
+            semigradient_sarsa_experiments(
+                num_episodes=num_episodes,
+                T=T,
+                reward_shaper=reward_shaper_position,
+                update_coefficient=build_update_coefficient_sched(
+                    start=1 / (2 * 8), end=1 / (10 * 8)),
+                epses=epses,
+                seeds=seeds,
+                base_name='Position Reward_'
+            )
+
+        if do_nstep_sarsa:
+            nstep_semigradient_sarsa_experiments(
+                num_episodes=num_episodes,
+                T=T,
+                n=n_steps,
+                reward_shaper=reward_shaper_position,
+                update_coefficient=build_update_coefficient_sched(
+                    start=1 / (2 * 8), end=1 / (10 * 8)),
+                epses=epses,
+                seeds=seeds,
+                base_name='Position Reward_'
+            )
 
     # Position + velocity reward shaping
     if 1:
@@ -701,15 +769,29 @@ if __name__ == '__main__':
             k = 0.1
             return reward + k * (state[0] - 0.45)  * (0.07/(abs(state[1]) + 0.001))
 
-        semigradient_sarsa_experiments(
-            num_episodes=num_episodes,
-            T=T,
-            reward_shaper=reward_shaper_position_velocity,
-            update_coefficient=build_update_coefficient_sched(
-                start=1/(2 * 8), end=1/(10 * 8)),
-            epses=epses,
-            seeds=seeds,
-            base_name='Position_and_Velocity Reward_')
+        if do_sarsa:
+            semigradient_sarsa_experiments(
+                num_episodes=num_episodes,
+                T=T,
+                reward_shaper=reward_shaper_position_velocity,
+                update_coefficient=build_update_coefficient_sched(
+                    start=1/(2 * 8), end=1/(10 * 8)),
+                epses=epses,
+                seeds=seeds,
+                base_name='Position_and_Velocity Reward_')
+
+        if do_nstep_sarsa:
+            nstep_semigradient_sarsa_experiments(
+                num_episodes=num_episodes,
+                T=T,
+                n=n_steps,
+                reward_shaper=reward_shaper_position_velocity,
+                update_coefficient=build_update_coefficient_sched(
+                    start=1 / (2 * 8), end=1 / (10 * 8)),
+                epses=epses,
+                seeds=seeds,
+                base_name='Position_and_Velocity Reward_'
+            )
 
     # Velocity reward shaping
     if 1:
@@ -718,15 +800,29 @@ if __name__ == '__main__':
             k = 0.1
             return reward + k * np.sign((state[0] - 0.45)) * (0.07 / (abs(state[1]) + 0.001))
 
-        semigradient_sarsa_experiments(
-            num_episodes=num_episodes,
-            T=T,
-            reward_shaper=reward_shaper_velocity,
-            update_coefficient=build_update_coefficient_sched(
-                start= 1 / (2 * 8), end=1 / (10 * 8)),
-            epses=epses,
-            seeds=seeds,
-            base_name='Velocity Reward_')
+        if do_sarsa:
+            semigradient_sarsa_experiments(
+                num_episodes=num_episodes,
+                T=T,
+                reward_shaper=reward_shaper_velocity,
+                update_coefficient=build_update_coefficient_sched(
+                    start= 1 / (2 * 8), end=1 / (10 * 8)),
+                epses=epses,
+                seeds=seeds,
+                base_name='Velocity Reward_')
+
+        if do_nstep_sarsa:
+            nstep_semigradient_sarsa_experiments(
+                num_episodes=num_episodes,
+                T=T,
+                n=n_steps,
+                reward_shaper=reward_shaper_velocity,
+                update_coefficient=build_update_coefficient_sched(
+                    start=1 / (2 * 8), end=1 / (10 * 8)),
+                epses=epses,
+                seeds=seeds,
+                base_name='Velocity Reward_'
+            )
 
     exit(0)
 
