@@ -72,10 +72,6 @@ The n-step return immediately generalizes from its tabular form to a function ap
 
 $G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n \hat{q}(S_{t+n}, A_{t+n}, \mathbf{w}_{t+n-1}), \ t + n < T$
 
-where the n-step update equation becomes:
-
-$\mathbf{w}_{t+n} \overset{\cdot}{=} \mathbf{w}_{t+n-1} + \alpha (G_{t:t+n} - \hat{q}(S_t, A_t, \mathbf{w}_{t+n-1})) \nabla \hat{q}(S_t, A_t, \mathbf{w}_{t+n-1})$
-
 The integrated algorithm is shown below:
 
 <img src="images/nStep_Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
