@@ -10,7 +10,7 @@ import gymnasium as gym
 from gymnasium import Env
 
 from tabular_methods.utils import (
-    LinearEpsSchedule,
+    LinearSchedule,
     Experience,
     DiscreteActionAgent,
     DiscreteActionRandomAgent,
@@ -26,7 +26,7 @@ from agents import (
     QSigmaOffPolicy
 )
 
-global env_name
+global ENV_NAME
 
 
 def plot(
@@ -467,11 +467,11 @@ def sarsa_experiments(
         :param start:
         :return:
         """
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=0.0, steps=(num_episodes // 4) * T)
 
     def build_fixed_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=start, steps=(num_episodes // 4) * T)
 
     for eps in epses:
@@ -588,11 +588,11 @@ def expected_sarsa_experiments(
         legend.append('Random')
 
     def build_greedy_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=0.0, steps=(num_episodes // 4) * T)
 
     def build_fixed_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=start, steps=(num_episodes // 4) * T)
 
     for eps in epses:
@@ -707,11 +707,11 @@ def qlearning_experiments(
         legend.append('Random')
 
     def build_greedy_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=0.0, steps=(num_episodes // 4) * T)
 
     def build_fixed_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=start, steps=(num_episodes // 4) * T)
 
     for eps in epses:
@@ -826,11 +826,11 @@ def nstep_sarsa_experiments(
         legend.append('Random')
 
     def build_greedy_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=0.0, steps=(num_episodes // 4) * T)
 
     def build_fixed_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=start, steps=(num_episodes // 4) * T)
 
     for eps in epses:
@@ -947,11 +947,11 @@ def offpolicy_nstep_sarsa_experiments(
         legend.append('Random')
 
     def build_greedy_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=0.0, steps=(num_episodes // 4) * T)
 
     def build_fixed_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=start, steps=(num_episodes // 4) * T)
 
     behavior_agent = random_agent
@@ -1075,11 +1075,11 @@ def offpolicy_nstep_qsigma_experiments(
         legend.append('Random')
 
     def build_greedy_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=0.0, steps=(num_episodes // 4) * T)
 
     def build_fixed_eps_sched(start):
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start, end=start, steps=(num_episodes // 4) * T)
 
     behavior_agent = random_agent
@@ -1154,7 +1154,7 @@ def offpolicy_nstep_qsigma_experiments(
 
 
 def build_env(render: bool = False) -> Env:
-    global env_name
+    global ENV_NAME
 
     if env_name == 'FrozenLake':
         env = gym.make(
@@ -1189,19 +1189,19 @@ if __name__ == '__main__':
     seeds = (1, 2, 3 , 4, 5, 6, 7)
     alpha = 0.2
 
-    env_name = 'FrozenLake'
+    ENV_NAME = 'FrozenLake'
     # env_name = 'CliffWalking'
     # env_name = 'Taxi'
 
-    if env_name == 'FrozenLake':
+    if ENV_NAME == 'FrozenLake':
         q_init = 0.0
         num_episodes = 2000
         T = 50
-    elif env_name == 'CliffWalking':
+    elif ENV_NAME == 'CliffWalking':
         q_init = -100.0  # to show how it learns
         num_episodes = 50
         T = 10
-    elif env_name == 'Taxi':
+    elif ENV_NAME == 'Taxi':
         q_init = -100.
         num_episodes = 100
         T = 50

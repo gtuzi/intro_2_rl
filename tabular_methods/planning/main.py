@@ -11,7 +11,7 @@ import seaborn as sns
 from tabular_methods.planning.agents import TabularDynaQAgent, TabularPrioritizedSweepingAgent
 from envMaze import ExtendedMazeEnvironment
 
-from tabular_methods.utils import Experience, LinearEpsSchedule, QEpsGreedyAgent
+from tabular_methods.utils import Experience, LinearSchedule, QEpsGreedyAgent
 
 
 ###############################################
@@ -452,7 +452,7 @@ def run_dynaq(
         :param start:
         :return:
         """
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start,
             end=0.0,
             steps=(maxEpisodes // 4) * max(max_steps_per_episode, 100)
@@ -581,7 +581,7 @@ def prioritized_sweeping_experiments(
         :param start:
         :return:
         """
-        return LinearEpsSchedule(
+        return LinearSchedule(
             start,
             end=0.0,
             steps=(maxEpisodes // 4) * max(max_steps_per_episode, 100)

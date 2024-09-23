@@ -12,7 +12,7 @@ from gymnasium import Env
 from agents import MCOnPolicyFirstVisitGLIE, MCOffPolicy
 
 from tabular_methods.utils import (
-    LinearEpsSchedule,
+    LinearSchedule,
     Experience,
     DiscreteActionAgent,
     DiscreteActionRandomAgent
@@ -240,7 +240,7 @@ def on_policy_experiments(num_episodes, T, q_init):
     legend.append('Random')
 
     def build_eps_sched(start):
-        return LinearEpsSchedule(start, end=0.0, steps=num_episodes)
+        return LinearSchedule(start, end=0.0, steps=num_episodes)
 
     # ------------ Step size is averaged over (s,a) visits ---------------- #
 
@@ -461,7 +461,7 @@ def off_policy_experiments(num_episodes, T, q_init):
         return reward
 
     def build_eps_sched(start, end=0.0):
-        return LinearEpsSchedule(start, end=end, steps=num_episodes)
+        return LinearSchedule(start, end=end, steps=num_episodes)
 
     random_agent = DiscreteActionRandomAgent(
         action_space_dims=int(env.action_space.n),

@@ -1,4 +1,5 @@
 from typing import Dict, Union, Any, List
+import numpy as np
 import scipy
 
 
@@ -32,7 +33,7 @@ class ConstantSchedule(NoiseSchedule):
         return self.val
 
 
-class LinearEpsSchedule(NoiseSchedule):
+class LinearSchedule(NoiseSchedule):
     def __init__(self, start, end=None, steps=None):
         if end is None:
             end = start
@@ -62,6 +63,122 @@ class LinearEpsSchedule(NoiseSchedule):
     @property
     def value(self):
         return self.current
+
+
+class CosineDecaySchedule(NoiseSchedule):
+    def __init__(self, initial_value, final_value, decay_steps):
+        """
+        Args:
+            initial_value (float): The starting value of the noise.
+            final_value (float): The value to which the noise decays.
+            decay_steps (int): The number of steps over which the decay occurs before reset.
+        """
+        self.initial_value = initial_value
+        self.final_value = final_value
+        self.decay_steps = decay_steps
+        self.current_step = 0
+        self._value = self.initial_value  # Start at the initial value
+
+    def initialize(self):
+        """ Initialization of exploration to the starting point """
+        self.current_step = 0
+        self._value = self.initial_value
+
+    def reset(self):
+        """
+        Reset the schedule to the initial state (used to reset between cycles).
+        """
+        self.current_step = 0
+        self._value = self.initial_value
+
+    def step(self):
+        """
+        Step the schedule forward by one. This will update the current value based on a
+        cosine decay function with periodic resets after 'decay_steps' steps.
+        """
+        # Reset the step counter periodically
+        cycle_step = self.current_step % self.decay_steps
+
+        # Apply the cosine decay function
+        cosine_decay = 0.5 * (1 + np.cos(np.pi * cycle_step / self.decay_steps))
+        decayed_value = self.final_value + (self.initial_value - self.final_value) * cosine_decay
+
+        # Update the current value and step
+        self._value = decayed_value
+        self.current_step += 1
+
+    @property
+    def value(self):
+        """ Returns the current value of the schedule. """
+        return self._value
+
+
+class CosineDecayWithHoldSchedule(NoiseSchedule):
+    def __init__(self, initial_value, final_value, decay_steps,
+                 initial_hold_steps, final_hold_cycles):
+        """
+        Args:
+            initial_value (float): The starting value of the noise.
+            final_value (float): The value to which the noise decays.
+            decay_steps (int): The number of steps over which the decay occurs before resetting.
+            initial_hold_steps (int): The number of steps to hold the initial value before decay starts.
+            final_hold_cycles (int): The number of cycles (complete decay periods) before holding the final value indefinitely.
+        """
+        self.initial_value = initial_value
+        self.final_value = final_value
+        self.decay_steps = decay_steps
+        self.initial_hold_steps = initial_hold_steps  # Number of steps to hold the initial value
+        self.final_hold_cycles = final_hold_cycles  # Number of cycles before final hold
+
+        self.current_step = 0
+        self._value = self.initial_value  # Start with initial value
+        self.hold_final = False
+
+    def initialize(self):
+        """ Initialization of exploration to starting point """
+        self.current_step = 0
+        self._value = self.initial_value
+        self.hold_final = False
+
+    def reset(self):
+        """ Reset the schedule to the initial state (used to reset between cycles). """
+        self.current_step = 0
+        self._value = self.initial_value
+        self.hold_final = False
+
+    def step(self):
+        """
+        Step the schedule forward by one. This updates the current value based on a
+        cosine decay function with periodic resets after 'decay_steps' steps, and includes
+        an initial hold at the beginning and a final hold after cycling ends.
+        """
+        if self.current_step < self.initial_hold_steps:
+            # Initial hold phase
+            self._value = self.initial_value
+
+        elif not self.hold_final:
+            # Cycle step: cosine decay with reset after decay_steps
+            cycle_step = (self.current_step - self.initial_hold_steps) % self.decay_steps
+            cycle_num = (self.current_step - self.initial_hold_steps) // self.decay_steps
+
+            if cycle_num >= self.final_hold_cycles:
+                # Final hold phase after all cycles
+                self._value = self.final_value
+                self.hold_final = True
+            else:
+                # Apply cosine decay during cycling
+                cosine_decay = 0.5 * (
+                            1 + np.cos(np.pi * cycle_step / self.decay_steps))
+                self._value = self.final_value + (
+                            self.initial_value - self.final_value) * cosine_decay
+
+        # Increment the step
+        self.current_step += 1
+
+    @property
+    def value(self):
+        """ Returns the current value of the schedule. """
+        return self._value
 
 
 class PDFSampler:
