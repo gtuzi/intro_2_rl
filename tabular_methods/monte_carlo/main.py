@@ -1,3 +1,4 @@
+import os
 import random
 from typing import List, Callable
 import matplotlib.pyplot as plt
@@ -22,7 +23,8 @@ from tabular_methods.utils import (
 def plot(
         rewards_over_seeds_over_agent: List,
         legend: List[str],
-        title: str = 'Algo'
+        title: str = 'Algo',
+        save: bool = True
 ):
 
     _ = plt.figure()
@@ -34,22 +36,24 @@ def plot(
 
     plt.legend(legend)
     plt.xlabel('Episodes')
-    plt.ylabel('Cummulative Returns')
+    plt.ylabel('Mean(Sum(r))')
     plt.title(title)
-    plt.show()
 
-    # _ = plt.figure()
-    # rewards_to_plot = [
-    #     [reward for reward in rewards] for rewards in rewards_over_seeds]
-    # df1 = pd.DataFrame(rewards_to_plot).melt()
-    # df1.rename(
-    #     columns={"variable": "episodes", "value": "reward"},
-    #     inplace=True
-    # )
-    #
-    # sns.set(style="darkgrid", context="talk", palette="rainbow")
-    # sns.lineplot(x="episodes", y="reward", data=df1).set(title=title)
-    # plt.show()
+    if save:
+        save_dir = 'images/results'
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        fname = f'{save_dir}/{title}'
+        fname = fname.replace(' ', '')
+        fname = fname.replace(":", "_")
+        fname = fname.replace("-", "_")
+        fname = fname.replace(".", "_")
+        fname = fname.replace("\n", "_")
+        fname += '.png'
+        plt.savefig(fname) if save else None
+    else:
+        plt.show()
 
 
 def build_env(render: bool = False) -> Env:
@@ -84,7 +88,7 @@ def evaluate_agent(
         state, info = env.reset()
 
         for t in range(T):
-            action, p = agent.act(state)
+            action, p = agent.get_greedy_action(state)
 
             next_state, reward, terminated, truncated, info = env.step(action)
 
@@ -215,233 +219,8 @@ def run_env(
     return rewards_over_seeds, eval_rewards_over_seeds
 
 
-def on_policy_experiments(num_episodes, T, q_init):
-    returns_over_seeds_over_over_agent = []
-    legend = []
-    env = build_env()
 
-    def reward_shaper(reward: float, done: bool, t: int):
-        return reward - (0.01 * (t + 1)) if done else -(0.01 * (t + 1))
-
-    agent = DiscreteActionRandomAgent(
-        action_space_dims=int(env.action_space.n),
-        obs_space_dims=int(env.observation_space.n),
-        distribution=randint,
-        distribution_args=dict(low=0, high=int(env.action_space.n))
-    )
-
-    train_returns_over_seeds, eval_returns_over_seeds = run_env(
-        env,
-        agent,
-        T=T,
-        num_episodes=num_episodes,
-        reward_shaper=reward_shaper)
-    returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append('Random')
-
-    def build_eps_sched(start):
-        return LinearSchedule(start, end=0.0, steps=num_episodes)
-
-    # ------------ Step size is averaged over (s,a) visits ---------------- #
-
-    eps = 0.0
-    step_size = None
-    agent1 = MCOnPolicyFirstVisitGLIE(
-        action_space_dims=int(env.action_space.n),
-        obs_space_dims=int(env.observation_space.n),
-        discount=0.99,
-        eps=build_eps_sched(eps),
-        qval_init=q_init,
-        step_size=step_size
-    )
-
-    train_returns_over_seeds, eval_returns_over_seeds = run_env(
-        env,
-        agent1,
-        T=T,
-        num_episodes=num_episodes,
-        reward_shaper=reward_shaper)
-    returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}')
-
-    eps = 0.1
-    step_size = None
-    agent1 = MCOnPolicyFirstVisitGLIE(
-        action_space_dims=int(env.action_space.n),
-        obs_space_dims=int(env.observation_space.n),
-        discount=0.99,
-        eps=build_eps_sched(eps),
-        qval_init=q_init,
-        step_size=step_size
-    )
-    train_returns_over_seeds, eval_returns_over_seeds = run_env(
-        env,
-        agent1,
-        T=30,
-        num_episodes=num_episodes,
-        reward_shaper=reward_shaper)
-
-    returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}')
-
-    eps = 0.2
-    step_size = None
-    agent1 = MCOnPolicyFirstVisitGLIE(
-        action_space_dims=int(env.action_space.n),
-        obs_space_dims=int(env.observation_space.n),
-        discount=0.99,
-        eps=build_eps_sched(eps),
-        qval_init=q_init,
-        step_size=step_size
-    )
-
-    train_returns_over_seeds, eval_returns_over_seeds = run_env(
-        env,
-        agent1,
-        T=30,
-        num_episodes=num_episodes,
-        reward_shaper=reward_shaper)
-    returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}')
-
-
-    eps = 0.4
-    step_size = None
-    agent1 = MCOnPolicyFirstVisitGLIE(
-        action_space_dims=int(env.action_space.n),
-        obs_space_dims=int(env.observation_space.n),
-        discount=0.99,
-        eps=build_eps_sched(eps),
-        qval_init=q_init,
-        step_size=step_size
-    )
-
-    train_returns_over_seeds, eval_returns_over_seeds = run_env(
-        env,
-        agent1,
-        T=30,
-        num_episodes=num_episodes,
-        reward_shaper=reward_shaper)
-    returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}')
-
-
-    eps = 0.6
-    step_size = None
-    agent1 = MCOnPolicyFirstVisitGLIE(
-        action_space_dims=int(env.action_space.n),
-        obs_space_dims=int(env.observation_space.n),
-        discount=0.99,
-        eps=build_eps_sched(eps),
-        qval_init=q_init,
-        step_size=step_size
-    )
-
-    train_returns_over_seeds, eval_returns_over_seeds = run_env(
-        env,
-        agent1,
-        T=30,
-        num_episodes=num_episodes,
-        reward_shaper=reward_shaper)
-    returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}')
-
-
-    eps = 0.8
-    step_size = None
-    agent1 = MCOnPolicyFirstVisitGLIE(
-        action_space_dims=int(env.action_space.n),
-        obs_space_dims=int(env.observation_space.n),
-        discount=0.99,
-        eps=build_eps_sched(eps),
-        qval_init=q_init,
-        step_size=step_size
-    )
-
-    train_returns_over_seeds, eval_returns_over_seeds = run_env(
-        env,
-        agent1,
-        T=30,
-        num_episodes=num_episodes,
-        reward_shaper=reward_shaper)
-    returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    legend.append(f'MC eps: {eps}')
-
-    plot(returns_over_seeds_over_over_agent, legend=legend,
-         title=f'Qinit: {q_init}')
-
-    # -------------- Using fixed step size ------------ #
-    # returns_over_seeds_over_over_agent = []
-    # eps = 0.1
-    # step_size = 0.01
-    # agent1 = MCOnPolicyFirstVisitGLIE(
-    #     action_space_dims=int(env.action_space.n),
-    #     obs_space_dims=int(env.observation_space.n),
-    #     discount=0.99,
-    #     eps=eps,
-    #     step_size=step_size
-    # )
-    # returns_over_seeds = run_env(env, agent1, T=30, num_episodes=num_episodes)
-    # returns_over_seeds_over_over_agent.append(returns_over_seeds)
-    # legend.append(f'MC eps: {eps}, step: {step_size}')
-    #
-    # eps = 0.1
-    # step_size = 0.1
-    # agent1 = MCOnPolicyFirstVisitGLIE(
-    #     action_space_dims=int(env.action_space.n),
-    #     obs_space_dims=int(env.observation_space.n),
-    #     discount=0.99,
-    #     eps=eps,
-    #     step_size=step_size
-    # )
-    # returns_over_seeds = run_env(env, agent1, T=30, num_episodes=num_episodes)
-    # returns_over_seeds_over_over_agent.append(returns_over_seeds)
-    # legend.append(f'MC eps: {eps}, step: {step_size}')
-    #
-    #
-    # eps = 0.1
-    # step_size = 0.3
-    # agent1 = MCOnPolicyFirstVisitGLIE(
-    #     action_space_dims=int(env.action_space.n),
-    #     obs_space_dims=int(env.observation_space.n),
-    #     discount=0.99,
-    #     eps=eps,
-    #     step_size=step_size
-    # )
-    # returns_over_seeds = run_env(env, agent1, T=30, num_episodes=num_episodes)
-    # returns_over_seeds_over_over_agent.append(returns_over_seeds)
-    # legend.append(f'MC eps: {eps}, step: {step_size}')
-    #
-    # eps = 0.1
-    # step_size = 0.6
-    # agent1 = MCOnPolicyFirstVisitGLIE(
-    #     action_space_dims=int(env.action_space.n),
-    #     obs_space_dims=int(env.observation_space.n),
-    #     discount=0.99,
-    #     eps=eps,
-    #     step_size=step_size
-    # )
-    # returns_over_seeds = run_env(env, agent1, T=30, num_episodes=num_episodes)
-    # returns_over_seeds_over_over_agent.append(returns_over_seeds)
-    # legend.append(f'MC eps: {eps}, step: {step_size}')
-    #
-    # eps = 0.1
-    # step_size = 0.9
-    # agent1 = MCOnPolicyFirstVisitGLIE(
-    #     action_space_dims=int(env.action_space.n),
-    #     obs_space_dims=int(env.observation_space.n),
-    #     discount=0.99,
-    #     eps=eps,
-    #     step_size=step_size
-    # )
-    # returns_over_seeds = run_env(env, agent1, T=30, num_episodes=num_episodes)
-    # returns_over_seeds_over_over_agent.append(returns_over_seeds)
-    # legend.append(f'MC eps: {eps}, step: {step_size}')
-
-    # plot(returns_over_seeds_over_over_agent, legend=legend)
-
-
-def off_policy_experiments(num_episodes, T, q_init):
+def off_policy_experiments(num_episodes, T):
 
     """
         Use U[num_actions] as behavior agent
@@ -451,17 +230,11 @@ def off_policy_experiments(num_episodes, T, q_init):
     train_returns_over_seeds_over_over_agent = []
     eval_returns_over_seeds_over_over_agent = []
     legend = []
-    env = build_env()
-
-    def reward_shaper_time_penalty(reward: float, done: bool, t: int):
-        k = 0.001
-        return reward - (k * (t + 1)) if done else -(k * (t + 1))
-
-    def reward_shaper_naive(reward: float, done: bool, t: int):
-        return reward
 
     def build_eps_sched(start, end=0.0):
         return LinearSchedule(start, end=end, steps=num_episodes)
+
+    env = build_env()
 
     random_agent = DiscreteActionRandomAgent(
         action_space_dims=int(env.action_space.n),
@@ -470,54 +243,194 @@ def off_policy_experiments(num_episodes, T, q_init):
         distribution_args=dict(low=0, high=int(env.action_space.n))
     )
 
-    # train_returns_over_seeds, eval_returns_over_seeds = run_env(
-    #     env, random_agent, T=T, num_episodes=num_episodes)
-    # returns_over_seeds_over_over_agent.append(returns_over_seeds)
-    # legend.append('Random')
-
     behavior_agent = random_agent
 
+    for q_init in [-1, 0., 1]:
+        for eps in [0.1, 0.2]:
+            agent_off_policy = MCOffPolicy(
+                action_space_dims=int(env.action_space.n),
+                obs_space_dims=int(env.observation_space.n),
+                discount=0.99,
+                eps=build_eps_sched(eps, eps),
+                qval_init=q_init
+            )
+
+            train_returns_over_seeds, eval_returns_over_seeds = run_env(
+                env=env,
+                behavioral_agent=behavior_agent,
+                target_agent=agent_off_policy,
+                T=T,
+                num_episodes=num_episodes
+            )
+
+            train_returns_over_seeds_over_over_agent.append(
+                train_returns_over_seeds)
+            eval_returns_over_seeds_over_over_agent.append(
+                eval_returns_over_seeds)
+            legend.append(r'$\epsilon = {}$, q_init = {}'.format(eps, q_init))
+
+    plot(
+        eval_returns_over_seeds_over_over_agent,
+        legend=legend,
+        title=f'MCOffPolicy-Eval-Target'
+    )
+
+
+def on_policy_experiments_averaged_step_size(num_episodes, T, seeds):
+    """
+        Step size is averaged over (s,a) visits
+    """
+
+    train_returns_over_seeds_over_over_agent = []
+    eval_returns_over_seeds_over_over_agent = []
+    legend = []
+    env = build_env()
+
+    rand_agent = DiscreteActionRandomAgent(
+        action_space_dims=int(env.action_space.n),
+        obs_space_dims=int(env.observation_space.n),
+        distribution=randint,
+        distribution_args=dict(low=0, high=int(env.action_space.n))
+    )
+
+    train_returns_over_seeds, eval_returns_over_seeds = run_env(
+        env,
+        rand_agent,
+        T=T,
+        num_episodes=num_episodes,
+        train_seeds=seeds)
+
+    train_returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
+    eval_returns_over_seeds_over_over_agent.append(eval_returns_over_seeds)
+    legend.append('Uniform Random')
+
+    def build_eps_sched(start):
+        return LinearSchedule(start, end=0.0, steps=num_episodes)
+
     step_size = None
-    for eps in [0.0, 0.001, 0.01, 0.05, 0.1, 0.2, 1.]:
-        agent_off_policy = MCOffPolicy(
-            action_space_dims=int(env.action_space.n),
-            obs_space_dims=int(env.observation_space.n),
-            discount=0.99,
-            eps=build_eps_sched(eps, eps),
-            qval_init=q_init
-        )
 
-        train_returns_over_seeds, eval_returns_over_seeds = run_env(
-            env=env,
-            behavioral_agent=behavior_agent,
-            target_agent=agent_off_policy,
-            reward_shaper=reward_shaper_time_penalty,
-            T=T,
-            num_episodes=num_episodes,
-            evaluate_frequency=num_episodes // 20,
-            eval_num_episodes=num_episodes // 20
-        )
+    for q_init in [-1, 0, 1]:
+        for eps in [0.05, 0.1]:
+            agent = MCOnPolicyFirstVisitGLIE(
+                action_space_dims=int(env.action_space.n),
+                obs_space_dims=int(env.observation_space.n),
+                discount=0.99,
+                eps=build_eps_sched(eps),
+                qval_init=q_init,
+                step_size=step_size)
 
-        train_returns_over_seeds_over_over_agent.append(
-            train_returns_over_seeds)
-        eval_returns_over_seeds_over_over_agent.append(
-            eval_returns_over_seeds)
-        legend.append(f'MC eps: {eps}')
+            train_returns_over_seeds, eval_returns_over_seeds = run_env(
+                env,
+                agent,
+                T=T,
+                num_episodes=num_episodes,
+                train_seeds=seeds)
 
-    # -------- Final Plots ----------- #
-    plot(train_returns_over_seeds_over_over_agent,
-         legend=legend, title=f'Train-Behavior\nQinit: {q_init}')
+            train_returns_over_seeds_over_over_agent.append(
+                train_returns_over_seeds)
 
-    plot(eval_returns_over_seeds_over_over_agent,
-         legend=legend, title=f'Eval-Target\nQinit: {q_init}')
+            eval_returns_over_seeds_over_over_agent.append(
+                eval_returns_over_seeds)
+            legend.append(r'$\epsilon = {}$, q_init = {}'.format(eps, q_init))
+
+    plot(
+        train_returns_over_seeds_over_over_agent,
+        legend=legend,
+        title=f'MCOnPolicyFirstVisit - Avg. Step Size\nTrain'
+    )
+
+    plot(
+        eval_returns_over_seeds_over_over_agent,
+        legend=legend,
+        title=f'MCOnPolicyFirstVisit - Avg. Step Size\nEval'
+    )
+
+
+def on_policy_experiments_fixed_step_size(num_episodes, T, seeds):
+    train_returns_over_seeds_over_over_agent = []
+    eval_returns_over_seeds_over_over_agent = []
+    legend = []
+    env = build_env()
+
+    rand_agent = DiscreteActionRandomAgent(
+        action_space_dims=int(env.action_space.n),
+        obs_space_dims=int(env.observation_space.n),
+        distribution=randint,
+        distribution_args=dict(low=0, high=int(env.action_space.n))
+    )
+
+    train_returns_over_seeds, eval_returns_over_seeds = run_env(
+        env,
+        rand_agent,
+        T=T,
+        num_episodes=num_episodes,
+        train_seeds=seeds)
+
+    train_returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
+    eval_returns_over_seeds_over_over_agent.append(eval_returns_over_seeds)
+    legend.append('Uniform Random')
+
+    def build_eps_sched(start):
+        return LinearSchedule(start, end=0.0, steps=num_episodes)
+
+    q_init = 0
+
+    for step_size in [0.05, 0.1, 0.2, 0.3]:
+        for eps in [0.1]:
+            agent = MCOnPolicyFirstVisitGLIE(
+                action_space_dims=int(env.action_space.n),
+                obs_space_dims=int(env.observation_space.n),
+                discount=0.99,
+                eps=build_eps_sched(eps),
+                qval_init=q_init,
+                step_size=step_size)
+
+            train_returns_over_seeds, eval_returns_over_seeds = run_env(
+                env,
+                agent,
+                T=T,
+                num_episodes=num_episodes,
+                train_seeds=seeds)
+
+            train_returns_over_seeds_over_over_agent.append(
+                train_returns_over_seeds)
+
+            eval_returns_over_seeds_over_over_agent.append(
+                eval_returns_over_seeds)
+            legend.append(r'$\epsilon = {}$, step_size = {}'.format(eps, step_size))
+
+    plot(
+        train_returns_over_seeds_over_over_agent,
+        legend=legend,
+        title=f'MCOnPolicyFirstVisit - Fixed Step Size\nTrain'
+    )
+
+    plot(
+        eval_returns_over_seeds_over_over_agent,
+        legend=legend,
+        title=f'MCOnPolicyFirstVisit - Fixed Step Size\nEval'
+    )
 
 
 if __name__ == '__main__':
-    num_episodes = 2000
+    num_episodes = 3000
     T = 30
-    q_init = 0.
+    seeds = tuple(range(5))
 
-    on_policy_experiments(num_episodes=num_episodes, T=T, q_init=q_init)
-    off_policy_experiments(num_episodes=num_episodes, T=T, q_init=q_init)
+    off_policy_experiments(
+        num_episodes=num_episodes,
+        T=T
+    )
+
+    num_episodes = 300
+    on_policy_experiments_averaged_step_size(
+        num_episodes=num_episodes,
+        T=T,
+        seeds=seeds)
+
+    on_policy_experiments_fixed_step_size(
+        num_episodes=num_episodes,
+        T=T,
+        seeds=seeds)
 
     exit(0)

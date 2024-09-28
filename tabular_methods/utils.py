@@ -18,6 +18,9 @@ class DiscreteActionAgent:
         """ Return the action and probability """
         raise NotImplementedError
 
+    def get_greedy_action(self, s) -> Tuple[int, float]:
+        raise NotImplementedError
+
     def initialize(self):
         pass
 
@@ -70,8 +73,9 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
         # Check if action is greedy for this state
         max_vals = np.amax(self.Q[s])
         idc = np.argwhere(self.Q[s] == max_vals).squeeze().tolist()
+
         if isinstance(idc, list) and (a in idc):
-            return (1. - eps + eps / self.action_space_dims) * (1. / len(idc))
+            return ((1. - eps) / len(idc)) + eps / self.action_space_dims
         elif isinstance(idc, int) and (a == idc):
             assert isinstance(idc, int)
             return 1. - eps + eps / self.action_space_dims
@@ -107,11 +111,28 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
             return a_greedy, p_greedy
         else:
             a = int(np.random.choice(self.action_space_dims))
-            # A greedy action can still be picked
+            # The greedy action can still be picked
             if a == a_greedy:
                 return a, p_greedy
             else:
-                return a, eps / self.action_space_dims
+                if pcond_greedy > (1. - 0.0001):
+                    # We're guaranteed that the greedy action was not tie-broken
+                    # so the non-greedy has eps/num_actions probability
+                    return a, eps / self.action_space_dims
+
+                # The non-greedy action here, may have been one of the
+                # randomly tie-broken greedy actions. This means that the
+                # probability of this action may not exactly
+                # eps / action_space_dims but rather p_greedy, where we've
+                # already scaled it with pcond_greedy
+
+                av = self.Q[s]
+                max_vals = np.amax(av)
+                idc = np.argwhere(av == max_vals).squeeze().tolist()
+                if a in idc:
+                    return a, p_greedy
+                else:
+                    return a, eps / self.action_space_dims
 
     def state_value(self, s):
         probs = [
