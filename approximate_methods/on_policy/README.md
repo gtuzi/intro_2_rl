@@ -5,7 +5,13 @@
 
 ## Table of Contents
 - [Introduction](#introduction)
-- [Implemented Algorithms](#implemented-algorithms)
+- [Linear Methos](#Linear-Methods)
+- [Implemented Algorithms](#Implemented-Algorithms)
+- [Semi-Gradient Sarsa](#Semi-Gradient-Sarsa)
+- [n-Step Semi-Gradient Sarsa](#n-Step-Semi-Gradient-Sarsa)
+- [Continuing Task Semi-Gradient Control: Average Reward, Differential Value Functions](#Continuing-Task-Semi-Gradient-Control)
+- [Differential Semi-Gradient Sarsa](#Differential-Semi-Gradient-Sarsa)
+- [Differential Semi-gradient n-step Sarsa](#Differential-Semi-gradient-n-step-Sarsa)
 
 ## Introduction
 This section contains methods from Chapter 10 in [Sutton & Barto RL Book].
@@ -34,9 +40,11 @@ in this case are:
 - [x]  n-Step Semi-gradient Sarsa (Section: 10.2): `agents.py/nStepSemiGradientSarsa`
 - [x]  Differential Semi-Gradient Sarsa (Section: 10.3): `agents.py/DifferentialSemiGradientSarsa`
 - [x]  Differential Semi-Gradient QLearning (Section: 10.3): `agents.py/DifferentialSemiGradientQLearning`
+- [x]  DifferentialSemiGradient_nStepSarsa (Section: 10.5): `agents.py/DifferentialSemiGradient_nStepSarsa`
 
 
 ## Algorithms - Episodic Semi-Gradient Control
+
 ### Semi-Gradient Sarsa
 
 <img src="images/Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
@@ -116,7 +124,7 @@ def reward_shaper_velocity(
 ```
 
 
-## Algorithms - Continuing Task Semi-Gradient Control
+## Continuing Task Semi-Gradient Control
 
 ### Average Reward
 Like the discounted setting, the average reward setting applies to continuing problems, 
@@ -150,9 +158,11 @@ differences between rewards and the average reward:
 
 $G_t \overset{\cdot}{=} R_{t+1} - r(\pi) + R_{t+2} - r(\pi) + R_{t+3} - r(\pi) + \dots$
 
-which are known as the _differential return_, and the corresponding 
+which are known as the __differential return__, and the corresponding 
 value functions are known as _differential value functions_.
 
+
+### Differential Value Functions
 Differential value functions are defined in terms of the new return just as 
 conventional value functions were defined in terms of the discounted return; 
 therefore the same notation is used. Differential value functions also have 
@@ -160,8 +170,8 @@ Bellman equations, just slightly different from those of the episodic setting.
 
 * $v_{\pi}(s) = \sum_{a} \pi(a \mid s) \sum_{r, s'} p(s', r \mid s, a) \left[ r - r(\pi) + v_{\pi}(s') \right]$
 * $q_{\pi}(s, a) = \sum_{r, s'} p(s', r \mid s, a) \left[ r - r(\pi) + \sum_{a'} \pi(a' \mid s') q_{\pi}(s', a') \right]$ $\hspace{1cm}(1)$
-* $v_\*(s) = \max_{a} \sum_{r, s'} p(s', r \mid s, a) \left[ r - \max_{\pi} r(\pi) + v_*(s') \right]$
-* $q_\*(s, a) = \sum_{r, s'} p(s', r \mid s, a) \left[ r - \max_{\pi} r(\pi) + \max_{a'} q_*(s', a') \right]$  $\hspace{1cm}(2)$
+* $v_*(s) = \max_{a} \sum_{r, s'} p(s', r \mid s, a) \left[ r - \max_{\pi} r(\pi) + v_*(s') \right]$
+* $q_*(s, a) = \sum_{r, s'} p(s', r \mid s, a) \left[ r - \max_{\pi} r(\pi) + \max_{a'} q_*(s', a') \right]$  $\hspace{1cm}(2)$
 
 The differential form of TD errors is defined as:
 * $\delta_t = R_{t+1} - \bar{R}_t + \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_t)$
@@ -169,6 +179,7 @@ The differential form of TD errors is defined as:
 
 where $\bar{R}_t$ is an estimate at time $t$ of the average reward $r(\pi)$.
 
+### Differential Semi-Gradient Sarsa
 The differential semi-gradient Sarsa algorithm (for estimating q) is shown below:
 
 <img src="images/DifferentialSemiGradientSarsa.png" alt="Grid" width="1885"/>
@@ -193,7 +204,8 @@ to show the effect of the __average reward__ setting on the agent's learning,
 since a continuing reward of "-1" has the same average reward (of -1).
 
 * Parameters
-  * $\epsilon$ linear decay schedule: 100k(steps) /3
+  * $100k$ steps to approximate continuing task 
+  * $\epsilon$ linearly decayed over $\frac{100k}{3}$ steps
 
 | Algorithm                                         | Results                                                                                                     | 
 |---------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
@@ -202,3 +214,60 @@ since a continuing reward of "-1" has the same average reward (of -1).
 
 For other $\epsilon$ settings, please refer to `images/results` folder.
 
+
+### Differential Semi-gradient n-step Sarsa
+
+In order to generalize to n-step bootstrapping, we need an n-step 
+version of the TD error. Starting with the n-step return:
+
+$G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n Q_{t+n-1}(S_{t+n}, A_{t+n}),
+\quad n \geq 1, 0 \leq t < T-n$
+
+and representing it in its differential form with _function approximation_:
+
+$G_{t:t+n} = R_{t+1} - \bar{R}_{t+n-1} + \cdots + R_{t+n} - \bar{R}_{t+n-1} + \hat{q}(S_{t+n}, A_{t+n}, \mathbf{w}_{t+n-1})$
+
+where $\bar{R}$ is an estimate of $r(\pi)$ and $n\geq1$ and $t+n < T$.
+If $t+n \geq T$ then $G_{t:t+n} = G_t$ as usual.
+
+The $n$-step TD error is then defined as:
+
+$\delta_t = G_{t:t+n} - \hat{q}(S_t, A_t, \mathbf{w})$
+
+after which we can apply our usual semi-gradient Sarsa update.
+
+<img src="images/Differential_nStep_Semi_Gradient_Sarsa.png.png" alt="Grid" width="1121"/>
+
+The implementation includes the "Unbiased Constant-Step-Size Trick" from 
+Section 2.6.
+
+#### Experiments
+Just like above, MountainCar environment - modified for the continuing task 
+case is also used.
+
+* Parameters
+  * $100k$ steps to approximate continuing task 
+  * $\epsilon$ linearly decayed over $\frac{100k}{3}$ steps
+
+| Parameter  | Results                                                                                                        | 
+|------------|----------------------------------------------------------------------------------------------------------------|
+| eps = 0.05 | <img src="images/results/BaseReward_DifferentialSemiGradient_4StepSarsa_eps_0.05.png" alt="Grid" width="400"/> |
+| eps = 0.1  | <img src="images/results/BaseReward_DifferentialSemiGradient_4StepSarsa_eps_0.1.png" alt="Grid" width="400"/>  |
+
+More experiments with different starting $\epsilon$ are located in `images/results`
+
+## Environment: [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car/#mountain-car)
+The Mountain Car MDP is a deterministic MDP that consists of a car placed 
+stochastically at the bottom of a sinusoidal valley, with the only 
+possible actions being the accelerations that can be applied to the car 
+in either direction. The goal of the MDP is to strategically accelerate 
+the car to reach the goal state on top of the right hill.
+
+The goal is to reach the flag placed on top of the right hill as quickly as 
+possible, as such the agent is penalised with a reward of -1 
+for each timestep.
+
+_In these experiments the discrete action is used. The reward was modified
+for the __continuing task__ case, such that when the flag is reached, a 
+"fake" reward of +100 is awarded, otherwise the average reward is constant
+-1.0 and there is nothing to optimize_.

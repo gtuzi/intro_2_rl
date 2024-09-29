@@ -11,7 +11,7 @@ Monte Carlo methods require only experience—sample sequences of states, action
 - [Off-Policy Prediction Via Importance Sampling](#Off-policy-Prediction-via-Importance-Sampling)
 - [Off-Policy MC Control](#Off-Policy-MC-Control)
 - [Execution](#Execution)
-- [Environments](#Environment)
+- [Environment](#Environment)
 
 
 ## Implemented Algorithms

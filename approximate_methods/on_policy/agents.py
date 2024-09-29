@@ -135,6 +135,8 @@ class nStepSemiGradientSarsa(LinearQEpsGreedyAgent):
 
         self.init_weights()
 
+        self.trajectory = []
+
 
     def reset(self):
         # The agent here is prepared for a new episode
@@ -405,3 +407,154 @@ class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
+
+
+class DifferentialSemiGradient_nStepSarsa(LinearQEpsGreedyAgent):
+    """
+        Implements algorithm in 10.5 in Sutton, 2020 book
+    """
+
+    def __init__(
+            self,
+            feature_size: int,
+            action_space_dims: int,
+            update_coefficient: Union[float, NoiseSchedule],
+            estimated_reward_update_coefficient: Union[float, NoiseSchedule],
+            feature_fn: Callable[[Any, int], np.ndarray], # state, action(int) --> np.ndarray
+            nstep_sarsa: int,
+            eps: Union[float, NoiseSchedule] = 0.1
+    ):
+
+        assert 0 < action_space_dims
+        assert isinstance(action_space_dims, int)
+
+        if isinstance(update_coefficient, float):
+            assert 0. < update_coefficient < 1.
+        else:
+            assert isinstance(update_coefficient, LinearSchedule)
+
+        if isinstance(estimated_reward_update_coefficient, float):
+            assert 0. < estimated_reward_update_coefficient < 1.
+        else:
+            assert isinstance(
+                estimated_reward_update_coefficient,
+                LinearSchedule
+            )
+
+        if not isinstance(eps, NoiseSchedule):
+            assert 0 <= eps <= 1
+
+        super().__init__(
+            feature_size=feature_size,
+            action_space_dims=action_space_dims,
+            feature_fn=feature_fn,
+            discount=None,  # gamma not used in this agent
+            eps=eps)
+
+        self.trajectory = []
+        self.t = 0
+        self.nstep_sarsa = nstep_sarsa
+        self.reward_estimate = 0  # r_hat
+        self.reward_estimate_unbiased_trick = 0
+        self.estimated_reward_update_coefficient = estimated_reward_update_coefficient
+        self.update_coefficient = update_coefficient
+
+
+    def initialize(self):
+        if isinstance(self.eps, NoiseSchedule):
+            # Reset noise to starting exploration
+            self.eps.initialize()
+
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            self.update_coefficient.initialize()
+
+        if isinstance(self.estimated_reward_update_coefficient, NoiseSchedule):
+            self.estimated_reward_update_coefficient.initialize()
+
+        self.t = 0
+        self.trajectory = []
+        self.reward_estimate = 0
+        self.reward_estimate_unbiased_trick = 0
+        self.init_weights()
+
+    def reset(self):
+        # Weights are not cleared. Reset does not unlearn
+        self.t = 0
+        self.trajectory = []
+
+        if isinstance(self.eps, NoiseSchedule):
+            self.eps.reset()
+
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            self.update_coefficient.reset()
+
+        if isinstance(self.estimated_reward_update_coefficient, NoiseSchedule):
+            self.estimated_reward_update_coefficient.reset()
+
+    def step(self, experience: Experience, **kwargs):
+
+        self.trajectory.append(experience)
+        tau = self.t - self.nstep_sarsa + 1
+
+        # If the episode ends before n-steps have been rolled out
+        if experience.done and (tau < 0):
+            tau = 0
+
+        if tau >= 0:
+            self.update(tau)
+
+        if isinstance(self.eps, NoiseSchedule):
+            self.eps.step()
+
+        self.t += 1
+
+    def update(self, tau, **kwargs):
+
+        """
+            In the book, for step "t", the experience is
+            formated as (R[t+1], S[t+1], A[t], S[t]). So, for (10.14),
+            given that our trajectory[t] = (R[t+1], S[t+1], A[t], S[t]),
+            we sum the rewards over trajectory over tau --> tau + n - 1
+        """
+
+        rdiff = [
+            self.trajectory[i].r - self.reward_estimate
+            for i in range(tau, tau + self.nstep_sarsa)
+        ]
+
+        delta = (sum(rdiff) +
+                 self.state_action_value(
+                     self.trajectory[tau + self.nstep_sarsa - 1].sp,
+                     self.trajectory[tau + self.nstep_sarsa - 1].ap
+                 ) -
+                 self.state_action_value(
+                     self.trajectory[tau].s,
+                     self.trajectory[tau].a
+                 )
+        )
+
+        if isinstance(self.estimated_reward_update_coefficient, LinearSchedule):
+            beta = self.estimated_reward_update_coefficient.value
+            self.estimated_reward_update_coefficient.step()
+        elif isinstance(self.estimated_reward_update_coefficient, float):
+            beta = self.estimated_reward_update_coefficient
+        else:
+            raise Exception("Invalid type for estimated reward update_coefficient")
+
+        # Compensate for the slowiness (i.e. nonstationarity) of the reward update
+        # Ref. Section 2.7 in book
+        self.reward_estimate_unbiased_trick += beta * (1. - self.reward_estimate_unbiased_trick)
+        self.reward_estimate += (beta / self.reward_estimate_unbiased_trick) * delta
+
+        grad_w = self.feature_fn(
+            self.trajectory[tau].s, self.trajectory[tau].a)
+
+        if isinstance(self.update_coefficient, LinearSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        elif isinstance(self.update_coefficient, float):
+            alpha = self.update_coefficient
+        else:
+            raise Exception("Invalid type for update_coefficient")
+
+        self.w += alpha * delta * grad_w
