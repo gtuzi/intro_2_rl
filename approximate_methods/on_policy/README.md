@@ -43,7 +43,7 @@ in this case are:
 - [x]  DifferentialSemiGradient_nStepSarsa (Section: 10.5): `agents.py/DifferentialSemiGradient_nStepSarsa`
 
 
-## Algorithms - Episodic Semi-Gradient Control
+## Episodic Semi-Gradient Control
 
 ### Semi-Gradient Sarsa
 
@@ -124,7 +124,7 @@ def reward_shaper_velocity(
 ```
 
 
-## Continuing Task Semi-Gradient Control
+## Continuing Semi-Gradient Control
 
 ### Average Reward
 Like the discounted setting, the average reward setting applies to continuing problems, 
@@ -179,6 +179,7 @@ The differential form of TD errors is defined as:
 
 where $\bar{R}_t$ is an estimate at time $t$ of the average reward $r(\pi)$.
 
+
 ### Differential Semi-Gradient Sarsa
 The differential semi-gradient Sarsa algorithm (for estimating q) is shown below:
 
@@ -206,6 +207,7 @@ since a continuing reward of "-1" has the same average reward (of -1).
 * Parameters
   * $100k$ steps to approximate continuing task 
   * $\epsilon$ linearly decayed over $\frac{100k}{3}$ steps
+  
 
 | Algorithm                                         | Results                                                                                                     | 
 |---------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
@@ -248,6 +250,7 @@ case is also used.
 * Parameters
   * $100k$ steps to approximate continuing task 
   * $\epsilon$ linearly decayed over $\frac{100k}{3}$ steps
+  * $\beta$ = 0.02 (much smaller than the $n$=1 Sarsa)
 
 | Parameter  | Results                                                                                                        | 
 |------------|----------------------------------------------------------------------------------------------------------------|
