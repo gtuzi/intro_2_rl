@@ -64,8 +64,11 @@ intro_2_rl/
 │   └── utils.py           # Base agents, utilities
 │
 ├── approximate_methods/   # Approximate Methods directory
+│   ├── off_policy/        # Source code for off_policy methods (initial implementation. Needs debugging)
+│   │   ├── agents.py      # Algorithms from: Ch. 11
+│   │   ├── main.py        # Main execution script
 │   ├── on_policy/         # Source code for on_policy methods
-│   │   ├── agents.py      # Algorithms from: Ch.10
+│   │   ├── agents.py      # Algorithms from: Ch. 10
 │   │   ├── main.py        # Main execution script
 │   │   └── README.md      # Detailed information
 │   │
