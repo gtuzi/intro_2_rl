@@ -182,54 +182,64 @@ def evaluate_agent(
     V0_over_episodes = []
     G0_over_episodes = []
 
-    for _ in tqdm(range(num_episodes), desc=f'Eval'):
+    with tqdm(
+            total=num_episodes,
+            desc=f'Eval',
+            ncols=100
+    ) as pbar:
+        for _ in range(num_episodes):
 
-        rewards_over_time = []
+            rewards_over_time = []
 
-        # Noise state reset (not exploration level)
-        agent.reset()
+            # gymnasium v26 requires users to set seed while resetting the
+            # environment
+            state, info = env.reset(seed=seed)
 
-        # gymnasium v26 requires users to set seed while resetting the
-        # environment
-        state, info = env.reset(seed=seed)
+            state_0 = state
+            G0 = 0.
+            gamma = agent.discount
 
-        state_0 = state
-        G0 = 0.
-        gamma = agent.discount
+            for t in range(T):
 
-        for t in range(T):
+                if greedy_eval:
+                    action, _ = agent.get_greedy_action(state)
+                else:
+                    action, _ = agent.act(state)
+
+                next_state, reward, terminated, truncated, info = env.step(action)
+
+                done = terminated or truncated or (t + 1 == T)
+
+                reward = reward_shaper(reward=reward, done=done, t=t)
+
+                G0 += (gamma ** t) * reward
+
+                rewards_over_time.append(reward)
+
+                if done:
+                    break
+                else:
+                    state = next_state
+
             if greedy_eval:
-                action, _ = agent.get_greedy_action(state)
+                V0 = agent.optimal_state_value(state_0)
+                S0_update_count = agent.optimal_state_update_count(state_0)
             else:
-                action, _ = agent.act(state)
+                V0 = agent.state_value(state_0)
+                S0_update_count = agent.state_update_count(state_0)
 
-            next_state, reward, terminated, truncated, info = env.step(action)
+            # Update display
+            pbar.set_postfix({
+                "G0": f" {G0:.2f}",
+                "V[0]": f"{V0: .2f}"
+            })
 
-            done = terminated or truncated or (t + 1 == T)
+            pbar.update(1)
 
-            reward = reward_shaper(reward=reward, done=done, t=t)
-
-            G0 += (gamma ** t) * reward
-
-            rewards_over_time.append(reward)
-
-            if done:
-                break
-            else:
-                state = next_state
-
-        if greedy_eval:
-            V0 = agent.optimal_state_value(state_0)
-            S0_update_count = agent.optimal_state_update_count(state_0)
-        else:
-            V0 = agent.state_value(state_0)
-            S0_update_count = agent.state_update_count(state_0)
-
-
-        rewards_over_episodes.append(sum(rewards_over_time))
-        V0_over_episodes.append(V0)
-        G0_over_episodes.append(G0)
-        S0_updates_over_episodes.append(S0_update_count)
+            rewards_over_episodes.append(sum(rewards_over_time))
+            V0_over_episodes.append(V0)
+            G0_over_episodes.append(G0)
+            S0_updates_over_episodes.append(S0_update_count)
 
     return rewards_over_episodes, V0_over_episodes, G0_over_episodes
 
@@ -278,118 +288,134 @@ def run_env(
         elif isinstance(behavioral_agent, QEpsGreedyAgent):
             gamma = behavioral_agent.discount
 
-        for episode in tqdm(
-                range(num_episodes), desc=f'Episodes for seed_{seed_i}'):
-            rewards_over_time = []
+        with tqdm(
+                total=num_episodes,
+                desc=f'Train - seed_{seed}',
+                ncols=100
+        ) as pbar:
 
-            # Noise state reset (not exploration level). Clear any trajectories
-            behavioral_agent.reset()
+            for episode in range(num_episodes):
 
-            # gymnasium v26 requires users to set seed while resetting the
-            # environment
-            state, info = env.reset(seed=seed)
+                rewards_over_time = []
 
-            state_0 = state
-            G0 = 0.
-
-            # a[0]
-            action, p = behavioral_agent.act(state)
-
-            for t in range(T):
-                next_state, reward, terminated, truncated, info = \
-                    env.step(action)
-
-                done = terminated or truncated or (t + 1 == T)
-
-                reward = reward_shaper(reward=reward, done=done, t=t)
-
-                rewards_over_time.append(reward)
-
-                next_action, next_p = behavioral_agent.act(next_state)
-
-                sigmap = sigma_fn(t + 1)
-
-                G0 += (gamma ** t) * reward
-
-                rhop = None
-                if (target_agent is not None) and (
-                isinstance(target_agent, SoftPolicy)
-                ):
-                    target_next_p = target_agent.get_sa_probability(
-                        next_state, next_action)
-                    rhop = target_next_p / next_p
-
-                e = Experience(
-                    s=state,
-                    a=action,
-                    p=p,
-                    r=reward,
-                    sp=next_state,
-                    ap=next_action,
-                    pp=next_p,
-                    done=int(done),
-                    sigmap=sigmap,
-                    rhop=rhop,
-                    t=t  # To debug the indexing of the trajectory
-                )
-
-                behavioral_agent.step(e)
+                # Noise state reset (not exploration level). Clear any trajectories
+                behavioral_agent.reset()
 
                 if target_agent is not None:
-                    target_agent.step(e)
+                    target_agent.reset()
 
-                if done:
-                    break
-                else:
-                    state = next_state
-                    action = next_action
-                    p = next_p
+                # gymnasium v26 requires users to set seed while resetting the
+                # environment
+                state, info = env.reset(seed=seed)
 
-            value = None
-            if (target_agent is not None) and isinstance(
-                    target_agent, QEpsGreedyAgent):
-                value = target_agent.state_value(state_0)
-            elif isinstance(behavioral_agent, QEpsGreedyAgent):
-                value = behavioral_agent.state_value(state_0)
+                state_0 = state
+                G0 = 0.
 
-            # The environment terminates on positive reward
-            # Opt 1: final reward of the episode
-            # rewards_over_episodes.append(rewards_over_time[-1])
+                # a[0]
+                action, p = behavioral_agent.act(state)
 
-            # Opt 2: sum of rewards in episode (for cases where there's
-            # always a reward)
-            rewards_over_episodes.append(sum(rewards_over_time))
-            V0_over_episodes.append(value)
-            G0_over_episodes.append(G0)
+                for t in range(T):
+                    next_state, reward, terminated, truncated, info = \
+                        env.step(action)
 
-            if (
-                    do_eval and
-                    (
-                        (
-                            (episode % evaluate_frequency == 0) and
-                            (eval_num_episodes > 0)
-                        ) or
-                        (episode + 1 == num_episodes) # evaluate last episode
+                    done = terminated or truncated or (t + 1 == T)
+
+                    reward = reward_shaper(reward=reward, done=done, t=t)
+
+                    rewards_over_time.append(reward)
+
+                    next_action, next_p = behavioral_agent.act(next_state)
+
+                    sigmap = sigma_fn(t + 1)
+
+                    G0 += (gamma ** t) * reward
+
+                    rhop = None
+                    if (target_agent is not None) and (
+                    isinstance(target_agent, SoftPolicy)
+                    ):
+                        target_next_p = target_agent.get_sa_probability(
+                            next_state, next_action)
+                        rhop = target_next_p / next_p
+
+                    e = Experience(
+                        s=state,
+                        a=action,
+                        p=p,
+                        r=reward,
+                        sp=next_state,
+                        ap=next_action,
+                        pp=next_p,
+                        done=int(done),
+                        sigmap=sigmap,
+                        rhop=rhop,
+                        t=t  # To debug the indexing of the trajectory
                     )
-            ):
-                eval_agent = behavioral_agent
 
-                if target_agent is not None:
-                    eval_agent = target_agent
+                    behavioral_agent.step(e)
 
-                eval_r, eval_v0, eval_g0, = evaluate_agent(
-                    env,
-                    agent=eval_agent,
-                    greedy_eval=greedy_eval,
-                    seed=seed,
-                    T=T,
-                    num_episodes=eval_num_episodes,
-                    reward_shaper=reward_shaper
-                )
+                    if target_agent is not None:
+                        target_agent.step(e)
 
-                eval_rewards_over_episodes += eval_r
-                eval_V0_over_episodes += eval_v0
-                eval_G0_over_episodes += eval_g0
+                    if done:
+                        break
+                    else:
+                        state = next_state
+                        action = next_action
+                        p = next_p
+
+                value = None
+                if isinstance(behavioral_agent, QEpsGreedyAgent):
+                    value = behavioral_agent.state_value(state_0)
+
+                # Update display
+                pbar.set_postfix({
+                    "G0": f" {G0:.2f}",
+                    "V[0]": f"{value: .2f}"
+                })
+
+                pbar.update(1)
+
+                # The environment terminates on positive reward
+                # Opt 1: final reward of the episode
+                # rewards_over_episodes.append(rewards_over_time[-1])
+
+                # Opt 2: sum of rewards in episode (for cases where there's
+                # always a reward)
+                rewards_over_episodes.append(sum(rewards_over_time))
+                V0_over_episodes.append(value)
+                G0_over_episodes.append(G0)
+
+
+
+                if (
+                        do_eval and
+                        (
+                            (
+                                (episode % evaluate_frequency == 0) and
+                                (eval_num_episodes > 0)
+                            ) or
+                            (episode + 1 == num_episodes) # evaluate last episode
+                        )
+                ):
+                    eval_agent = behavioral_agent
+
+                    if target_agent is not None:
+                        eval_agent = target_agent
+
+                    eval_r, eval_v0, eval_g0, = evaluate_agent(
+                        env,
+                        agent=eval_agent,
+                        greedy_eval=greedy_eval,
+                        seed=seed,
+                        T=T,
+                        num_episodes=eval_num_episodes,
+                        reward_shaper=reward_shaper
+                    )
+
+                    eval_rewards_over_episodes += eval_r
+                    eval_V0_over_episodes += eval_v0
+                    eval_G0_over_episodes += eval_g0
 
         rewards_over_seeds.append(rewards_over_episodes)
         eval_rewards_over_seeds.append(eval_rewards_over_episodes)
@@ -960,7 +986,7 @@ def offpolicy_nstep_sarsa_experiments(
         agent = nStepsSarsaOffPolicy(
             action_space_dims=int(env.action_space.n),
             obs_space_dims=int(env.observation_space.n),
-            n=n,
+            n_sarsa_steps=n,
             discount=0.999,
             eps=build_greedy_eps_sched(eps),
             qval_init=q_init,
@@ -1156,7 +1182,7 @@ def offpolicy_nstep_qsigma_experiments(
 def build_env(render: bool = False) -> Env:
     global ENV_NAME
 
-    if env_name == 'FrozenLake':
+    if ENV_NAME == 'FrozenLake':
         env = gym.make(
             'FrozenLake-v1',
             render_mode="human" if render else None,
@@ -1164,12 +1190,12 @@ def build_env(render: bool = False) -> Env:
             map_name="4x4",
             is_slippery=True)
 
-    elif env_name == 'Taxi':
+    elif ENV_NAME == 'Taxi':
         env = gym.make(
             'Taxi-v3',
             render_mode="human" if render else None
         )
-    elif env_name == 'CliffWalking':
+    elif ENV_NAME == 'CliffWalking':
         env = gym.make(
             "CliffWalking-v0",
             # render_mode="human",
@@ -1217,7 +1243,7 @@ if __name__ == '__main__':
         return reward
 
     # ----------- Sarsa ------------ #
-    if 1:
+    if 0:
         sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1230,7 +1256,7 @@ if __name__ == '__main__':
         )
 
     # ------ Expected Sarsa ------- #
-    if 1:
+    if 0:
         expected_sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1243,7 +1269,7 @@ if __name__ == '__main__':
         )
 
     # --------- Q-Learning -------- #
-    if 1:
+    if 0:
         qlearning_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1255,7 +1281,7 @@ if __name__ == '__main__':
             train_seeds=seeds)
 
     # -------- nStep Sarsa -------- #
-    if 1:
+    if 0:
         nstep_sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1269,7 +1295,7 @@ if __name__ == '__main__':
         )
 
     # -------- Offpolicy nStepSarsa ------ #
-    if 0:
+    if 1:
         # Note: behavioral agent is random (U), so expect
         # the training returns to be bad.
         offpolicy_nstep_sarsa_experiments(

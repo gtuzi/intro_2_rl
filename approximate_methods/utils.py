@@ -138,10 +138,14 @@ class LinearQEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
 
         # We need to know which one is the greedy action and/or it's prob
         a_greedy, pcond_greedy = self.get_greedy_action(s)
-        p_greedy = 1. - eps + eps / self.action_space_dims  # If 1 argmax_action
-        # If there are > 1 argmax_a's this is scaled according to its
-        # conditional uniform pmf
-        p_greedy *= pcond_greedy
+
+        # There can be more than one greedy actions with uniformly broken
+        # tie-breaks.
+        num_greedy_actions = 1./ pcond_greedy
+        p_greedy = (
+                ((1. - eps) / num_greedy_actions) +
+                eps / self.action_space_dims
+        )
 
         greedy = np.random.choice([True, False], p=[1. - eps, eps])
 
@@ -161,8 +165,7 @@ class LinearQEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
                 # The non-greedy action here, may have been one of the
                 # randomly tie-broken greedy actions. This means that the
                 # probability of this action may not exactly
-                # eps / action_space_dims but rather p_greedy, where we've
-                # already scaled it with pcond_greedy
+                # eps / action_space_dims, but rather p_greedy
 
                 av = self.action_values(s)
                 max_vals = np.amax(av)
@@ -170,6 +173,7 @@ class LinearQEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
                 if a in idc:
                     return a, p_greedy
                 else:
+                    # This was a non-greedy action after all
                     return a, eps / self.action_space_dims
 
     def state_value(self, s):
