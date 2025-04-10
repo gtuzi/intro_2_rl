@@ -33,6 +33,7 @@ accross environments providing they provide Gymnasium-like front end.
 - [x] Chapter 7: [n-Step Bootstrapping](tabular_methods/td/README.md)
 - [x] Chapter 8: [Planning](tabular_methods/planning/README.md)
 - [x] Chapter 10: [On-Policy Approximation](approximate_methods/on_policy/README.md)
+- [x] Chapter 11: [Off-Policy Approximation](approximate_methods/off_policy/README.md)
 
 
 ## Code Organization

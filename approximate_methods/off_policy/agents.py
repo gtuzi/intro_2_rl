@@ -1,6 +1,5 @@
 from typing import Union, Callable, Any
 import numpy as np
-from sympy import ceiling
 import time
 
 from approximate_methods.utils import (
@@ -48,8 +47,6 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
         self.update_coefficient = update_coefficient
         self.trajectory = []
 
-
-
     def __del__(self):
         try:
             self.writer.close()
@@ -61,7 +58,7 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
         self.t = 0
 
         # Create a SummaryWriter instance
-        _c = current_time = int(time.time())
+        _c = int(time.time())
         self.writer = SummaryWriter(f'runs/nstep_offpolicy/{_c}')
         SemiGradient_nStepsSarsaOffPolicy.writer_T = 0
 
@@ -74,7 +71,6 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
 
         self.init_weights()
 
-
     def reset(self):
         # The agent here is prepared for a new episode
         self.t = 0
@@ -85,7 +81,6 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
 
         if isinstance(self.update_coefficient, LinearSchedule):
             self.update_coefficient.reset()
-
 
     def step(self, e: Experience):
 
@@ -193,7 +188,6 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
             self.writer.add_scalar('target', target, t)
             self.writer.add_scalar('rho_prod', rho_prod, t)
             self.writer.add_scalar('alpha', alpha, t)
-
 
     def update_per_decision(self, tau: int):
         # starting from min(n-steps, T/done) back

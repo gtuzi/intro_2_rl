@@ -37,6 +37,8 @@ in this case are:
 
 ## Implemented Algorithms
 - [x]  Semi-gradient Sarsa (Section: 10.1): `agents.py/SemiGradientSarsa`
+- [x]  Semi-gradient Expected Sarsa (extension of Sarsa)
+- [x]  Semi-gradient SarsaMax (QLearning) (extension of Sarsa)
 - [x]  n-Step Semi-gradient Sarsa (Section: 10.2): `agents.py/nStepSemiGradientSarsa`
 - [x]  Differential Semi-Gradient Sarsa (Section: 10.3): `agents.py/DifferentialSemiGradientSarsa`
 - [x]  Differential Semi-Gradient QLearning (Section: 10.3): `agents.py/DifferentialSemiGradientQLearning`
@@ -46,8 +48,13 @@ in this case are:
 ## Episodic Semi-Gradient Control
 
 ### Semi-Gradient Sarsa
-
+For the one-step Sarsa, the target value $U_t = R_{t+1} + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w})$. The one-step algorithm listed in the book is the following:
 <img src="images/Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
+
+However, following the formulations for the tabular case (ref Chapter 6), 
+the one-step Sarsa target value $U_t$ can be easily extended to:
+* Expected Sarsa: $U_t = R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}) = R_{t+1} + \gamma{\sum_{a}{\pi(a|S_{t+1})\hat{q}(S_{t+1},a, \mathbf{w})}}$
+* Q-Learning: $U_t = R_{t+1} + \gamma\max_a{\hat{q}(S_{t+1}, a, \mathbf{w})}$
 
 #### Experiments
 Here the [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car_continuous/) environment from OpenAI's Gymnasium is used.
@@ -84,6 +91,11 @@ $G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R
 The integrated algorithm is shown below:
 
 <img src="images/nStep_Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
+
+Likewise, following the diagrams in Figure 7.3, we can extend the n-Step 
+tabular methods for computing $U_{t}$ as follows:
+* n-Step Expected Sarsa: $G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n{\sum_{a}{\pi(a|S_{t+n})\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n-1})}}, \ t + n < T$
+* n-Step Sarsa Max/QLearning: $G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n{\max_{a}\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n-1})}, \ t + n < T$
 
 #### Experiments
 The same MountainCar environment is used for this experiment, with the same parameters as the Semi-Gradient Sarsa experiment (above)
@@ -133,7 +145,7 @@ without termination or start states. Unlike that setting, however, there is no d
 cares just as much about delayed rewards as it does about immediate reward.
 
 In the average-reward setting, the quality of a policy $\pi$  is defined as the average rate of reward, 
-or  simply average reward $r(\pi)$, while following that policy.
+or  simply _average reward_ $r(\pi)$, while following that policy.
 
 
 $r(\pi) \overset{\cdot}{=} \lim_{{h \to \infty}} \frac{1}{h} \sum_{{t=1}}^{h} \mathbb{E} \left[ R_t \mid S_0, A_{0:t-1} \sim \pi \right]$
@@ -143,7 +155,7 @@ $\hspace{1cm} = \lim_{{t \to \infty}} \mathbb{E} \left[ R_t \mid S_0, A_{0:t-1} 
 $\hspace{1cm} = \sum_{s} \mu_{\pi}(s) \sum_{a} \pi(a \mid s) \sum_{s',r} p(s', r \mid s, a)r$
 
 The second and third equations hold if the steady-state distribution 
-$\mu_{\pi}(s) \overset{\cdot}{=} \lim_{{t \to \infty}} \Pr \{ S_t = s \mid A_{0:t-1} \sim \pi \}$ exists,
+$\mu_{\pi}(s) \overset{\cdot}{=} \lim_{{t \to \infty}} \Pr \{ S_t = s \mid A_{0:t-1} \sim \pi \}$
 exists and is independent of $S_0$, in other words, if the MDP is _ergodic_. 
 In an ergodic MDP, the starting state and any early decision made by the agent 
 can have only a temporary effect, in the long run the expectation of being in 
@@ -167,6 +179,8 @@ Differential value functions are defined in terms of the new return just as
 conventional value functions were defined in terms of the discounted return; 
 therefore the same notation is used. Differential value functions also have 
 Bellman equations, just slightly different from those of the episodic setting.
+Note that we remove $\gamma$ and replace rewards by the difference of the 
+reward and the true average reward
 
 * $v_{\pi}(s) = \sum_{a} \pi(a \mid s) \sum_{r, s'} p(s', r \mid s, a) \left[ r - r(\pi) + v_{\pi}(s') \right]$
 * $q_{\pi}(s, a) = \sum_{r, s'} p(s', r \mid s, a) \left[ r - r(\pi) + \sum_{a'} \pi(a' \mid s') q_{\pi}(s', a') \right]$ $\hspace{1cm}(1)$
@@ -187,6 +201,7 @@ The differential semi-gradient Sarsa algorithm (for estimating q) is shown below
 
 which leverages the differential form of the TD error to update the weights $(3)$.
 
+#### Q-Learning
 If we would like to implement the QLearning (i.e. SarsaMax), using the definition in $(2)$ 
 we could use the following TD error:
 * $\delta_t = R_{t+1} - \max{({R}_t}) + \max_a{\hat{q}(S_{t+1}, a, \mathbf{w}_t)} - \hat{q}(S_t, A_t, \mathbf{w}_t)$  $\hspace{1cm}(4)$
@@ -194,6 +209,9 @@ we could use the following TD error:
 where $\max({{R}_t})$ is an estimate of $\max_\pi{r(\pi)}$ in $(2)$ and is simply
 the maximum reward seen so far.
 
+#### Expected Sarsa
+Similar to the tabular case, expected sarsa can be formulated as:
+* $\delta_t = R_{t+1} - \bar{R}_t + \sum_{a}{\pi(a|S_{t+1})\hat{q}(S_{t+1}, a, \mathbf{w}_t)} - \hat{q}(S_t, A_t, \mathbf{w}_t)$ $\hspace{1cm}(5)$
 
 #### Experiments
 The same MountainCar environment is used for these experiments, where the 

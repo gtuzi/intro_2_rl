@@ -621,7 +621,7 @@ if __name__ == '__main__':
 
     n_sarsa_steps = 4
 
-    epses = (0.1,) # (0.01, 0.05, 0.1, 0.3, 0.5)
+    epses = (0.1, ) # (0.01, 0.05, 0.1, 0.3, 0.5)
     seeds = tuple(range(0, 3)) # tuple(range(0, 10))
     episodic = True
 

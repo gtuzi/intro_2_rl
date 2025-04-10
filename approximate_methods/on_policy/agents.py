@@ -7,6 +7,11 @@ from approximate_methods.utils import (
     Experience)
 from shared.utils import LinearSchedule
 
+# ************* Semi-Gradient ************* #
+
+#######################################
+# ----------- 1-step ---------------- #
+#######################################
 
 class SemiGradientSarsa(LinearQEpsGreedyAgent):
     def __init__(
@@ -88,6 +93,85 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
+
+class SemiGradientExpectedSarsa(SemiGradientSarsa):
+    """
+        A natural extension of approximate method Sarsa to Expected Sarsa,
+        following the discussion of the tabular methods of Chapter 6 (6.6) and
+        Chapter 7 (7.2; note eq. 7.8)
+    """
+
+    def step(self, experience: Experience, **kwargs):
+        # ap is already taken from eps-greedy call
+        s, a, r, sp, ap, done = (
+            experience.s, experience.a,
+            experience.r, experience.sp,
+            experience.ap, experience.done
+        )
+
+        # For Expected Sarsa, next step state-action value is the expectation
+        # over actions, i.e. V(s'). Refer to Chapter 7, eq. 7.8) for the
+        # tabular case
+        tgt = r + self.discount * self.state_value(sp) * (1 - done)
+        td_error = tgt - self.state_action_value(s, a)
+
+        # Grad_wi(sum(xi * wi)) = xi
+        grad_w = self.feature_fn(s, a)
+
+        if isinstance(self.update_coefficient, LinearSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        elif isinstance(self.update_coefficient, float):
+            alpha = self.update_coefficient
+        else:
+            raise Exception("Invalid type for update_coefficient")
+
+        self.w += alpha * td_error * grad_w
+
+        if isinstance(self.eps, NoiseSchedule):
+            self.eps.step()
+
+
+class SemiGradientQLearning(SemiGradientSarsa):
+    """
+        A natural extension of approximate method Sarsa to Sarsa-max
+        aka Q-Learning.
+        Following the discussion of the tabular methods of Chapter 6 (6.5)
+    """
+
+    def step(self, experience: Experience, **kwargs):
+        # ap is already taken from eps-greedy call
+        s, a, r, sp, ap, done = (
+            experience.s, experience.a,
+            experience.r, experience.sp,
+            experience.ap, experience.done
+        )
+
+        # For Expected Sarsa, next step state-action value is
+        # the max_a(q(a, S')), aka Q-Learning.
+        tgt = r + self.discount * max(self.action_values(sp)) * (1 - done)
+        td_error = tgt - self.state_action_value(s, a)
+
+        # Grad_wi(sum(xi * wi)) = xi
+        grad_w = self.feature_fn(s, a)
+
+        if isinstance(self.update_coefficient, LinearSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        elif isinstance(self.update_coefficient, float):
+            alpha = self.update_coefficient
+        else:
+            raise Exception("Invalid type for update_coefficient")
+
+        self.w += alpha * td_error * grad_w
+
+        if isinstance(self.eps, NoiseSchedule):
+            self.eps.step()
+
+
+#######################################
+# ----------- n-step ---------------- #
+#######################################
 
 class nStepSemiGradientSarsa(LinearQEpsGreedyAgent):
     def __init__(
@@ -217,6 +301,117 @@ class nStepSemiGradientSarsa(LinearQEpsGreedyAgent):
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
+
+class nStepSemiGradientExpectedSarsa(nStepSemiGradientSarsa):
+
+    def update(self, tau):
+
+        # --- Policy Evaluation --- #
+
+        # starting from min(n-steps, T/done) back
+        tau_end = min(tau + self.n, len(self.trajectory))
+
+        target = sum(
+            [
+                # Notationally, in the book, for a[t], reward is r[t+1].
+                # So while the book starts the accumulation of rewards at
+                # tau+1, this means that tau+1 indexes the
+                # (s[tau], a[tau], r[tau+1], s[tau+1]) experience
+                (self.discount ** i) * e.r
+                for i, e in enumerate(self.trajectory[tau:tau_end])
+            ]
+        )
+
+        experience_tau = self.trajectory[tau]
+        experience_tau_end = self.trajectory[tau_end - 1]  # tau + n - 1
+
+        if not experience_tau_end.done:
+            # Episode not terminated
+            # (tau + n) - th td step portion of the target
+            # This is expected Sarsa, so we get E_pi(*|s)[Q(*, s)]
+            target += (self.discount ** self.n) * self.state_value(
+                experience_tau_end.sp)
+
+        # --- Policy Improvement --- #
+        # This is still a TD method, so we still have a TD error
+        td_error = target - self.state_action_value(
+            experience_tau.s, experience_tau.a)
+
+        # gradient of the state-action value function
+        # Grad_wi(sum(xi * wi)) = xi
+        grad_w = self.feature_fn(experience_tau.s, experience_tau.a)
+
+        if isinstance(self.update_coefficient, LinearSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        elif isinstance(self.update_coefficient, float):
+            alpha = self.update_coefficient
+        else:
+            raise Exception("Invalid type for update_coefficient")
+
+        self.w += alpha * td_error * grad_w
+
+        if isinstance(self.eps, NoiseSchedule):
+            self.eps.step()
+
+
+class nStepSemiGradientQLearning(nStepSemiGradientSarsa):
+    def update(self, tau):
+
+        # --- Policy Evaluation --- #
+
+        # starting from min(n-steps, T/done) back
+        tau_end = min(tau + self.n, len(self.trajectory))
+
+        target = sum(
+            [
+                # Notationally, in the book, for a[t], reward is r[t+1].
+                # So while the book starts the accumulation of rewards at
+                # tau+1, this means that tau+1 indexes the
+                # (s[tau], a[tau], r[tau+1], s[tau+1]) experience
+                (self.discount ** i) * e.r
+                for i, e in enumerate(self.trajectory[tau:tau_end])
+            ]
+        )
+
+        experience_tau = self.trajectory[tau]
+        experience_tau_end = self.trajectory[tau_end - 1]  # tau + n - 1
+
+        if not experience_tau_end.done:
+            # Episode not terminated
+            # (tau + n) - th td step portion of the target
+            # This is Sarsa max, so we get E_pi(*|s)[Q(*, s)]
+            target += (self.discount ** self.n) * max(self.action_values(
+                experience_tau_end.sp))
+
+        # --- Policy Improvement --- #
+        # This is still a TD method, so we still have a TD error
+        td_error = target - self.state_action_value(
+            experience_tau.s, experience_tau.a)
+
+        # gradient of the state-action value function
+        # Grad_wi(sum(xi * wi)) = xi
+        grad_w = self.feature_fn(experience_tau.s, experience_tau.a)
+
+        if isinstance(self.update_coefficient, LinearSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        elif isinstance(self.update_coefficient, float):
+            alpha = self.update_coefficient
+        else:
+            raise Exception("Invalid type for update_coefficient")
+
+        self.w += alpha * td_error * grad_w
+
+        if isinstance(self.eps, NoiseSchedule):
+            self.eps.step()
+
+
+# ************* Differential Semi-Gradient ************* #
+
+#######################################
+# ----------- 1-step ---------------- #
+#######################################
 
 class DifferentialSemiGradientSarsa(LinearQEpsGreedyAgent):
     def __init__(
@@ -363,34 +558,13 @@ class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
         )
 
         # ---- Policy Evaluation ---- #
-        assert done == 0  # expecting continuing task
+        # Expecting continuing task
+        assert done == 0
 
-        # max_a'{Q(s', a')}
-        max_val = max(
-            [
-                self.state_action_value(sp, a)
-                for a in range(self.action_space_dims)
-            ]
-        )
+        # For Q-learning max(r(pi)), is the maximum reward seen thus far
+        self.max_reward = max(self.max_reward, r)
 
-        if r > self.max_reward:
-            self.max_reward = r
-
-        delta = r - self.max_reward + max_val - self.state_action_value(s, a)
-
-        if isinstance(
-                self.estimated_reward_update_coefficient,
-                LinearSchedule
-        ):
-            beta = self.estimated_reward_update_coefficient.value
-            self.estimated_reward_update_coefficient.step()
-        elif isinstance(self.estimated_reward_update_coefficient, float):
-            beta = self.estimated_reward_update_coefficient
-        else:
-            raise Exception(
-                "Invalid type for estimated reward update_coefficient")
-
-        # self.reward_estimate += beta * delta
+        delta = r - self.max_reward + max(self.action_values(sp)) - self.state_action_value(s, a)
 
         # ---- Policy Improvement ---- #
         grad_w = self.feature_fn(s, a)  # grad_wi(sum(xi * wi)) = xi
@@ -408,6 +582,56 @@ class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
+
+class DifferentialSemiGradientExpectedSarsa(DifferentialSemiGradientSarsa):
+    def step(self, experience: Experience, **kwargs):
+        # ap is already taken from eps-greedy call
+        s, a, r, sp, ap, done = (
+            experience.s, experience.a,
+            experience.r, experience.sp,
+            experience.ap, experience.done
+        )
+
+        # ---- Policy Evaluation ---- #
+        # Expecting continuing task
+        assert done == 0
+
+        delta = r - self.reward_estimate + self.state_value(sp) - self.state_action_value(s, a)
+
+        if isinstance(
+                self.estimated_reward_update_coefficient,
+                LinearSchedule
+        ):
+            beta = self.estimated_reward_update_coefficient.value
+            self.estimated_reward_update_coefficient.step()
+        elif isinstance(self.estimated_reward_update_coefficient, float):
+            beta = self.estimated_reward_update_coefficient
+        else:
+            raise Exception(
+                "Invalid type for estimated reward update_coefficient"
+            )
+
+        self.reward_estimate += beta * delta
+
+        # ---- Policy Improvement ---- #
+        grad_w = self.feature_fn(s, a)  # grad_wi(sum(xi * wi)) = xi
+
+        if isinstance(self.update_coefficient, LinearSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        elif isinstance(self.update_coefficient, float):
+            alpha = self.update_coefficient
+        else:
+            raise Exception("Invalid type for update_coefficient")
+
+        self.w += alpha * delta * grad_w
+
+        if isinstance(self.eps, NoiseSchedule):
+            self.eps.step()
+
+#######################################
+# ----------- n-step ---------------- #
+#######################################
 
 class DifferentialSemiGradient_nStepSarsa(LinearQEpsGreedyAgent):
     """
