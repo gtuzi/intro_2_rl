@@ -37,12 +37,17 @@ in this case are:
 
 ## Implemented Algorithms
 - [x]  Semi-gradient Sarsa (Section: 10.1): `agents.py/SemiGradientSarsa`
-- [x]  Semi-gradient Expected Sarsa (extension of Sarsa)
-- [x]  Semi-gradient SarsaMax (QLearning) (extension of Sarsa)
+- [x]  Semi-gradient Expected Sarsa (extension of Sarsa): `agents.py/SemiGradientExpectedSarsa`
+- [x]  Semi-gradient SarsaMax (QLearning) (extension of Sarsa): `agents.py/SemiGradientQLearning`
 - [x]  n-Step Semi-gradient Sarsa (Section: 10.2): `agents.py/nStepSemiGradientSarsa`
+- [x]  n-Step Semi-gradient Expected Sarsa (extension of Sarsa): `agents.py/nStepSemiGradientExpectedSarsa`
+- [x]  n-Step Semi-gradient SarsaMax / QLearning (extension of Sarsa): `agents.py/nStepSemiGradientQLearning`
 - [x]  Differential Semi-Gradient Sarsa (Section: 10.3): `agents.py/DifferentialSemiGradientSarsa`
 - [x]  Differential Semi-Gradient QLearning (Section: 10.3): `agents.py/DifferentialSemiGradientQLearning`
+- [x]  Differential Semi-Gradient Expected Sarsa (extension of Sarsa): `agents.py/DifferentialSemiGradientExpectedSarsa`
 - [x]  DifferentialSemiGradient_nStepSarsa (Section: 10.5): `agents.py/DifferentialSemiGradient_nStepSarsa`
+- [ ]   DifferentialSemiGradient_nStepExpectedSarsa (extension of Sarsa)
+- [ ]   DifferentialSemiGradient_nStepQLearning (extension of Sarsa)
 
 
 ## Environment
@@ -146,11 +151,13 @@ The following simulation parameters are used:
 
 #### Comparing different n-steps
 
-| Algorithm      | $n = 2$ | $n = 4$ | $n = 6$ | $n = 8$ |
-|----------------|---------|---------|---------|---------|
-| Sarsa          |         |         |         |         |
-| Expected-Sarsa |         |         |         |         |
-| Q-Learning     |         |         |         |         |
+* $\epsilon = 0.01$
+
+| Algorithm      | $n = 2$                                                                                                        | $n = 4$                                                                                                        | $n = 6$                                                                                                        | $n = 8$                                                                                                        |
+|----------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| Sarsa          | <img src="images/results/BaseReward_2StepSemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_4StepSemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_6StepSemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_8StepSemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         |
+| Expected-Sarsa | <img src="images/results/BaseReward_2StepSemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_4StepSemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_6StepSemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_8StepSemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> |
+| Q-Learning     | <img src="images/results/BaseReward_2StepSemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_4StepSemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_6StepSemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_8StepSemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     |
 
 Results for other parameters and reward shaping functions are located under `images/results` folder.
 
@@ -212,7 +219,7 @@ policies that attain the maximal value of $r(\pi)$ are considered to be optimal.
 In the average-reward setting, returns are defined in terms of 
 differences between rewards and the average reward:
 
-$G_t \overset{\cdot}{=} R_{t+1} - r(\pi) + R_{t+2} - r(\pi) + R_{t+3} - r(\pi) + \dots$
+$G_{t} \overset{\cdot}{=} R_{t+1} - r(\pi) + R_{t+2} - r(\pi) + R_{t+3} - r(\pi) + \dots$
 
 which are known as the __differential return__, and the corresponding 
 value functions are known as _differential value functions_.
@@ -232,8 +239,8 @@ reward and the true average reward
 * $q_*(s, a) = \sum_{r, s'} p(s', r \mid s, a) \left[ r - \max_{\pi} r(\pi) + \max_{a'} q_*(s', a') \right]$  $\hspace{1cm}(2)$
 
 The differential form of TD errors is defined as:
-* $\delta_t = R_{t+1} - \bar{R}_t + \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_t)$
-* $\delta_t = R_{t+1} - \bar{R}_t + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w}_t) - \hat{q}(S_t, A_t, \mathbf{w}_t)$ $\hspace{1cm}(3)$
+* $\delta_{t} = R_{t+1} - \bar{R}_t + \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_t)$
+* $\delta_{t} = R_{t+1} - \bar{R}_t + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w}_t) - \hat{q}(S_t, A_t, \mathbf{w}_t)$ $\hspace{1cm}(3)$
 
 where $\bar{R}_t$ is an estimate at time $t$ of the average reward $r(\pi)$.
 
@@ -248,14 +255,14 @@ which leverages the differential form of the TD error to update the weights $(3)
 #### Q-Learning
 If we would like to implement the QLearning (i.e. SarsaMax), using the definition in $(2)$ 
 we could use the following TD error:
-* $\delta_t = R_{t+1} - \max{({R}_t}) + \max_a{\hat{q}(S_{t+1}, a, \mathbf{w}_t)} - \hat{q}(S_t, A_t, \mathbf{w}_t)$  $\hspace{1cm}(4)$
+* $\delta_{t} = R_{t+1} - \max{({R}_t}) + \max_a{\hat{q}(S_{t+1}, a, \mathbf{w}_t)} - \hat{q}(S_t, A_t, \mathbf{w}_t)$  $\hspace{1cm}(4)$
 
 where $\max({{R}_t})$ is an estimate of $\max_\pi{r(\pi)}$ in $(2)$ and is simply
 the maximum reward seen so far.
 
 #### Expected Sarsa
 Similar to the tabular case, expected sarsa can be formulated as:
-* $\delta_t = R_{t+1} - \bar{R}_t + \sum_{a}{\pi(a|S_{t+1})\hat{q}(S_{t+1}, a, \mathbf{w}_t)} - \hat{q}(S_t, A_t, \mathbf{w}_t)$ $\hspace{1cm}(5)$
+* $\delta_{t} = R_{t+1} - \bar{R}_t + \sum_{a}{\pi(a|S_{t+1})\hat{q}(S_{t+1}, a, \mathbf{w}_t)} - \hat{q}(S_t, A_t, \mathbf{w}_t)$ $\hspace{1cm}(5)$
 
 #### Experiments
 The same MountainCar environment is used for these experiments, where the 
@@ -292,11 +299,11 @@ and representing it in its differential form with _function approximation_:
 $G_{t:t+n} = R_{t+1} - \bar{R}_{t+n-1} + \cdots + R_{t+n} - \bar{R}_{t+n-1} + \hat{q}(S_{t+n}, A_{t+n}, \mathbf{w}_{t+n-1})$
 
 where $\bar{R}$ is an estimate of $r(\pi)$ and $n\geq1$ and $t+n < T$.
-If $t+n \geq T$ then $G_{t:t+n} = G_t$ as usual.
+If $t+n \geq T$ then $G_{t:t+n} = G_{t}$ as usual.
 
 The $n$-step TD error is then defined as:
 
-$\delta_t = G_{t:t+n} - \hat{q}(S_t, A_t, \mathbf{w})$
+$\delta_{t} = G_{t:t+n} - \hat{q}(S_t, A_t, \mathbf{w})$
 
 after which we can apply our usual semi-gradient Sarsa update.
 

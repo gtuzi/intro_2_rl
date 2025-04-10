@@ -1657,7 +1657,7 @@ if __name__ == '__main__':
                     eps_builder=build_greedy_eps_sched,
                     update_coefficient=build_update_coefficient_sched(
                         start=1 / (2 * 8), end=1 / (10 * 8)),
-                    epses=epses,
+                    epses=(0.01, ),
                     seeds=seeds,
                     base_name='Base Reward_'
                 )
@@ -1671,7 +1671,7 @@ if __name__ == '__main__':
                     eps_builder=build_greedy_eps_sched,
                     update_coefficient=build_update_coefficient_sched(
                         start=1 / (2 * 8), end=1 / (10 * 8)),
-                    epses=epses,
+                    epses=(0.01, ),
                     seeds=seeds,
                     base_name='Base Reward_'
                 )
@@ -1685,7 +1685,7 @@ if __name__ == '__main__':
                     eps_builder=build_greedy_eps_sched,
                     update_coefficient=build_update_coefficient_sched(
                         start=1 / (2 * 8), end=1 / (10 * 8)),
-                    epses=epses,
+                    epses=(0.01, ),
                     seeds=seeds,
                     base_name='Base Reward_'
                 )
