@@ -16,6 +16,8 @@ from approximate_methods.on_policy.agents import (
     SemiGradientExpectedSarsa,
     SemiGradientQLearning,
     nStepSemiGradientSarsa,
+    nStepSemiGradientExpectedSarsa,
+    nStepSemiGradientQLearning,
     DifferentialSemiGradientSarsa,
     DifferentialSemiGradientQLearning,
     DifferentialSemiGradient_nStepSarsa)
@@ -43,7 +45,7 @@ def plot(
         x_label: str = 'Episodes',
         title: str = 'Algo',
         save = True,
-        min_y_val = -300,
+        min_y_val = -500,
         max_y_val = -50
 ):
     # Function to create raw dataframes from the sequences
@@ -588,6 +590,13 @@ def build_env() -> Env:
 
     return env
 
+# region Episodic-Semi-Gradient
+
+# region single_step
+
+####################################
+# ---------- Single Step --------- #
+####################################
 
 def semigradient_sarsa_experiments(
         num_episodes,
@@ -887,6 +896,14 @@ def semigradient_qlearning_experiments(
         eval_G0_returns_over_seeds_over_over_agent.clear()
         legend.clear()
 
+# endregion single_step
+
+
+# region n-step
+
+####################################
+# ------------- n Step ----------- #
+####################################
 
 def nstep_semigradient_sarsa_experiments(
         num_episodes,
@@ -973,11 +990,11 @@ def nstep_semigradient_sarsa_experiments(
         if do_performance_plot:
             plot(train_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'nStepSemiGradientSarsa_Train')
+                 title=base_name + f'{n}StepSemiGradientSarsa_Train')
 
             plot(eval_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'nStepSemiGradientSarsa_Eval')
+                 title=base_name + f'{n}StepSemiGradientSarsa_Eval')
 
         train_returns_over_seeds_over_over_agent.clear()
         eval_returns_over_seeds_over_over_agent.clear()
@@ -988,6 +1005,212 @@ def nstep_semigradient_sarsa_experiments(
         legend.clear()
 
 
+
+def nstep_semigradient_expected_sarsa_experiments(
+        num_episodes,
+        T,
+        n,
+        reward_shaper: Callable,
+        eps_builder: Callable = lambda x: x,
+        update_coefficient: Optional[Union[float, LinearSchedule]] = None,
+        epses=(0.01, 0.1, 1.),
+        seeds=(1, 2),
+        do_performance_plot=True,
+        base_name: str = ''):
+    train_returns_over_seeds_over_over_agent = []
+    eval_returns_over_seeds_over_over_agent = []
+    train_V0_returns_over_seeds_over_over_agent = []
+    eval_V0_returns_over_seeds_over_over_agent = []
+    train_G0_returns_over_seeds_over_over_agent = []
+    eval_G0_returns_over_seeds_over_over_agent = []
+
+    legend = []
+
+    env = build_env()
+
+    num_tilings = 8
+    num_tiles = 8
+    max_size = 4096
+
+    x0_low, x1_low = env.observation_space.low
+    x0_high, x1_high = env.observation_space.high
+
+    '''
+        From Section 10.1:
+            We used 8 tilings, with each tile covering 1/8th of 
+            the bounded distance in each dimension
+    '''
+    feature_fn = TileCodingFeature(
+        max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
+
+    if update_coefficient is None:
+        update_coefficient = 1 / (3 * num_tilings)
+
+    for eps in epses:
+        agent = nStepSemiGradientExpectedSarsa(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            n=n,
+            update_coefficient=update_coefficient,
+            feature_fn=feature_fn,
+            discount=0.99,
+            eps=eps_builder(eps)
+        )
+
+        (
+            train_returns_over_seeds,
+            eval_returns_over_seeds,
+            train_V0_over_seeds,
+            eval_V0_over_seeds,
+            train_G0_over_seeds,
+            eval_G0_over_seeds
+        ) = run_env_episodic(
+            env=env,
+            behavioral_agent=agent,
+            reward_shaper=reward_shaper,
+            num_episodes=num_episodes,
+            T=T,
+            eval_num_episodes=1,
+            train_seeds=seeds)
+
+        train_returns_over_seeds_over_over_agent.append(
+            train_returns_over_seeds)
+        eval_returns_over_seeds_over_over_agent.append(
+            eval_returns_over_seeds)
+        train_V0_returns_over_seeds_over_over_agent.append(
+            train_V0_over_seeds)
+        eval_V0_returns_over_seeds_over_over_agent.append(
+            eval_V0_over_seeds)
+        train_G0_returns_over_seeds_over_over_agent.append(
+            train_G0_over_seeds)
+        eval_G0_returns_over_seeds_over_over_agent.append(
+            eval_G0_over_seeds)
+
+        legend.append(f'eps: {eps}')
+
+        if do_performance_plot:
+            plot(train_returns_over_seeds_over_over_agent,
+                 legend=legend,
+                 title=base_name + f'{n}StepSemiGradientExpectedSarsa_Train')
+
+            plot(eval_returns_over_seeds_over_over_agent,
+                 legend=legend,
+                 title=base_name + f'{n}StepSemiGradientExpectedSarsa_Eval')
+
+        train_returns_over_seeds_over_over_agent.clear()
+        eval_returns_over_seeds_over_over_agent.clear()
+        train_V0_returns_over_seeds_over_over_agent.clear()
+        eval_V0_returns_over_seeds_over_over_agent.clear()
+        train_G0_returns_over_seeds_over_over_agent.clear()
+        eval_G0_returns_over_seeds_over_over_agent.clear()
+        legend.clear()
+
+
+def nstep_semigradient_qlearning_experiments(
+        num_episodes,
+        T,
+        n,
+        reward_shaper: Callable,
+        eps_builder: Callable = lambda x: x,
+        update_coefficient: Optional[Union[float, LinearSchedule]] = None,
+        epses=(0.01, 0.1, 1.),
+        seeds=(1, 2),
+        do_performance_plot=True,
+        base_name: str = ''):
+    train_returns_over_seeds_over_over_agent = []
+    eval_returns_over_seeds_over_over_agent = []
+    train_V0_returns_over_seeds_over_over_agent = []
+    eval_V0_returns_over_seeds_over_over_agent = []
+    train_G0_returns_over_seeds_over_over_agent = []
+    eval_G0_returns_over_seeds_over_over_agent = []
+
+    legend = []
+
+    env = build_env()
+
+    num_tilings = 8
+    num_tiles = 8
+    max_size = 4096
+
+    x0_low, x1_low = env.observation_space.low
+    x0_high, x1_high = env.observation_space.high
+
+    '''
+        From Section 10.1:
+            We used 8 tilings, with each tile covering 1/8th of 
+            the bounded distance in each dimension
+    '''
+    feature_fn = TileCodingFeature(
+        max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
+
+    if update_coefficient is None:
+        update_coefficient = 1 / (3 * num_tilings)
+
+    for eps in epses:
+        agent = nStepSemiGradientQLearning(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            n=n,
+            update_coefficient=update_coefficient,
+            feature_fn=feature_fn,
+            discount=0.99,
+            eps=eps_builder(eps)
+        )
+
+        (
+            train_returns_over_seeds,
+            eval_returns_over_seeds,
+            train_V0_over_seeds,
+            eval_V0_over_seeds,
+            train_G0_over_seeds,
+            eval_G0_over_seeds
+        ) = run_env_episodic(
+            env=env,
+            behavioral_agent=agent,
+            reward_shaper=reward_shaper,
+            num_episodes=num_episodes,
+            T=T,
+            eval_num_episodes=1,
+            train_seeds=seeds)
+
+        train_returns_over_seeds_over_over_agent.append(
+            train_returns_over_seeds)
+        eval_returns_over_seeds_over_over_agent.append(
+            eval_returns_over_seeds)
+        train_V0_returns_over_seeds_over_over_agent.append(
+            train_V0_over_seeds)
+        eval_V0_returns_over_seeds_over_over_agent.append(
+            eval_V0_over_seeds)
+        train_G0_returns_over_seeds_over_over_agent.append(
+            train_G0_over_seeds)
+        eval_G0_returns_over_seeds_over_over_agent.append(
+            eval_G0_over_seeds)
+
+        legend.append(f'eps: {eps}')
+
+        if do_performance_plot:
+            plot(train_returns_over_seeds_over_over_agent,
+                 legend=legend,
+                 title=base_name + f'{n}StepSemiGradientQLearning_Train')
+
+            plot(eval_returns_over_seeds_over_over_agent,
+                 legend=legend,
+                 title=base_name + f'{n}StepSemiGradientQLearning_Eval')
+
+        train_returns_over_seeds_over_over_agent.clear()
+        eval_returns_over_seeds_over_over_agent.clear()
+        train_V0_returns_over_seeds_over_over_agent.clear()
+        eval_V0_returns_over_seeds_over_over_agent.clear()
+        train_G0_returns_over_seeds_over_over_agent.clear()
+        eval_G0_returns_over_seeds_over_over_agent.clear()
+        legend.clear()
+
+# endregion n-step
+
+# endregion Episodic-Semi-Gradient
+
+
+# region  Continuous-Differential-Semi-Gradient
 
 def differential_semigradient_sarsa_experiments(
         T,
@@ -1194,16 +1417,17 @@ def differential_semigradient_nStep_sarsa_experiments(
         mean_returns_over_seeds_over_over_agent.clear()
         legend.clear()
 
-
+# endregion  Continuous-Differential-Semi-Gradient
 
 if __name__ == '__main__':
     do_sarsa = True
-    do_expected_sarsa = False
-    do_qlearning = False
-    do_nstep_sarsa = False
+    do_expected_sarsa = True
+    do_qlearning = True
+    do_nstep = True
     n_sarsa_steps = 4
+    n_sarsa_steps_sweep = [2, 6, 8]
 
-    epses = (0.01, 0.05, 0.1, 0.3, 0.5)
+    epses = (0.01, 0.05, 0.1, 0.3)
     seeds = tuple(range(0, 5))
     episodic = True
 
@@ -1214,7 +1438,7 @@ if __name__ == '__main__':
         if episodic:
             num_episodes = 200
             # Environment truncates the length of the episode at 200.
-            T = 20 # 999
+            T = 999
             MAX_EPISODE_STEPS = T
         else:
             episodic = False
@@ -1297,7 +1521,7 @@ if __name__ == '__main__':
                 base_name='Base Reward_'
             )
 
-        if do_nstep_sarsa:
+        if do_nstep:
             differential_semigradient_nStep_sarsa_experiments(
                 T=T,
                 nstep_sarsa=n_sarsa_steps,
@@ -1331,63 +1555,140 @@ if __name__ == '__main__':
     #########################################
 
     # Semi-Gradient
-    if 1 and episodic:
+    if 0 and episodic:
         def base_reward(reward: float,  state:np.ndarray, done: bool, t: int):
             return reward
 
-        if do_sarsa:
-            semigradient_sarsa_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                reward_shaper=base_reward,
-                eps_builder=build_greedy_eps_sched,
-                update_coefficient=build_update_coefficient_sched(
-                    start=1 / (2 * 8), end=1 / (10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Base Reward_'
-            )
+        if not do_nstep:
+            if do_sarsa:
+                semigradient_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_'
+                )
 
-        if do_expected_sarsa:
-            semigradient_expected_sarsa_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                reward_shaper=base_reward,
-                eps_builder=build_greedy_eps_sched,
-                update_coefficient=build_update_coefficient_sched(
-                    start=1 / (2 * 8), end=1 / (10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Base Reward_'
-            )
+            if do_expected_sarsa:
+                semigradient_expected_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_'
+                )
 
-        if do_qlearning:
-            semigradient_qlearning_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                reward_shaper=base_reward,
-                eps_builder=build_greedy_eps_sched,
-                update_coefficient=build_update_coefficient_sched(
-                    start=1 / (2 * 8), end=1 / (10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Base Reward_'
-            )
+            if do_qlearning:
+                semigradient_qlearning_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_'
+                )
 
-        if do_nstep_sarsa:
-            nstep_semigradient_sarsa_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                n=n_sarsa_steps,
-                reward_shaper=base_reward,
-                eps_builder=build_greedy_eps_sched,
-                update_coefficient=build_update_coefficient_sched(
-                    start=1 / (2 * 8), end=1 / (10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Base Reward_'
-            )
+        if do_nstep:
+            if do_sarsa:
+                nstep_semigradient_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    n=n_sarsa_steps,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_'
+                )
 
+            if do_expected_sarsa:
+                nstep_semigradient_expected_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    n=n_sarsa_steps,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_'
+                )
+
+            if do_qlearning:
+                nstep_semigradient_qlearning_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    n=n_sarsa_steps,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_'
+                )
+
+    # Sweep over different n-steps
+    if 1 and episodic and do_nstep:
+        def base_reward(reward: float,  state:np.ndarray, done: bool, t: int):
+            return reward
+
+        for n in n_sarsa_steps_sweep:
+            if do_sarsa:
+                nstep_semigradient_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    n=n,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_'
+                )
+
+            if do_expected_sarsa:
+                nstep_semigradient_expected_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    n=n,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_'
+                )
+
+            if do_qlearning:
+                nstep_semigradient_qlearning_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    n=n,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_'
+                )
 
     ##########################################
     # ----------- Reward Shaping ----------- #
@@ -1395,36 +1696,42 @@ if __name__ == '__main__':
 
     # Position reward shaping
     if 0 and episodic:
-        def reward_shaper_position(reward: float, state: np.ndarray,
-                                   done: bool, t: int):
+        def reward_shaper_position(
+                reward: float,
+                state: np.ndarray,
+                done: bool, t: int
+        ):
             k = 0.1
             return reward + k * (state[0] - 0.45)
 
 
-        if do_sarsa:
-            semigradient_sarsa_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                reward_shaper=reward_shaper_position,
-                update_coefficient=build_update_coefficient_sched(
-                    start=1 / (2 * 8), end=1 / (10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Position Reward_'
-            )
+        if not do_nstep:
+            if do_sarsa:
+                semigradient_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    reward_shaper=reward_shaper_position,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Position Reward_'
+                )
 
-        if do_nstep_sarsa:
-            nstep_semigradient_sarsa_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                n=n_sarsa_steps,
-                reward_shaper=reward_shaper_position,
-                update_coefficient=build_update_coefficient_sched(
-                    start=1 / (2 * 8), end=1 / (10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Position Reward_'
-            )
+
+        if do_nstep:
+            if do_sarsa:
+                nstep_semigradient_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    n=n_sarsa_steps,
+                    reward_shaper=reward_shaper_position,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Position Reward_'
+                )
 
     # Position + velocity reward shaping
     if 0 and episodic:
@@ -1432,29 +1739,32 @@ if __name__ == '__main__':
             k = 0.1
             return reward + k * (state[0] - 0.45)  * (0.07/(abs(state[1]) + 0.001))
 
-        if do_sarsa:
-            semigradient_sarsa_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                reward_shaper=reward_shaper_position_velocity,
-                update_coefficient=build_update_coefficient_sched(
-                    start=1/(2 * 8), end=1/(10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Position_and_Velocity Reward_')
 
-        if do_nstep_sarsa:
-            nstep_semigradient_sarsa_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                n=n_sarsa_steps,
-                reward_shaper=reward_shaper_position_velocity,
-                update_coefficient=build_update_coefficient_sched(
-                    start=1 / (2 * 8), end=1 / (10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Position_and_Velocity Reward_'
-            )
+        if not do_nstep:
+            if do_sarsa:
+                semigradient_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    reward_shaper=reward_shaper_position_velocity,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1/(2 * 8), end=1/(10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Position_and_Velocity Reward_')
+
+        if do_nstep:
+            if do_sarsa:
+                nstep_semigradient_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    n=n_sarsa_steps,
+                    reward_shaper=reward_shaper_position_velocity,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Position_and_Velocity Reward_'
+                )
 
     # Velocity reward shaping
     if 0 and episodic:
@@ -1463,29 +1773,32 @@ if __name__ == '__main__':
             k = 0.1
             return reward + k * np.sign((state[0] - 0.45)) * (0.07 / (abs(state[1]) + 0.001))
 
-        if do_sarsa:
-            semigradient_sarsa_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                reward_shaper=reward_shaper_velocity,
-                update_coefficient=build_update_coefficient_sched(
-                    start= 1 / (2 * 8), end=1 / (10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Velocity Reward_')
 
-        if do_nstep_sarsa:
-            nstep_semigradient_sarsa_experiments(
-                num_episodes=num_episodes,
-                T=T,
-                n=n_sarsa_steps,
-                reward_shaper=reward_shaper_velocity,
-                update_coefficient=build_update_coefficient_sched(
-                    start=1 / (2 * 8), end=1 / (10 * 8)),
-                epses=epses,
-                seeds=seeds,
-                base_name='Velocity Reward_'
-            )
+        if do_nstep:
+            if do_sarsa:
+                semigradient_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    reward_shaper=reward_shaper_velocity,
+                    update_coefficient=build_update_coefficient_sched(
+                        start= 1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Velocity Reward_')
+
+        if do_nstep:
+            if do_sarsa:
+                nstep_semigradient_sarsa_experiments(
+                    num_episodes=num_episodes,
+                    T=T,
+                    n=n_sarsa_steps,
+                    reward_shaper=reward_shaper_velocity,
+                    update_coefficient=build_update_coefficient_sched(
+                        start=1 / (2 * 8), end=1 / (10 * 8)),
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Velocity Reward_'
+                )
 
     exit(0)
 

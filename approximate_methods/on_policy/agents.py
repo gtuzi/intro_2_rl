@@ -356,6 +356,7 @@ class nStepSemiGradientExpectedSarsa(nStepSemiGradientSarsa):
 
 
 class nStepSemiGradientQLearning(nStepSemiGradientSarsa):
+
     def update(self, tau):
 
         # --- Policy Evaluation --- #
@@ -380,7 +381,7 @@ class nStepSemiGradientQLearning(nStepSemiGradientSarsa):
         if not experience_tau_end.done:
             # Episode not terminated
             # (tau + n) - th td step portion of the target
-            # This is Sarsa max, so we get E_pi(*|s)[Q(*, s)]
+            # This is Sarsa max, so we get max_a(Q(*, s))
             target += (self.discount ** self.n) * max(self.action_values(
                 experience_tau_end.sp))
 
