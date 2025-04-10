@@ -64,8 +64,9 @@ where the number of tiles & tilings are set to 8.
 ## Episodic Semi-Gradient Control
 
 ### Semi-Gradient Sarsa
-For the one-step Sarsa, the target value $U_t = R_{t+1} + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w})$. The one-step algorithm listed in the book is the following:
-<img src="images/Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
+For the one-step Sarsa, the target value $U_t = R_{t+1} + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w})$. 
+The one-step algorithm listed in the book is the following:
+<img src="images/Semi_Gradient_Sarsa.png" alt="Grid" width="800"/>
 
 Following the formulations for the tabular case (ref Chapter 6), 
 the one-step Sarsa target value $U_t$ can be easily extended to Expected
@@ -109,7 +110,7 @@ $G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R
 
 The integrated algorithm is shown below:
 
-<img src="images/nStep_Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
+<img src="images/nStep_Semi_Gradient_Sarsa.png" alt="Grid" width="800"/>
 
 Likewise, following the diagrams in Figure 7.3, we can extend the n-Step 
 tabular methods for computing $G_{t:t+n}$ as follows
@@ -240,7 +241,7 @@ where $\bar{R}_t$ is an estimate at time $t$ of the average reward $r(\pi)$.
 ### Differential Semi-Gradient Sarsa
 The differential semi-gradient Sarsa algorithm (for estimating q) is shown below:
 
-<img src="images/DifferentialSemiGradientSarsa.png" alt="Grid" width="1885"/>
+<img src="images/DifferentialSemiGradientSarsa.png" alt="Grid" width="800"/>
 
 which leverages the differential form of the TD error to update the weights $(3)$.
 
@@ -299,7 +300,7 @@ $\delta_t = G_{t:t+n} - \hat{q}(S_t, A_t, \mathbf{w})$
 
 after which we can apply our usual semi-gradient Sarsa update.
 
-<img src="images/Differential_nStep_Semi_Gradient_Sarsa.png.png" alt="Grid" width="1121"/>
+<img src="images/Differential_nStep_Semi_Gradient_Sarsa.png.png" alt="Grid" width="800"/>
 
 The implementation includes the "Unbiased Constant-Step-Size Trick" from 
 Section 2.6.
