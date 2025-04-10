@@ -45,20 +45,14 @@ in this case are:
 - [x]  DifferentialSemiGradient_nStepSarsa (Section: 10.5): `agents.py/DifferentialSemiGradient_nStepSarsa`
 
 
-## Episodic Semi-Gradient Control
+## Environment
+Here the [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car/) environment from OpenAI's Gymnasium is used.
+This is a discrete control environment where the agent is a car that must reach the flag at the top of the hill.
 
-### Semi-Gradient Sarsa
-For the one-step Sarsa, the target value $U_t = R_{t+1} + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w})$. The one-step algorithm listed in the book is the following:
-<img src="images/Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
-
-However, following the formulations for the tabular case (ref Chapter 6), 
-the one-step Sarsa target value $U_t$ can be easily extended to:
-* Expected Sarsa: $U_t = R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}) = R_{t+1} + \gamma{\sum_{a}{\pi(a|S_{t+1})\hat{q}(S_{t+1},a, \mathbf{w})}}$
-* Q-Learning: $U_t = R_{t+1} + \gamma\max_a{\hat{q}(S_{t+1}, a, \mathbf{w})}$
-
-#### Experiments
-Here the [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car_continuous/) environment from OpenAI's Gymnasium is used.
-This is a continuous control environment where the agent is a car that must reach the flag at the top of the hill.
+The discrete action space is defined as:
+* 0 - Accelerate to the left
+* 1 - Don’t accelerate
+* 2 - Accelerate to the right
 
 The continuous state-space is discretized into feature vectors using tile-coding from [`tiles3.py`](http://incompleteideas.net/tiles/tiles3.py-remove) - where, as in footnote (1) in the book - it is used as:
 - `iht=IHT(4096)` 
@@ -66,20 +60,45 @@ The continuous state-space is discretized into feature vectors using tile-coding
 
 where the number of tiles & tilings are set to 8.
 
-###### Parameters
-The following parameters are used:
-* Num episodes = 200
-* Evaluation frequency = 5
-* Max steps = 999
-* &epsilon; = 0.01
-* learning rate (&alpha;) was decayed from 
-  * start  = 1 / (2 * num_tilings) = 1 / (2 * 8)
-  * end = 1 / (10 * num_tilings) = 1 / (10 * 8)
+
+## Episodic Semi-Gradient Control
+
+### Semi-Gradient Sarsa
+For the one-step Sarsa, the target value $U_t = R_{t+1} + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w})$. The one-step algorithm listed in the book is the following:
+<img src="images/Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
+
+Following the formulations for the tabular case (ref Chapter 6), 
+the one-step Sarsa target value $U_t$ can be easily extended to Expected
+Sarsa and Q-Learning. The rest of the boxed algorithm remains the same.
+
+### Expected Sarsa 
+$U_t = R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}) = R_{t+1} + \gamma{\sum_{a}{\pi(a|S_{t+1})\hat{q}(S_{t+1},a, \mathbf{w})}}$
+
+### Q-Learning
+$U_t = R_{t+1} + \gamma\max_a{\hat{q}(S_{t+1}, a, \mathbf{w})}$
+
+
+### Experiments
+###### Simulation Parameters
+The following simulation parameters are used:
+* 5 seeds
+* Search parameter: $\epsilon$ = `[0.01, 0.05, 0.1, 0.3]`. 
+  * Results for one $\epsilon$ shown in table. Others in `/results`
+* Num episodes = $200$
+* Evaluation frequency = $5$
+* MaxSteps = $999$
+
+###### Learning Parameters
+* learning rate $\alpha$ was decayed from `start` to `end`
+  * `start` = $\frac{1}{2NumTilings} = \frac{1}{16}$
+  * `end` = $\frac{1}{10NumTilings} = \frac{1}{80}$
 
   
-| Train                                                                                       | Evaluation                                                                                 | 
-|---------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------|
-| <img src="images/Base Reward_SemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/Base Reward_SemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> | 
+| Algorithm      | Parameters        | Train                                                                                                      | Evaluation                                                                                                | 
+|----------------|-------------------|------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| Sarsa          | $\epsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_SemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         |
+| Expected-Sarsa | $\epsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientExpectedSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_SemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> |
+| Q-Learning     | $\epsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientQLearning_Train_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_SemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     |
 
 
 ### n-Step Semi-Gradient Sarsa
@@ -93,20 +112,44 @@ The integrated algorithm is shown below:
 <img src="images/nStep_Semi_Gradient_Sarsa.png" alt="Grid" width="1019"/>
 
 Likewise, following the diagrams in Figure 7.3, we can extend the n-Step 
-tabular methods for computing $U_{t}$ as follows:
-* n-Step Expected Sarsa: $G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n{\sum_{a}{\pi(a|S_{t+n})\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n-1})}}, \ t + n < T$
-* n-Step Sarsa Max/QLearning: $G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n{\max_{a}\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n-1})}, \ t + n < T$
+tabular methods for computing $G_{t:t+n}$ as follows
+
+### n-Step Expected Sarsa
+$G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n{\sum_{a}{\pi(a|S_{t+n})\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n-1})}}, \ t + n < T$
+
+### n-Step Sarsa Max/QLearning
+$G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n{\max_{a}\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n-1})}, \ t + n < T$
 
 #### Experiments
-The same MountainCar environment is used for this experiment, with the same parameters as the Semi-Gradient Sarsa experiment (above)
+###### Simulation Parameters
+The following simulation parameters are used:
+* 5 seeds
+* Num episodes = $200$
+* Evaluation frequency = $5$
+* MaxSteps = $999$
 
-Paremeters pertaining to nStep-Semi-Gradient Sarsa for the shown results are:
-* n = 4
-* &epsilon; = 0.05
+###### Learning Parameters
+* learning rate $\alpha$ was decayed from `start` to `end`
+  * `start` = $\frac{1}{2NumTilings} = \frac{1}{16}$
+  * `end` = $\frac{1}{10NumTilings} = \frac{1}{80}$
+
+
+#### Comparing different Agents (Algorithms)
   
-| Train                                                                                            | Evaluation                                                                                      | 
-|--------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| <img src="images/Base Reward_nStepSemiGradientSarsa_Train_eps_0.05.png" alt="Grid" width="400"/> | <img src="images/Base Reward_nStepSemiGradientSarsa_Eval_eps_0.05.png" alt="Grid" width="400"/> | 
+| Algorithm      | Parameters                 | Train                                                                                                           | Evaluation                                                                                                     | 
+|----------------|----------------------------|-----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| Sarsa          | $n = 4$, $\epsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_4StepSemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         |
+| Expected-Sarsa | $n = 4$, $\epsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientExpectedSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_4StepSemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> |
+| Q-Learning     | $n = 4$, $\epsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientQLearning_Train_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_4StepSemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     |
+
+
+#### Comparing different n-steps
+
+| Algorithm      | $n = 2$ | $n = 4$ | $n = 6$ | $n = 8$ |
+|----------------|---------|---------|---------|---------|
+| Sarsa          |         |         |         |         |
+| Expected-Sarsa |         |         |         |         |
+| Q-Learning     |         |         |         |         |
 
 Results for other parameters and reward shaping functions are located under `images/results` folder.
 
