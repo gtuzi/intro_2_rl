@@ -1,5 +1,7 @@
-from typing import Union, Callable, Any
+from typing import Union, Callable, Any, Optional
 import numpy as np
+
+from torch.utils.tensorboard import SummaryWriter
 
 from approximate_methods.utils import (
     LinearQEpsGreedyAgent,
@@ -44,6 +46,17 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
         self.t = 0
         self.update_coefficient = update_coefficient
 
+        self._writer: Optional[SummaryWriter] = None
+
+    @property
+    def writer(self) -> SummaryWriter:
+        return self._writer
+
+    @writer.setter
+    def writer(self, w: SummaryWriter):
+        if w is not None:
+            assert isinstance(w, SummaryWriter)
+        self._writer = w
 
     def initialize(self):
         if isinstance(self.eps, NoiseSchedule):
@@ -74,8 +87,15 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
             experience.ap, experience.done
         )
 
-        tgt = r + self.discount * self.state_action_value(sp, ap) * (1 - done)
-        td_error = tgt - self.state_action_value(s, a)
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
+
+        next_qhat = self.state_action_value(sp, ap) * (1 - done)
+        qhat = self.state_action_value(s, a)
+
+        tgt = r + self.discount * next_qhat
+        td_error = tgt - qhat
 
         # Grad_wi(sum(xi * wi)) = xi
         grad_w = self.feature_fn(s, a)
@@ -93,6 +113,20 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
+        if (self._writer is not None) and (log_step is not None):
+            self._writer.add_scalar('target', tgt, log_step)
+            self._writer.add_scalar('td_error', td_error, log_step)
+            self._writer.add_scalar('q', qhat, log_step)
+            self._writer.add_scalar('q_next', next_qhat, log_step)
+            self._writer.add_scalar('alpha', alpha, log_step)
+
+            if isinstance(self.eps, NoiseSchedule):
+                e = self.eps.value
+            else:
+                e = self.eps
+
+            self._writer.add_scalar('epsilon', e, log_step)
+            self.writer.add_histogram('grad_w', grad_w, log_step)
 
 class SemiGradientExpectedSarsa(SemiGradientSarsa):
     """
@@ -109,11 +143,18 @@ class SemiGradientExpectedSarsa(SemiGradientSarsa):
             experience.ap, experience.done
         )
 
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
+
         # For Expected Sarsa, next step state-action value is the expectation
         # over actions, i.e. V(s'). Refer to Chapter 7, eq. 7.8) for the
         # tabular case
-        tgt = r + self.discount * self.state_value(sp) * (1 - done)
-        td_error = tgt - self.state_action_value(s, a)
+        v_next = self.state_value(sp) * (1 - done)
+        qhat = self.state_action_value(s, a)
+
+        tgt = r + self.discount * v_next
+        td_error = tgt - qhat
 
         # Grad_wi(sum(xi * wi)) = xi
         grad_w = self.feature_fn(s, a)
@@ -130,6 +171,22 @@ class SemiGradientExpectedSarsa(SemiGradientSarsa):
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
+
+
+        if (self._writer is not None) and (log_step is not None):
+            self._writer.add_scalar('target', tgt, log_step)
+            self._writer.add_scalar('td_error', td_error, log_step)
+            self._writer.add_scalar('q', qhat, log_step)
+            self._writer.add_scalar('v_next', v_next, log_step)
+            self._writer.add_scalar('alpha', alpha, log_step)
+
+            if isinstance(self.eps, NoiseSchedule):
+                e = self.eps.value
+            else:
+                e = self.eps
+
+            self._writer.add_scalar('epsilon', e, log_step)
+            self.writer.add_histogram('grad_w', grad_w, log_step)
 
 
 class SemiGradientQLearning(SemiGradientSarsa):
@@ -147,10 +204,17 @@ class SemiGradientQLearning(SemiGradientSarsa):
             experience.ap, experience.done
         )
 
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
+
         # For Expected Sarsa, next step state-action value is
         # the max_a(q(a, S')), aka Q-Learning.
-        tgt = r + self.discount * max(self.action_values(sp)) * (1 - done)
-        td_error = tgt - self.state_action_value(s, a)
+        qhat = self.state_action_value(s, a)
+        qhat_next = max(self.action_values(sp)) * (1 - done)
+
+        tgt = r + self.discount * qhat_next
+        td_error = tgt - qhat
 
         # Grad_wi(sum(xi * wi)) = xi
         grad_w = self.feature_fn(s, a)
@@ -167,6 +231,22 @@ class SemiGradientQLearning(SemiGradientSarsa):
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
+
+
+        if (self._writer is not None) and (log_step is not None):
+            self._writer.add_scalar('target', tgt, log_step)
+            self._writer.add_scalar('td_error', td_error, log_step)
+            self._writer.add_scalar('q', qhat, log_step)
+            self._writer.add_scalar('q_next', qhat_next, log_step)
+            self._writer.add_scalar('alpha', alpha, log_step)
+
+            if isinstance(self.eps, NoiseSchedule):
+                e = self.eps.value
+            else:
+                e = self.eps
+
+            self._writer.add_scalar('epsilon', e, log_step)
+            self.writer.add_histogram('grad_w', grad_w, log_step)
 
 
 #######################################
@@ -208,6 +288,17 @@ class nStepSemiGradientSarsa(LinearQEpsGreedyAgent):
         self.update_coefficient = update_coefficient
         self.trajectory = []
 
+        self._writer: Optional[SummaryWriter] = None
+
+    @property
+    def writer(self) -> SummaryWriter:
+        return self._writer
+
+    @writer.setter
+    def writer(self, w: SummaryWriter):
+        if w is not None:
+            assert isinstance(w, SummaryWriter)
+        self._writer = w
 
     def initialize(self):
         if isinstance(self.eps, NoiseSchedule):
@@ -234,7 +325,7 @@ class nStepSemiGradientSarsa(LinearQEpsGreedyAgent):
         self.trajectory = []
 
 
-    def step(self, e: Experience):
+    def step(self, e: Experience, **kwargs):
         self.trajectory.append(e)
         tau = self.t - self.n + 1
 
@@ -243,12 +334,14 @@ class nStepSemiGradientSarsa(LinearQEpsGreedyAgent):
             tau = 0
 
         if tau >= 0:
-            self.update(tau)
+            self.update(tau, **kwargs)
 
         self.t += 1
 
-
-    def update(self, tau):
+    def update(self, tau, **kwargs):
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
 
         # --- Policy Evaluation --- #
 
@@ -269,20 +362,21 @@ class nStepSemiGradientSarsa(LinearQEpsGreedyAgent):
         experience_tau = self.trajectory[tau]
         experience_tau_end = self.trajectory[tau_end - 1]  # tau + n - 1
 
+        qhat_next = None
         if not experience_tau_end.done:
             # Episode not terminated
             # (tau + n) - th td step portion of the target
-            qh = self.state_action_value(
+            qhat_next = self.state_action_value(
                 experience_tau_end.sp,
                 experience_tau_end.ap
             )
-            target += (self.discount ** self.n) * qh
+            target += (self.discount ** self.n) * qhat_next
 
 
         # --- Policy Improvement --- #
         # This is still a TD method, so we still have a TD error
-        td_error = target - self.state_action_value(
-            experience_tau.s, experience_tau.a)
+        qhat = self.state_action_value(experience_tau.s, experience_tau.a)
+        td_error = target - qhat
 
         # gradient of the state-action value function
         # Grad_wi(sum(xi * wi)) = xi
@@ -300,11 +394,32 @@ class nStepSemiGradientSarsa(LinearQEpsGreedyAgent):
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
+
+        if (self._writer is not None) and (log_step is not None):
+            self._writer.add_scalar('target', target, log_step)
+            self._writer.add_scalar('td_error', td_error, log_step)
+            self._writer.add_scalar('q', qhat, log_step)
+
+            if qhat_next is not None:
+                self._writer.add_scalar('q_next', qhat_next, log_step)
+
+            self._writer.add_scalar('alpha', alpha, log_step)
+
+            if isinstance(self.eps, NoiseSchedule):
+                e = self.eps.value
+            else:
+                e = self.eps
+
+            self._writer.add_scalar('epsilon', e, log_step)
+            self.writer.add_histogram('grad_w', grad_w, log_step)
 
 
 class nStepSemiGradientExpectedSarsa(nStepSemiGradientSarsa):
 
-    def update(self, tau):
+    def update(self, tau, **kwargs):
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
 
         # --- Policy Evaluation --- #
 
@@ -325,17 +440,18 @@ class nStepSemiGradientExpectedSarsa(nStepSemiGradientSarsa):
         experience_tau = self.trajectory[tau]
         experience_tau_end = self.trajectory[tau_end - 1]  # tau + n - 1
 
+        vhat_next = None
         if not experience_tau_end.done:
             # Episode not terminated
             # (tau + n) - th td step portion of the target
             # This is expected Sarsa, so we get E_pi(*|s)[Q(*, s)]
-            target += (self.discount ** self.n) * self.state_value(
-                experience_tau_end.sp)
+            vhat_next = self.state_value(experience_tau_end.sp)
+            target += (self.discount ** self.n) * vhat_next
 
         # --- Policy Improvement --- #
         # This is still a TD method, so we still have a TD error
-        td_error = target - self.state_action_value(
-            experience_tau.s, experience_tau.a)
+        qhat = self.state_action_value(experience_tau.s, experience_tau.a)
+        td_error = target - qhat
 
         # gradient of the state-action value function
         # Grad_wi(sum(xi * wi)) = xi
@@ -354,10 +470,31 @@ class nStepSemiGradientExpectedSarsa(nStepSemiGradientSarsa):
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
+        if (self._writer is not None) and (log_step is not None):
+            self._writer.add_scalar('target', target, log_step)
+            self._writer.add_scalar('td_error', td_error, log_step)
+            self._writer.add_scalar('q', qhat, log_step)
+
+            if vhat_next is not None:
+                self._writer.add_scalar('v_next', vhat_next, log_step)
+
+            self._writer.add_scalar('alpha', alpha, log_step)
+
+            if isinstance(self.eps, NoiseSchedule):
+                e = self.eps.value
+            else:
+                e = self.eps
+
+            self._writer.add_scalar('epsilon', e, log_step)
+            self.writer.add_histogram('grad_w', grad_w, log_step)
+
 
 class nStepSemiGradientQLearning(nStepSemiGradientSarsa):
 
-    def update(self, tau):
+    def update(self, tau, **kwargs):
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
 
         # --- Policy Evaluation --- #
 
@@ -378,17 +515,18 @@ class nStepSemiGradientQLearning(nStepSemiGradientSarsa):
         experience_tau = self.trajectory[tau]
         experience_tau_end = self.trajectory[tau_end - 1]  # tau + n - 1
 
+        qhat_next = None
         if not experience_tau_end.done:
             # Episode not terminated
             # (tau + n) - th td step portion of the target
             # This is Sarsa max, so we get max_a(Q(*, s))
-            target += (self.discount ** self.n) * max(self.action_values(
-                experience_tau_end.sp))
+            qhat_next = max(self.action_values(experience_tau_end.sp))
+            target += (self.discount ** self.n) * qhat_next
 
         # --- Policy Improvement --- #
         # This is still a TD method, so we still have a TD error
-        td_error = target - self.state_action_value(
-            experience_tau.s, experience_tau.a)
+        qhat = self.state_action_value(experience_tau.s, experience_tau.a)
+        td_error = target - qhat
 
         # gradient of the state-action value function
         # Grad_wi(sum(xi * wi)) = xi
@@ -406,6 +544,24 @@ class nStepSemiGradientQLearning(nStepSemiGradientSarsa):
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
+
+        if (self._writer is not None) and (log_step is not None):
+            self._writer.add_scalar('target', target, log_step)
+            self._writer.add_scalar('td_error', td_error, log_step)
+            self._writer.add_scalar('q', qhat, log_step)
+
+            if qhat_next is not None:
+                self._writer.add_scalar('q_next', qhat_next, log_step)
+
+            self._writer.add_scalar('alpha', alpha, log_step)
+
+            if isinstance(self.eps, NoiseSchedule):
+                e = self.eps.value
+            else:
+                e = self.eps
+
+            self._writer.add_scalar('epsilon', e, log_step)
+            self.writer.add_histogram('grad_w', grad_w, log_step)
 
 
 # ************* Differential Semi-Gradient ************* #
@@ -453,6 +609,20 @@ class DifferentialSemiGradientSarsa(LinearQEpsGreedyAgent):
         self.reward_estimate = 0 # r_hat
         self.estimated_reward_update_coefficient = estimated_reward_update_coefficient
         self.update_coefficient = update_coefficient
+        self._writer: Optional[SummaryWriter] = None
+
+
+    @property
+    def writer(self) -> SummaryWriter:
+        return self._writer
+
+
+    @writer.setter
+    def writer(self, w: SummaryWriter):
+        if w is not None:
+            assert isinstance(w, SummaryWriter)
+        self._writer = w
+
 
     def initialize(self):
         if isinstance(self.eps, NoiseSchedule):
@@ -484,6 +654,11 @@ class DifferentialSemiGradientSarsa(LinearQEpsGreedyAgent):
 
 
     def step(self, experience: Experience, **kwargs):
+
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
+
         # ap is already taken from eps-greedy call
         s, a, r, sp, ap, done = (
             experience.s, experience.a,
@@ -495,7 +670,10 @@ class DifferentialSemiGradientSarsa(LinearQEpsGreedyAgent):
         # Expecting continuing task
         assert done == 0
 
-        delta = r - self.reward_estimate + self.state_action_value(sp, ap) - self.state_action_value(s, a)
+        qhat_next = self.state_action_value(sp, ap)
+        qhat = self.state_action_value(s, a)
+        target = r - self.reward_estimate + qhat_next
+        delta = target - qhat
 
         if isinstance(self.estimated_reward_update_coefficient, LinearSchedule):
             beta = self.estimated_reward_update_coefficient.value
@@ -522,6 +700,23 @@ class DifferentialSemiGradientSarsa(LinearQEpsGreedyAgent):
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
+
+        if (self._writer is not None) and (log_step is not None):
+            self._writer.add_scalar('target', target, log_step)
+            self._writer.add_scalar('td_error', delta, log_step)
+            self._writer.add_scalar('q', qhat, log_step)
+            self._writer.add_scalar('q_next', qhat_next, log_step)
+            self._writer.add_scalar('alpha', alpha, log_step)
+            self._writer.add_scalar(
+                'reward_estimate', self.reward_estimate, log_step)
+
+            if isinstance(self.eps, NoiseSchedule):
+                e = self.eps.value
+            else:
+                e = self.eps
+
+            self._writer.add_scalar('epsilon', e, log_step)
+            self.writer.add_histogram('grad_w', grad_w, log_step)
 
 
 class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
@@ -551,6 +746,10 @@ class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
         self.max_reward = -np.inf
 
     def step(self, experience: Experience, **kwargs):
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
+
         # ap is already taken from eps-greedy call
         s, a, r, sp, ap, done = (
             experience.s, experience.a,
@@ -564,8 +763,10 @@ class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
 
         # For Q-learning max(r(pi)), is the maximum reward seen thus far
         self.max_reward = max(self.max_reward, r)
-
-        delta = r - self.max_reward + max(self.action_values(sp)) - self.state_action_value(s, a)
+        qhat_next = max(self.action_values(sp))
+        qhat = self.state_action_value(s, a)
+        target = r - self.max_reward + qhat_next
+        delta = target - qhat
 
         # ---- Policy Improvement ---- #
         grad_w = self.feature_fn(s, a)  # grad_wi(sum(xi * wi)) = xi
@@ -583,9 +784,31 @@ class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
+        if (self._writer is not None) and (log_step is not None):
+            self._writer.add_scalar('target', target, log_step)
+            self._writer.add_scalar('td_error', delta, log_step)
+            self._writer.add_scalar('q', qhat, log_step)
+            self._writer.add_scalar('q_next', qhat_next, log_step)
+            self._writer.add_scalar('alpha', alpha, log_step)
+            self._writer.add_scalar(
+                'max_reward', self.max_reward, log_step)
+
+            if isinstance(self.eps, NoiseSchedule):
+                e = self.eps.value
+            else:
+                e = self.eps
+
+            self._writer.add_scalar('epsilon', e, log_step)
+            self.writer.add_histogram('grad_w', grad_w, log_step)
+
 
 class DifferentialSemiGradientExpectedSarsa(DifferentialSemiGradientSarsa):
+
     def step(self, experience: Experience, **kwargs):
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
+
         # ap is already taken from eps-greedy call
         s, a, r, sp, ap, done = (
             experience.s, experience.a,
@@ -597,7 +820,10 @@ class DifferentialSemiGradientExpectedSarsa(DifferentialSemiGradientSarsa):
         # Expecting continuing task
         assert done == 0
 
-        delta = r - self.reward_estimate + self.state_value(sp) - self.state_action_value(s, a)
+        vhat_next = self.state_value(sp)
+        qhat = self.state_action_value(s, a)
+        target = r - self.reward_estimate + vhat_next
+        delta = target - qhat
 
         if isinstance(
                 self.estimated_reward_update_coefficient,
@@ -629,6 +855,24 @@ class DifferentialSemiGradientExpectedSarsa(DifferentialSemiGradientSarsa):
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
+
+        if (self._writer is not None) and (log_step is not None):
+            self._writer.add_scalar('target', target, log_step)
+            self._writer.add_scalar('td_error', delta, log_step)
+            self._writer.add_scalar('q', qhat, log_step)
+            self._writer.add_scalar('v_next', vhat_next, log_step)
+            self._writer.add_scalar('alpha', alpha, log_step)
+            self._writer.add_scalar(
+                'reward_estimate', self.reward_estimate, log_step)
+
+            if isinstance(self.eps, NoiseSchedule):
+                e = self.eps.value
+            else:
+                e = self.eps
+
+            self._writer.add_scalar('epsilon', e, log_step)
+            self.writer.add_histogram('grad_w', grad_w, log_step)
+
 
 #######################################
 # ----------- n-step ---------------- #

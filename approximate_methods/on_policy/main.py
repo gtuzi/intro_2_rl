@@ -1,5 +1,6 @@
 import os
 import random
+import time
 from typing import List, Callable, Union, Optional
 
 from tqdm import tqdm
@@ -11,6 +12,8 @@ import seaborn as sns
 import gymnasium as gym
 from gymnasium import Env
 
+from torch.utils.tensorboard import SummaryWriter
+
 from approximate_methods.on_policy.agents import (
     SemiGradientSarsa,
     SemiGradientExpectedSarsa,
@@ -20,7 +23,7 @@ from approximate_methods.on_policy.agents import (
     nStepSemiGradientQLearning,
     DifferentialSemiGradientSarsa,
     DifferentialSemiGradientQLearning,
-    DifferentialSemiGradient_nStepSarsa)
+    DifferentialSemiGradient_nStepSarsa, DifferentialSemiGradientExpectedSarsa)
 
 from approximate_methods.utils import (
     DiscreteActionAgent,
@@ -45,8 +48,8 @@ def plot(
         x_label: str = 'Episodes',
         title: str = 'Algo',
         save = True,
-        min_y_val = -500,
-        max_y_val = -50
+        min_y_val = None,
+        max_y_val = None
 ):
     # Function to create raw dataframes from the sequences
     def create_raw_df(sequences, group_name):
@@ -104,8 +107,8 @@ def plot(
         plt.plot(group_data['episodes'], group_data['max'], linestyle='--',
                  color='gray', alpha=0.7)
 
-
-    plt.ylim(min_y_val, max_y_val)
+    if (min_y_val is not None) and (max_y_val is not None):
+        plt.ylim(min_y_val, max_y_val)
 
     # Add labels and title
     plt.xlabel(x_label)
@@ -201,11 +204,15 @@ def run_env_continuing(
         reward_shaper: Callable = lambda reward, state, done, t: reward,
         T: int = int(1e5),
         train_seeds=(1, 2, 3, 4),
-        normalize_reward: bool = False
+        normalize_reward: bool = False,
+        do_log: bool = False,
+        log_freq: int = 10,
+        root_log: str = ''
 ):
-    rewards_over_seeds = []
-    mean_rewards_over_seeds = []
-    sum_rewards_per_term_over_seeds = []
+    sum_rewards_over_seeds = []
+
+    writer = None
+    log_folder = f'runs/continuing/{root_log}/{int(time.time())}'
 
     for seed_i, seed in enumerate(train_seeds):
         random.seed(seed)
@@ -213,9 +220,19 @@ def run_env_continuing(
 
         agent.initialize()  # Unlearn
 
-        rewards_over_time = []
-        mean_rewards_over_time = []
-        sum_rewards_per_term_over_term = []
+        if do_log:
+            if writer is not None:
+                writer.close()
+                del writer
+
+            writer = SummaryWriter(f'{log_folder}/seed_{seed_i}')
+            try:
+                agent.writer = writer
+            except:
+                pass
+
+        sum_rewards_over_time = []
+        success_times = [0]
 
         sum_raw_rewards = 0.
         sum_raw_rewards_per_term = 0.
@@ -238,6 +255,7 @@ def run_env_continuing(
 
                 if (ENV_NAME == 'MountainCar') and terminated:
                     reward_raw = 100.0
+                    success_times.append(t)
 
                 done = terminated or truncated or (t + 1 == T)
 
@@ -260,18 +278,6 @@ def run_env_continuing(
                 nu_rewards = (1. - 0.1) * nu_rewards + 0.1 * (reward ** 2)
                 var_reward = nu_rewards - (mean_rewards ** 2)
 
-                probs = [
-                    agent.get_sa_probability(next_state, _a)
-                    for _a in range(agent.action_space_dims)
-                ]
-                assert 1 - 1e-5 <= sum(probs) <= 1. + 1e-5
-                entropy = -np.sum([p * np.log2(p + 1e-8) for p in probs])
-
-                rewards_over_time.append(reward_raw)
-                mean_rewards_over_time.append(sum_raw_rewards/(t + 1))
-                sum_rewards_per_term_over_term.append(
-                    sum_raw_rewards_per_term)
-
                 if isinstance(agent.eps, NoiseSchedule):
                     eps_val = agent.eps.value
                 else:
@@ -280,13 +286,62 @@ def run_env_continuing(
                 # Update display
                 pbar.set_postfix(
                     {
-                        "r(sum/avg/term)":
-                            f" {sum_raw_rewards:.2f}/{sum_raw_rewards/(t + 1):.2f}/{sum_raw_rewards_per_term:.2f}",
+                        "r(sum/avg)-term ":
+                            f" {sum_raw_rewards_per_term:.2f}/{sum_raw_rewards_per_term/(t + 1):.2f}",
+                        "r(sum/avg)":
+                            f" {sum_raw_rewards:.2f}/{sum_raw_rewards/ (t + seed_i * T + 1):.2f}",
                         "eps": f" {eps_val:.4f}",
-                        "entropy": f" {entropy:.4f}",
-                        "#terms": num_terminations,
+                        "#successes": len(success_times) - 1,
                     })
+
                 pbar.update(1)
+
+                sum_rewards_over_time.append(sum_raw_rewards)
+
+                if (writer is not None) and ((t % log_freq == 0) or (reward_raw == 100.0)):
+
+                    writer.add_scalar(
+                        'reward_raw',
+                        reward_raw,
+                        t
+                    )
+
+                    writer.add_scalar(
+                        'reward',
+                        reward,
+                        t
+                    )
+
+                    writer.add_scalar(
+                        'avg_rewards_per_term',
+                        sum_raw_rewards_per_term/(t + 1),
+                        t
+                    )
+
+                    writer.add_scalar(
+                        'sum_raw_rewards_per_term',
+                        sum_raw_rewards_per_term,
+                        t
+                    )
+
+                    writer.add_scalar(
+                        'avg_rewards',
+                        sum_raw_rewards / (t + seed_i * T + 1),
+                        t
+                    )
+
+                    writer.add_scalar(
+                        'sum_raw_rewards',
+                        sum_raw_rewards,
+                        t
+                    )
+
+                    if reward_raw == 100.0:
+                        writer.add_scalar(
+                            'time_to_success',
+                            success_times[-1] - success_times[-2],
+                            t
+                        )
 
                 e = Experience(
                     s=state,
@@ -300,7 +355,7 @@ def run_env_continuing(
                     t=t
                 )
 
-                agent.step(e)  # Learn
+                agent.step(e, log_step=t)  # Learn
 
                 if terminated or truncated:
                     state, info = env.reset(seed=seed)
@@ -313,11 +368,9 @@ def run_env_continuing(
                     action = next_action
                     p = next_p
 
-        rewards_over_seeds.append(rewards_over_time)
-        mean_rewards_over_seeds.append(mean_rewards_over_time)
-        sum_rewards_per_term_over_seeds.append(sum_rewards_per_term_over_term)
+        sum_rewards_over_seeds.append(sum_rewards_over_time)
 
-    return mean_rewards_over_seeds
+    return sum_rewards_over_seeds
 
 
 def evaluate_episodic(
@@ -682,11 +735,17 @@ def semigradient_sarsa_experiments(
         if do_performance_plot:
             plot(train_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'SemiGradientSarsa_Train')
+                 title=base_name + f'SemiGradientSarsa_Train',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
             plot(eval_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'SemiGradientSarsa_Eval')
+                 title=base_name + f'SemiGradientSarsa_Eval',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
         train_returns_over_seeds_over_over_agent.clear()
         eval_returns_over_seeds_over_over_agent.clear()
@@ -782,11 +841,17 @@ def semigradient_expected_sarsa_experiments(
         if do_performance_plot:
             plot(train_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'SemiGradientExpectedSarsa_Train')
+                 title=base_name + f'SemiGradientExpectedSarsa_Train',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
             plot(eval_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'SemiGradientExpectedSarsa_Eval')
+                 title=base_name + f'SemiGradientExpectedSarsa_Eval',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
         train_returns_over_seeds_over_over_agent.clear()
         eval_returns_over_seeds_over_over_agent.clear()
@@ -882,11 +947,17 @@ def semigradient_qlearning_experiments(
         if do_performance_plot:
             plot(train_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'SemiGradientQLearning_Train')
+                 title=base_name + f'SemiGradientQLearning_Train',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
             plot(eval_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'SemiGradientQLearning_Eval')
+                 title=base_name + f'SemiGradientQLearning_Eval',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
         train_returns_over_seeds_over_over_agent.clear()
         eval_returns_over_seeds_over_over_agent.clear()
@@ -990,11 +1061,17 @@ def nstep_semigradient_sarsa_experiments(
         if do_performance_plot:
             plot(train_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'{n}StepSemiGradientSarsa_Train')
+                 title=base_name + f'{n}StepSemiGradientSarsa_Train',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
             plot(eval_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'{n}StepSemiGradientSarsa_Eval')
+                 title=base_name + f'{n}StepSemiGradientSarsa_Eval',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
         train_returns_over_seeds_over_over_agent.clear()
         eval_returns_over_seeds_over_over_agent.clear()
@@ -1091,11 +1168,17 @@ def nstep_semigradient_expected_sarsa_experiments(
         if do_performance_plot:
             plot(train_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'{n}StepSemiGradientExpectedSarsa_Train')
+                 title=base_name + f'{n}StepSemiGradientExpectedSarsa_Train',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
             plot(eval_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'{n}StepSemiGradientExpectedSarsa_Eval')
+                 title=base_name + f'{n}StepSemiGradientExpectedSarsa_Eval',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
         train_returns_over_seeds_over_over_agent.clear()
         eval_returns_over_seeds_over_over_agent.clear()
@@ -1191,11 +1274,17 @@ def nstep_semigradient_qlearning_experiments(
         if do_performance_plot:
             plot(train_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'{n}StepSemiGradientQLearning_Train')
+                 title=base_name + f'{n}StepSemiGradientQLearning_Train',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
             plot(eval_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'{n}StepSemiGradientQLearning_Eval')
+                 title=base_name + f'{n}StepSemiGradientQLearning_Eval',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
         train_returns_over_seeds_over_over_agent.clear()
         eval_returns_over_seeds_over_over_agent.clear()
@@ -1212,6 +1301,8 @@ def nstep_semigradient_qlearning_experiments(
 
 # region  Continuous-Differential-Semi-Gradient
 
+
+# region 1-step
 def differential_semigradient_sarsa_experiments(
         T,
         reward_shaper: Callable,
@@ -1221,9 +1312,10 @@ def differential_semigradient_sarsa_experiments(
         epses=(0.01, 0.1, 1.),
         seeds=(1, 2),
         do_performance_plot=True,
-        base_name: str = ''
+        base_name: str = '',
+        do_log: bool = False
 ):
-    mean_returns_over_seeds_over_over_agent = []
+    sum_of_rewards_over_seeds_over_agent = []
     legend = []
 
     env = build_env()
@@ -1256,27 +1348,102 @@ def differential_semigradient_sarsa_experiments(
             eps=eps_builder(eps)
         )
 
-        mean_rewards_over_seeds = run_env_continuing(
+        sum_of_rewards_over_seeds = run_env_continuing(
             env=env,
             agent=agent,
             reward_shaper=reward_shaper,
             T=T,
-            train_seeds=seeds)
+            train_seeds=seeds,
+            do_log=do_log,
+            root_log=base_name + f'DifferentialSemiGradientSarsa/eps_{eps}'
+        )
 
-        mean_returns_over_seeds_over_over_agent.append(
-            mean_rewards_over_seeds)
+        sum_of_rewards_over_seeds_over_agent.append(
+            sum_of_rewards_over_seeds)
         legend.append(f'eps: {eps}')
 
         if do_performance_plot:
             plot(
-                mean_returns_over_seeds_over_over_agent,
-                x_label='Timesteps (t)',
-                y_label='Mean-Reward (sum(r) / t)',
+                sum_of_rewards_over_seeds_over_agent,
+                x_label='Steps',
+                y_label='Sum(r)',
                 legend=legend,
                 title=base_name + f'DifferentialSemiGradientSarsa'
             )
 
-        mean_returns_over_seeds_over_over_agent.clear()
+        sum_of_rewards_over_seeds_over_agent.clear()
+        legend.clear()
+
+
+def differential_semigradient_expected_sarsa_experiments(
+        T,
+        reward_shaper: Callable,
+        eps_builder: Callable = lambda x: x,
+        update_coefficient: Optional[Union[float, LinearSchedule]] = None,
+        estimated_reward_update_coefficient: Optional[Union[float, LinearSchedule]] = None,
+        epses=(0.01, 0.1, 1.),
+        seeds=(1, 2),
+        do_performance_plot=True,
+        base_name: str = '',
+        do_log: bool = False
+):
+    sum_of_rewards_over_seeds_over_agent = []
+    legend = []
+
+    env = build_env()
+
+    num_tilings = 8
+    num_tiles = 8
+    max_size = 4096
+
+    x0_low, x1_low = env.observation_space.low
+    x0_high, x1_high = env.observation_space.high
+
+    '''
+        From Section 10.1:
+            We used 8 tilings, with each tile covering 1/8th of 
+            the bounded distance in each dimension
+    '''
+    feature_fn = TileCodingFeature(
+        max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
+
+    if update_coefficient is None:
+        update_coefficient = 1 / (3 * num_tilings)
+
+    for eps in epses:
+        agent = DifferentialSemiGradientExpectedSarsa(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            update_coefficient=3 * update_coefficient,
+            estimated_reward_update_coefficient=estimated_reward_update_coefficient,
+            feature_fn=feature_fn,
+            eps=eps_builder(eps)
+        )
+
+        sum_of_rewards_over_seeds = run_env_continuing(
+            env=env,
+            agent=agent,
+            reward_shaper=reward_shaper,
+            T=T,
+            train_seeds=seeds,
+            do_log=do_log,
+            root_log=base_name + f'DifferentialSemiGradientExpectedSarsa/eps_{eps}'
+        )
+
+        sum_of_rewards_over_seeds_over_agent.append(
+            sum_of_rewards_over_seeds)
+        legend.append(f'eps: {eps}')
+
+        if do_performance_plot:
+            plot(
+                sum_of_rewards_over_seeds_over_agent,
+                x_label='Steps',
+                y_label='Sum(r)',
+                legend=legend,
+                title=base_name + f'DifferentialSemiGradientExpectedSarsa'
+            )
+
+        sum_of_rewards_over_seeds_over_agent.clear()
         legend.clear()
 
 
@@ -1289,9 +1456,10 @@ def differential_semigradient_q_learning_experiments(
         epses=(0.01, 0.1, 1.),
         seeds=(1, 2),
         do_performance_plot=True,
-        base_name: str = ''
+        base_name: str = '',
+        do_log: bool = False
 ):
-    mean_returns_over_seeds_over_over_agent = []
+    sum_of_rewards_over_seeds_over_agent = []
     legend = []
 
     env = build_env()
@@ -1324,30 +1492,36 @@ def differential_semigradient_q_learning_experiments(
             eps=eps_builder(eps)
         )
 
-        mean_rewards_over_seeds = run_env_continuing(
+        sum_of_rewards_over_seeds = run_env_continuing(
             env=env,
             agent=agent,
             reward_shaper=reward_shaper,
             T=T,
-            train_seeds=seeds)
+            train_seeds=seeds,
+            do_log=do_log,
+            root_log=base_name + f'DifferentialSemiGradientQLearning/eps_{eps}'
+        )
 
-        mean_returns_over_seeds_over_over_agent.append(
-            mean_rewards_over_seeds)
+        sum_of_rewards_over_seeds_over_agent.append(
+            sum_of_rewards_over_seeds)
         legend.append(f'eps: {eps}')
 
         if do_performance_plot:
             plot(
-                mean_returns_over_seeds_over_over_agent,
-                x_label='Timesteps (t)',
-                y_label='Mean-Reward (sum(r) / t)',
+                sum_of_rewards_over_seeds_over_agent,
+                x_label='Steps',
+                y_label='Sum(r)',
                 legend=legend,
                 title=base_name + f'DifferentialSemiGradientQLearning'
             )
 
-        mean_returns_over_seeds_over_over_agent.clear()
+        sum_of_rewards_over_seeds_over_agent.clear()
         legend.clear()
 
+# endregion 1-step
 
+
+# region n-steps
 def differential_semigradient_nStep_sarsa_experiments(
         T,
         nstep_sarsa: int,
@@ -1416,34 +1590,35 @@ def differential_semigradient_nStep_sarsa_experiments(
 
         mean_returns_over_seeds_over_over_agent.clear()
         legend.clear()
+# endregion n-steps
 
 # endregion  Continuous-Differential-Semi-Gradient
 
 if __name__ == '__main__':
+    do_log = False
     do_sarsa = True
     do_expected_sarsa = True
     do_qlearning = True
-    do_nstep = True
+    do_nstep = False
     n_sarsa_steps = 4
     n_sarsa_steps_sweep = [2, 6, 8]
+    episodic = False
+    seeds = tuple(range(0, 10))
 
-    epses = (0.01, 0.05, 0.1, 0.3)
-    seeds = tuple(range(0, 5))
-    episodic = True
 
     RENDER = False
     ENV_NAME = 'MountainCar'
 
     if ENV_NAME == 'MountainCar':
         if episodic:
+            epses = (0.01, 0.05, 0.1, 0.3)
             num_episodes = 200
-            # Environment truncates the length of the episode at 200.
             T = 999
             MAX_EPISODE_STEPS = T
         else:
-            episodic = False
+            epses = (0.3, )
             num_episodes = None
-            T = 100000
+            T = 40000
             MAX_EPISODE_STEPS = T
 
     elif ENV_NAME == 'AirRaid':
@@ -1477,24 +1652,8 @@ if __name__ == '__main__':
             return LinearSchedule(start, end=end, steps=steps)
     else:
         def build_greedy_eps_sched(start):
-            # schedule = ConstantSchedule(start)
             schedule = LinearSchedule(start, end=0.1 * start, steps=(T // 3))
-
-            # schedule = CosineDecaySchedule(
-            #     start, final_value=0.1 * start, decay_steps=(T // 3))
-
-            # schedule = CosineDecayWithHoldSchedule(
-            #     start,
-            #     final_value=0.1 * start,
-            #     decay_steps=(T//8),
-            #     initial_hold_steps=T//8,
-            #     final_hold_cycles=5)
-
             return schedule
-
-        def build_update_coefficient_sched(
-                start, end, steps=(T // 3)):
-            return LinearSchedule(start, end=end, steps=steps)
 
 
     #########################################
@@ -1504,22 +1663,50 @@ if __name__ == '__main__':
     differential = not episodic
 
     # Differential Semi-Gradient Sarsa/nStep
-    if 0 and differential:
+    if 1 and differential:
 
         def base_reward(reward: float,  state:np.ndarray, done: bool, t: int):
             return reward
 
-        if do_sarsa:
-            differential_semigradient_sarsa_experiments(
-                T=T,
-                reward_shaper=base_reward,
-                eps_builder=build_greedy_eps_sched,
-                update_coefficient = None,
-                estimated_reward_update_coefficient=0.1,
-                epses=epses,
-                seeds=seeds,
-                base_name='Base Reward_'
-            )
+        if not do_nstep:
+            if do_sarsa:
+                differential_semigradient_sarsa_experiments(
+                    T=T,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient = None,
+                    estimated_reward_update_coefficient=0.1,
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_',
+                    do_log=do_log
+                )
+
+            if do_expected_sarsa:
+                differential_semigradient_expected_sarsa_experiments(
+                    T=T,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=None,
+                    estimated_reward_update_coefficient=0.1,
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_',
+                    do_log=do_log
+                )
+
+            if do_qlearning:
+                differential_semigradient_q_learning_experiments(
+                    T=T,
+                    reward_shaper=base_reward,
+                    eps_builder=build_greedy_eps_sched,
+                    update_coefficient=None,
+                    estimated_reward_update_coefficient=0.1,
+                    epses=epses,
+                    seeds=seeds,
+                    base_name='Base Reward_',
+                    do_log=do_log
+                )
 
         if do_nstep:
             differential_semigradient_nStep_sarsa_experiments(
@@ -1533,22 +1720,6 @@ if __name__ == '__main__':
                 seeds=seeds,
                 base_name='Base Reward_'
             )
-
-    # Differential Semi-Gradient QLearning
-    if 0 and differential:
-        def base_reward(reward: float,  state:np.ndarray, done: bool, t: int):
-            return reward
-
-        differential_semigradient_q_learning_experiments(
-            T=T,
-            reward_shaper=base_reward,
-            eps_builder=build_greedy_eps_sched,
-            update_coefficient = None,
-            estimated_reward_update_coefficient=0.1,
-            epses=epses,
-            seeds=seeds,
-            base_name='Base Reward_'
-        )
 
     #########################################
     # ---------- Episodic Tasks ----------- #
@@ -1643,7 +1814,7 @@ if __name__ == '__main__':
                 )
 
     # Sweep over different n-steps
-    if 1 and episodic and do_nstep:
+    if 0 and episodic and do_nstep:
         def base_reward(reward: float,  state:np.ndarray, done: bool, t: int):
             return reward
 

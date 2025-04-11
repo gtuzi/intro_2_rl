@@ -16,7 +16,7 @@
 ## Introduction
 This section contains methods from Chapter 10 in [Sutton & Barto RL Book].
 
-#### Linear Methods
+### Linear Methods
 Approximate functions $\hat{v}(\cdot, \mathbf{w})$ or $\hat{q}(\cdot, \mathbf{w})$, 
 are a linear function of the weight vector $\mathbf{w}$. 
 Linear methods approximate the value functions by the inner product 
@@ -33,6 +33,89 @@ The gradient of the approximate value functions with respect to $\mathbf{w}$
 in this case are:
 * $\nabla \hat{v}(s, \mathbf{w}) = \mathbf{x}(s)$
 * $\nabla \hat{q}(s, a, \mathbf{w}) = \mathbf{x}(s, a)$
+
+### Prediction
+In the tabular case a continuous measure of prediction quality was not 
+necessary because the learned value function could come to equal the true 
+_value function_ exactly. Additionally, the learned  values at each state 
+were decoupled, an update at one state affected no other. But with approximation 
+an update at one state affects many others, and it is not possible to get the 
+values of all states exactly correct. Moreover, we assume that we have many
+more states than we have weights, so making a few of the state estimations 
+correct, invariably makes the other states' estimations less so.
+
+### Prediction Objective
+Because we cannot get an accurate estimation for all states, we must emphasize
+which states we care more about, by specifying a _state_ distribution 
+$\mu(s) \ge 0$ such that $\sum_{s}\mu(s) = 1$ representing how much we care
+about the error at each state. We define the _error_ at each state as the 
+squared difference between the _approximate_ value $\hat{v}(s, \mathbf{w})$ and
+the _true_ value $v(s)$. Weighing it by the state distribution $\mu(s)$ we get
+an objective function called _mean square value error_ $\overline{VE}$ defined
+as:
+
+$\overline{VE}(\mathbf{w}) \overset{\cdot}{=}\sum_{s \in \mathcal{S}}\mu(s)[v(s) - \hat{v}(s, \mathbf{w})]^2$
+
+$\mu(s)$ is usually chosen to be the fraction of time spent in $s$. Under the
+on-policy training this is called the _on-policy_ distribution. In continuing
+tasks, this distribtution is the stationary distribution under $\pi$.
+
+An ideal goal in terms of $\overline{VE}$ would be to find the _global optimum_ 
+$\mathbf{w}^*$ such that $\overline{VE}(\mathbf{w}^*) \le \overline{VE}(\mathbf{w})$
+for all possible $\mathbf{w}$. This is rarely achieved for complex functions,
+so we typically settle on _local optimum_, a weight vector $\mathbf{w}^*$ 
+for which $\overline{VE}(\mathbf{w}^*) \le \overline{VE}(\mathbf{w})$ in a 
+neighborhood around $\mathbf{w}^*$. 
+
+### Stochastic Gradient
+We assume that states appear in examples with the same distribution $\mu$ over
+which we minimize $\overline{VE}$.  If we assume that on each step, we observe
+a new example $S_t \rightarrow v_{\pi}(S_t)$, where $v_{\pi}(S_t)$ denotes
+the _true_ value  of state $S_t$ under $\pi$, we converge to a local optimum 
+on the observed  examples using Stochastic Gradient Descend (SGD), by adjusting 
+the weight by  a small amount in the direction that would mostly reduce the 
+error in that example as follows:
+
+$
+\mathbf{w}_{t + 1} = \mathbf{w}_t - \frac{1}{2}\alpha\nabla_\mathbf{w}[v_{\pi}(S_t) - \hat{v}(S_t, \mathbf{w}_t)]^2
+= \mathbf{w}_t + \alpha[v_{\pi}(S_t) - \hat{v}(S_t, \mathbf{w}_t)]\nabla_\mathbf{w}\hat{v}(S_t, \mathbf{w}_t)
+$
+
+Convergence results for SGD methods assume that $\alpha$ decreases over time 
+in order for the stochastic approximation to converge to a _local optimum_.
+
+However, we don't usually have access to the true state value $v_{\pi}(S_t)$, and 
+instead we use a random approximation of it $U_t$. This can be a noise corrupted
+approximation of $v_{\pi}(S_t)$ or a bootstrapped approximation. In these cases
+we cannot perform an exact update - since  $v_{\pi}(S_t)$ is unknown - but 
+we can approximate it by substituting it in the SDG formulation as follows:
+
+$
+\mathbf{w}_{t + 1} = \mathbf{w}_t + \alpha[U_t - \hat{v}(S_t, \mathbf{w}_t)]\nabla_\mathbf{w}\hat{v}(S_t, \mathbf{w}_t)
+$
+
+#### Unbiased Target
+$U_t$ can be an unbiased estimate of $v_{\pi}(S_t)$, i.e. $\mathbb{E}[U_t | S_t = s] = v_{\pi}(s)$
+for each $t$, then $\mathbf{w}_t$ is guaranteed to converge to a local optimum.  
+Under the Monte-Carlo setting, the policy generates the sequence of examples.
+Since the true value of the return is the expectation of the return
+following policy $\pi$, then $U_t = G_t$ is definitionally an 
+unbiased estimate of $v_{\pi}(S_t)$.
+
+#### Semi-Gradient
+However, when we use bootstrapping, we do not obtain the same guarantees for 
+the estimation of $v_{\pi}(S_t)$. For the n-step return: 
+$G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+2} + ... + \gamma^{n}\hat{v}(S_{t+n}, \mathbf{w}_t)$
+$G_{t:t+n}$ as well as $\hat{v}(*, \mathbf{w_t})$ both depend on the value 
+of $\mathbf{w}_t$. Therefore, the gradient formulation above does  not produce 
+a _true_ gradient. It changes the weights based on the estimate but ignores
+the effects of it in the target. Therefore, they only include part of the 
+gradient and are called _semi-gradient methods_. Although semi-gradient methods 
+do not have robust convergence guarantees, they  typically enable significantly 
+faster learning, can be used for online learning,  and computational advantages.
+
+### Control
+#### On-policy Control with Approximation
 
 
 ## Implemented Algorithms
@@ -278,10 +361,11 @@ since a continuing reward of "-1" has the same average reward (of -1).
   * $\epsilon$ linearly decayed over $\frac{100k}{3}$ steps
   
 
-| Algorithm                                         | Results                                                                                                     | 
-|---------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| Differential Semi-Gradient _QLearning_: eps = 0.1 | <img src="images/results/BaseReward_DifferentialSemiGradientQLearning_eps_0.1.png" alt="Grid" width="400"/> |
-| Differential Semi-Gradient _Sarsa_: eps = 0.1     | <img src="images/results/BaseReward_DifferentialSemiGradientSarsa_eps_0.1.png" alt="Grid" width="400"/>     |
+| Algorithm      | Parameters  | Results                                                                                                     | 
+|----------------|-------------|-------------------------------------------------------------------------------------------------------------|
+| Sarsa          | $eps = 0.3$ | <img src="images/results/BaseReward_DifferentialSemiGradientSarsa_eps_0.3.png" alt="Grid" width="400"/> |
+| Expected Sarsa | $eps = 0.3$ | <img src="images/results/BaseReward_DifferentialSemiGradientExpectedSarsa_eps_0.3.png" alt="Grid" width="400"/>     |
+| Q-Learning     | $eps = 0.3$ | <img src="images/results/BaseReward_DifferentialSemiGradientQLearning_eps_0.3.png" alt="Grid" width="400"/>     |
 
 For other $\epsilon$ settings, please refer to `images/results` folder.
 
