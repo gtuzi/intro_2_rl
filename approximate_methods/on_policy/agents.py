@@ -874,7 +874,7 @@ class DifferentialSemiGradient_nStepSarsa(LinearQEpsGreedyAgent):
             update_coefficient: Union[float, NoiseSchedule],
             estimated_reward_update_coefficient: Union[float, NoiseSchedule],
             feature_fn: Callable[[Any, int], np.ndarray], # state, action(int) --> np.ndarray
-            nstep_sarsa: int,
+            nsteps: int,
             eps: Union[float, NoiseSchedule] = 0.1
     ):
 
@@ -906,7 +906,7 @@ class DifferentialSemiGradient_nStepSarsa(LinearQEpsGreedyAgent):
 
         self.trajectory = []
         self.t = 0
-        self.nstep_sarsa = nstep_sarsa
+        self.nsteps = nsteps
         self.reward_estimate = 0  # r_hat
         self.reward_estimate_unbiased_trick = 0
         self.estimated_reward_update_coefficient = estimated_reward_update_coefficient
@@ -947,7 +947,7 @@ class DifferentialSemiGradient_nStepSarsa(LinearQEpsGreedyAgent):
     def step(self, experience: Experience, **kwargs):
 
         self.trajectory.append(experience)
-        tau = self.t - self.nstep_sarsa + 1
+        tau = self.t - self.nsteps + 1
 
         # If the episode ends before n-steps have been rolled out
         if experience.done and (tau < 0):
@@ -972,13 +972,13 @@ class DifferentialSemiGradient_nStepSarsa(LinearQEpsGreedyAgent):
 
         rdiff = [
             self.trajectory[i].r - self.reward_estimate
-            for i in range(tau, tau + self.nstep_sarsa)
+            for i in range(tau, tau + self.nsteps)
         ]
 
         delta = (sum(rdiff) +
                  self.state_action_value(
-                     self.trajectory[tau + self.nstep_sarsa - 1].sp,
-                     self.trajectory[tau + self.nstep_sarsa - 1].ap
+                     self.trajectory[tau + self.nsteps - 1].sp,
+                     self.trajectory[tau + self.nsteps - 1].ap
                  ) -
                  self.state_action_value(
                      self.trajectory[tau].s,
@@ -998,6 +998,132 @@ class DifferentialSemiGradient_nStepSarsa(LinearQEpsGreedyAgent):
         # Ref. Section 2.7 in book
         self.reward_estimate_unbiased_trick += beta * (1. - self.reward_estimate_unbiased_trick)
         self.reward_estimate += (beta / self.reward_estimate_unbiased_trick) * delta
+
+        grad_w = self.feature_fn(
+            self.trajectory[tau].s, self.trajectory[tau].a)
+
+        if isinstance(self.update_coefficient, LinearSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        elif isinstance(self.update_coefficient, float):
+            alpha = self.update_coefficient
+        else:
+            raise Exception("Invalid type for update_coefficient")
+
+        self.w += alpha * delta * grad_w
+
+
+class DifferentialSemiGradient_nStepExpectedSarsa(
+    DifferentialSemiGradient_nStepSarsa):
+    """
+        This algo is not in the book. It's simply the adaptation of the
+        n-step Sarsa to n-Step Expected Sarsa
+    """
+
+    def update(self, tau, **kwargs):
+
+        """
+            In the book, for step "t", the experience is
+            formated as (R[t+1], S[t+1], A[t], S[t]). So, for (10.14),
+            given that our trajectory[t] = (R[t+1], S[t+1], A[t], S[t]),
+            we sum the rewards over trajectory over tau --> tau + n - 1
+        """
+
+        rdiff = [
+            self.trajectory[i].r - self.reward_estimate
+            for i in range(tau, tau + self.nsteps)
+        ]
+
+        vhat_next = self.state_value(self.trajectory[tau + self.nsteps - 1].sp)
+        target = sum(rdiff) + vhat_next
+
+        estimate = self.state_action_value(
+            self.trajectory[tau].s, self.trajectory[tau].a
+        )
+
+        delta = target - estimate
+
+        if isinstance(self.estimated_reward_update_coefficient, LinearSchedule):
+            beta = self.estimated_reward_update_coefficient.value
+            self.estimated_reward_update_coefficient.step()
+        elif isinstance(self.estimated_reward_update_coefficient, float):
+            beta = self.estimated_reward_update_coefficient
+        else:
+            raise Exception(
+                "Invalid type for estimated reward update_coefficient")
+
+        # Compensate for the slowiness (i.e. nonstationarity) of the reward update
+        # Ref. Section 2.7 in book
+        self.reward_estimate_unbiased_trick += (
+                beta * (1. - self.reward_estimate_unbiased_trick))
+        self.reward_estimate += (
+                (beta / self.reward_estimate_unbiased_trick) * delta
+        )
+
+        grad_w = self.feature_fn(
+            self.trajectory[tau].s, self.trajectory[tau].a)
+
+        if isinstance(self.update_coefficient, LinearSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        elif isinstance(self.update_coefficient, float):
+            alpha = self.update_coefficient
+        else:
+            raise Exception("Invalid type for update_coefficient")
+
+        self.w += alpha * delta * grad_w
+
+
+class DifferentialSemiGradient_nStepQLearning(
+    DifferentialSemiGradient_nStepSarsa):
+    """
+        This algo is not in the book. It's simply the adaptation of the
+        n-step Sarsa to n-Step Expected Sarsa
+    """
+
+    def update(self, tau, **kwargs):
+
+        """
+            In the book, for step "t", the experience is
+            formated as (R[t+1], S[t+1], A[t], S[t]). So, for (10.14),
+            given that our trajectory[t] = (R[t+1], S[t+1], A[t], S[t]),
+            we sum the rewards over trajectory over tau --> tau + n - 1
+        """
+
+        rdiff = [
+            self.trajectory[i].r - self.reward_estimate
+            for i in range(tau, tau + self.nsteps)
+        ]
+
+        qhat_next = max(
+            self.action_values(self.trajectory[tau + self.nsteps - 1].sp)
+        )
+
+        target = sum(rdiff) + qhat_next
+
+        estimate = self.state_action_value(
+            self.trajectory[tau].s, self.trajectory[tau].a
+        )
+
+        delta = target - estimate
+
+        if isinstance(
+                self.estimated_reward_update_coefficient, LinearSchedule):
+            beta = self.estimated_reward_update_coefficient.value
+            self.estimated_reward_update_coefficient.step()
+        elif isinstance(self.estimated_reward_update_coefficient, float):
+            beta = self.estimated_reward_update_coefficient
+        else:
+            raise Exception(
+                "Invalid type for estimated reward update_coefficient")
+
+        # Compensate for the slowiness (i.e. nonstationarity) of the reward update
+        # Ref. Section 2.7 in book
+        self.reward_estimate_unbiased_trick += beta * (
+                    1. - self.reward_estimate_unbiased_trick)
+
+        self.reward_estimate += (
+                (beta / self.reward_estimate_unbiased_trick) * delta)
 
         grad_w = self.feature_fn(
             self.trajectory[tau].s, self.trajectory[tau].a)

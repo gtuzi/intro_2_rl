@@ -14,7 +14,7 @@
 - [Differential Semi-gradient n-step Sarsa](#Differential-Semi-gradient-n-step-Sarsa)
 
 ## Theoretical Background
-See explication here: [summary.ipynb](summary.ipynb)
+See excplication here: [summary.ipynb](summary.ipynb)
 
 
 ## Implemented Algorithms
@@ -124,8 +124,8 @@ The following simulation parameters are used:
 
 #### Comparing different Agents (Algorithms)
   
-| Algorithm      | Parameters                 | Train                                                                                                           | Evaluation                                                                                                     | 
-|----------------|----------------------------|-----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| Algorithm      | Parameters                    | Train                                                                                                           | Evaluation                                                                                                     | 
+|----------------|-------------------------------|-----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
 | Sarsa          | $n = 4$, $\varepsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_4StepSemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         |
 | Expected-Sarsa | $n = 4$, $\varepsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientExpectedSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_4StepSemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> |
 | Q-Learning     | $n = 4$, $\varepsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientQLearning_Train_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_4StepSemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     |
@@ -143,44 +143,18 @@ The following simulation parameters are used:
 
 Results for other parameters and reward shaping functions are located under `images/results` folder.
 
-
-### Reward Shaping
-Three reward shaping functions were also tried to encourage the car to reach the flag.
-The results for these methods are located under `images/results` folder.
-
-```python
-# 1.Encourage the car to reach the flag by giving a reward proportional to the position of the car
-def reward_shaper_position(reward: float, state:np.ndarray, done: bool, t: int):
-    k = 0.1
-    return reward + k * (state[0] - 0.45)
-
-# 2. Encourage the car to reach the flag by giving a reward proportional to the 
-# position of the car and discourage small velocities - which would default 
-# to the car oscillating at the trough between the two hills
-def reward_shaper_position_velocity(reward: float, state:np.ndarray, done: bool, t: int):
-    k = 0.1
-    return reward + k * (state[0] - 0.45)  * (0.07/(abs(state[1]) + 0.001))
-
-# 3. Focus only on the velocity of the car
-def reward_shaper_velocity(
-        reward: float, state: np.ndarray, done: bool, t: int):
-    k = 0.1
-    return reward + k * np.sign((state[0] - 0.45)) * (0.07 / (abs(state[1]) + 0.001))
-```
-
-
 ## Continuing Semi-Gradient Control
-See explication here: [summary.ipynb](summary.ipynb)
+Disscusion for Sarsa, Expected Sarsa and Q-Learning variants discussed here: [summary.ipynb](summary.ipynb)
 
 
-### Differential Semi-Gradient Sarsa
+### One-Step Differential Semi-Gradient Sarsa
 The differential semi-gradient Sarsa algorithm (for estimating q) is shown below:
 
 <img src="images/DifferentialSemiGradientSarsa.png" alt="Grid" width="800"/>
 
 #### Experiments
 The same MountainCar environment is used for these experiments, where the 
-environment is set to be continuous (100k steps). Since the environment 
+environment is set to be continuous (40k steps). Since the environment 
 "out of the box" simply resets the vehicle to the starting position 
 when it reaches the flag, and continues to generate "-1" reward, the environment
 was modified to award a reward of "100" upon reaching the flag. This was done 
@@ -188,8 +162,8 @@ to show the effect of the __average reward__ setting on the agent's learning,
 since a continuing reward of "-1" has the same average reward (of -1).
 
 * Parameters
-  * $100k$ steps to approximate continuing task 
-  * $\varepsilon$ linearly decayed over $\frac{100k}{3}$ steps
+  * $40k$ steps to approximate continuing task 
+  * $\varepsilon$ linearly decayed over $\frac{40k}{3}$ steps
   
 
 | Algorithm      | Parameters  | Results                                                                                                         | 
@@ -201,27 +175,29 @@ since a continuing reward of "-1" has the same average reward (of -1).
 For other $\varepsilon$ settings, please refer to `images/results` folder.
 
 
-### Differential Semi-gradient n-step Sarsa
-See explication here: [summary.ipynb](summary.ipynb)
+### $n$-Step Differential Semi-gradient Sarsa
+Disscusion for Sarsa, Expected Sarsa and Q-Learning variants discussed here: [summary.ipynb](summary.ipynb)
 
 <img src="images/Differential_nStep_Semi_Gradient_Sarsa.png.png" alt="Grid" width="800"/>
 
 The implementation includes the "Unbiased Constant-Step-Size Trick" from 
-Section 2.6.
+Section 2.7.
 
 #### Experiments
 Just like above, MountainCar environment - modified for the continuing task 
 case is also used.
 
 * Parameters
-  * $100k$ steps to approximate continuing task 
-  * $\varepsilon$ linearly decayed over $\frac{100k}{3}$ steps
-  * $\beta$ = 0.02 (much smaller than the $n$=1 Sarsa)
+  * $40k$ steps to approximate continuing task 
+  * $\varepsilon$ linearly decayed over $\frac{40k}{3}$ steps
+  * $\beta$ = 0.05
+  * $n$ = 4
 
-| Parameter  | Results                                                                                                        | 
-|------------|----------------------------------------------------------------------------------------------------------------|
-| eps = 0.05 | <img src="images/results/BaseReward_DifferentialSemiGradient_4StepSarsa_eps_0.05.png" alt="Grid" width="400"/> |
-| eps = 0.1  | <img src="images/results/BaseReward_DifferentialSemiGradient_4StepSarsa_eps_0.1.png" alt="Grid" width="400"/>  |
+| Agent          | Results                                                                                                               | 
+|----------------|-----------------------------------------------------------------------------------------------------------------------|
+| Sarsa          | <img src="images/results/BaseReward_DifferentialSemiGradient_4StepSarsa_eps_0.3.png" alt="Grid" width="400"/>         |
+| Expected Sarsa | <img src="images/results/BaseReward_DifferentialSemiGradient_4StepExpectedSarsa_eps_0.3.png" alt="Grid" width="400"/> |
+| Q-Learning     | <img src="images/results/BaseReward_DifferentialSemiGradient_4StepQLearning_eps_0.3.png" alt="Grid" width="400"/>     |
 
 More experiments with different starting $\varepsilon$ are located in `images/results`
 
