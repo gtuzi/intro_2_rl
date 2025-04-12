@@ -1596,8 +1596,8 @@ def differential_semigradient_nStep_sarsa_experiments(
 
 if __name__ == '__main__':
     do_log = False
-    do_sarsa = True
-    do_expected_sarsa = True
+    do_sarsa = False
+    do_expected_sarsa = False
     do_qlearning = True
     do_nstep = False
     n_sarsa_steps = 4

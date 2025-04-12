@@ -720,30 +720,6 @@ class DifferentialSemiGradientSarsa(LinearQEpsGreedyAgent):
 
 
 class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
-    def __init__(
-            self,
-            feature_size: int,
-            action_space_dims: int,
-            update_coefficient: Union[float, NoiseSchedule],
-            estimated_reward_update_coefficient: Union[float, NoiseSchedule],
-            feature_fn: Callable[[Any, int], np.ndarray], # state, action(int) --> np.ndarray
-            eps: Union[float, NoiseSchedule] = 0.01
-    ):
-
-        super().__init__(
-            feature_size=feature_size,
-            action_space_dims=action_space_dims,
-            update_coefficient=update_coefficient,
-            estimated_reward_update_coefficient=estimated_reward_update_coefficient,
-            feature_fn=feature_fn,
-            eps=eps)
-
-        self.max_reward = -np.inf
-
-
-    def initialize(self):
-        super().initialize()
-        self.max_reward = -np.inf
 
     def step(self, experience: Experience, **kwargs):
         log_step = None
@@ -761,12 +737,20 @@ class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
         # Expecting continuing task
         assert done == 0
 
-        # For Q-learning max(r(pi)), is the maximum reward seen thus far
-        self.max_reward = max(self.max_reward, r)
         qhat_next = max(self.action_values(sp))
         qhat = self.state_action_value(s, a)
-        target = r - self.max_reward + qhat_next
+        target = r - self.reward_estimate + qhat_next
         delta = target - qhat
+
+        if isinstance(self.estimated_reward_update_coefficient, LinearSchedule):
+            beta = self.estimated_reward_update_coefficient.value
+            self.estimated_reward_update_coefficient.step()
+        elif isinstance(self.estimated_reward_update_coefficient, float):
+            beta = self.estimated_reward_update_coefficient
+        else:
+            raise Exception("Invalid type for estimated reward update_coefficient")
+
+        self.reward_estimate += beta * delta
 
         # ---- Policy Improvement ---- #
         grad_w = self.feature_fn(s, a)  # grad_wi(sum(xi * wi)) = xi
@@ -791,7 +775,7 @@ class DifferentialSemiGradientQLearning(DifferentialSemiGradientSarsa):
             self._writer.add_scalar('q_next', qhat_next, log_step)
             self._writer.add_scalar('alpha', alpha, log_step)
             self._writer.add_scalar(
-                'max_reward', self.max_reward, log_step)
+                'reward_estimate', self.reward_estimate, log_step)
 
             if isinstance(self.eps, NoiseSchedule):
                 e = self.eps.value

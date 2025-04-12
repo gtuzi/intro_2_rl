@@ -13,109 +13,8 @@
 - [Differential Semi-Gradient Sarsa](#Differential-Semi-Gradient-Sarsa)
 - [Differential Semi-gradient n-step Sarsa](#Differential-Semi-gradient-n-step-Sarsa)
 
-## Introduction
-This section contains methods from Chapter 10 in [Sutton & Barto RL Book].
-
-### Linear Methods
-Approximate functions $\hat{v}(\cdot, \mathbf{w})$ or $\hat{q}(\cdot, \mathbf{w})$, 
-are a linear function of the weight vector $\mathbf{w}$. 
-Linear methods approximate the value functions by the inner product 
-between $\mathbf{w}$ and $\mathbf{x}(s)$ - for the state-value 
-function $\hat{v}(\cdot, \mathbf{w})$; or 
-$\mathbf{x}(s, a)$ for $\hat{q}(\cdot, \mathbf{w})$ for the state-action value function, where $\mathbf{x}(s)$ or $\mathbf{x}(s, a)$ are feature vectors, encoding the state
-or state-action pairs into a feature space.
-
-The value functions are defined as:
-* $\hat{v}(s, \mathbf{w}) \overset{\cdot}{=} \mathbf{w}^\top \mathbf{x}(s) \overset{\cdot}{=} \sum_{i=1}^{d} w_i x_i(s)$
-* $\hat{q}(s, a, \mathbf{w}) \overset{\cdot}{=} \mathbf{w}^\top \mathbf{x}(s, a) \overset{\cdot}{=} \sum_{i=1}^{d} w_i x_i(s, a)$
-
-The gradient of the approximate value functions with respect to $\mathbf{w}$
-in this case are:
-* $\nabla \hat{v}(s, \mathbf{w}) = \mathbf{x}(s)$
-* $\nabla \hat{q}(s, a, \mathbf{w}) = \mathbf{x}(s, a)$
-
-### Prediction
-In the tabular case a continuous measure of prediction quality was not 
-necessary because the learned value function could come to equal the true 
-_value function_ exactly. Additionally, the learned  values at each state 
-were decoupled, an update at one state affected no other. But with approximation 
-an update at one state affects many others, and it is not possible to get the 
-values of all states exactly correct. Moreover, we assume that we have many
-more states than we have weights, so making a few of the state estimations 
-correct, invariably makes the other states' estimations less so.
-
-### Prediction Objective
-Because we cannot get an accurate estimation for all states, we must emphasize
-which states we care more about, by specifying a _state_ distribution 
-$\mu(s) \ge 0$ such that $\sum_{s}\mu(s) = 1$ representing how much we care
-about the error at each state. We define the _error_ at each state as the 
-squared difference between the _approximate_ value $\hat{v}(s, \mathbf{w})$ and
-the _true_ value $v(s)$. Weighing it by the state distribution $\mu(s)$ we get
-an objective function called _mean square value error_ $\overline{VE}$ defined
-as:
-
-$\overline{VE}(\mathbf{w}) \overset{\cdot}{=}\sum_{s \in \mathcal{S}}\mu(s)[v(s) - \hat{v}(s, \mathbf{w})]^2$
-
-$\mu(s)$ is usually chosen to be the fraction of time spent in $s$. Under the
-on-policy training this is called the _on-policy_ distribution. In continuing
-tasks, this distribtution is the stationary distribution under $\pi$.
-
-An ideal goal in terms of $\overline{VE}$ would be to find the _global optimum_ 
-$\mathbf{w}^*$ such that $\overline{VE}(\mathbf{w}^*) \le \overline{VE}(\mathbf{w})$
-for all possible $\mathbf{w}$. This is rarely achieved for complex functions,
-so we typically settle on _local optimum_, a weight vector $\mathbf{w}^*$ 
-for which $\overline{VE}(\mathbf{w}^*) \le \overline{VE}(\mathbf{w})$ in a 
-neighborhood around $\mathbf{w}^*$. 
-
-### Stochastic Gradient
-We assume that states appear in examples with the same distribution $\mu$ over
-which we minimize $\overline{VE}$.  If we assume that on each step, we observe
-a new example $S_t \rightarrow v_{\pi}(S_t)$, where $v_{\pi}(S_t)$ denotes
-the _true_ value  of state $S_t$ under $\pi$, we converge to a local optimum 
-on the observed  examples using Stochastic Gradient Descend (SGD), by adjusting 
-the weight by  a small amount in the direction that would mostly reduce the 
-error in that example as follows:
-
-$
-\mathbf{w}_{t + 1} = \mathbf{w}_t - \frac{1}{2}\alpha\nabla_\mathbf{w}[v_{\pi}(S_t) - \hat{v}(S_t, \mathbf{w}_t)]^2
-= \mathbf{w}_t + \alpha[v_{\pi}(S_t) - \hat{v}(S_t, \mathbf{w}_t)]\nabla_\mathbf{w}\hat{v}(S_t, \mathbf{w}_t)
-$
-
-Convergence results for SGD methods assume that $\alpha$ decreases over time 
-in order for the stochastic approximation to converge to a _local optimum_.
-
-However, we don't usually have access to the true state value $v_{\pi}(S_t)$, and 
-instead we use a random approximation of it $U_t$. This can be a noise corrupted
-approximation of $v_{\pi}(S_t)$ or a bootstrapped approximation. In these cases
-we cannot perform an exact update - since  $v_{\pi}(S_t)$ is unknown - but 
-we can approximate it by substituting it in the SDG formulation as follows:
-
-$
-\mathbf{w}_{t + 1} = \mathbf{w}_t + \alpha[U_t - \hat{v}(S_t, \mathbf{w}_t)]\nabla_\mathbf{w}\hat{v}(S_t, \mathbf{w}_t)
-$
-
-#### Unbiased Target
-$U_t$ can be an unbiased estimate of $v_{\pi}(S_t)$, i.e. $\mathbb{E}[U_t | S_t = s] = v_{\pi}(s)$
-for each $t$, then $\mathbf{w}_t$ is guaranteed to converge to a local optimum.  
-Under the Monte-Carlo setting, the policy generates the sequence of examples.
-Since the true value of the return is the expectation of the return
-following policy $\pi$, then $U_t = G_t$ is definitionally an 
-unbiased estimate of $v_{\pi}(S_t)$.
-
-#### Semi-Gradient
-However, when we use bootstrapping, we do not obtain the same guarantees for 
-the estimation of $v_{\pi}(S_t)$. For the n-step return: 
-$G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+2} + ... + \gamma^{n}\hat{v}(S_{t+n}, \mathbf{w}_t)$
-$G_{t:t+n}$ as well as $\hat{v}(*, \mathbf{w_t})$ both depend on the value 
-of $\mathbf{w}_t$. Therefore, the gradient formulation above does  not produce 
-a _true_ gradient. It changes the weights based on the estimate but ignores
-the effects of it in the target. Therefore, they only include part of the 
-gradient and are called _semi-gradient methods_. Although semi-gradient methods 
-do not have robust convergence guarantees, they  typically enable significantly 
-faster learning, can be used for online learning,  and computational advantages.
-
-### Control
-#### On-policy Control with Approximation
+## Theoretical Background
+See explication here: [summary.ipynb](summary.ipynb)
 
 
 ## Implemented Algorithms
@@ -171,8 +70,8 @@ $U_t = R_{t+1} + \gamma\max_a{\hat{q}(S_{t+1}, a, \mathbf{w})}$
 ###### Simulation Parameters
 The following simulation parameters are used:
 * 5 seeds
-* Search parameter: $\epsilon$ = `[0.01, 0.05, 0.1, 0.3]`. 
-  * Results for one $\epsilon$ shown in table. Others in `/results`
+* Search parameter: $\varepsilon$ = `[0.01, 0.05, 0.1, 0.3]`. 
+  * Results for one $\varepsilon$ shown in table. Others in `/results`
 * Num episodes = $200$
 * Evaluation frequency = $5$
 * MaxSteps = $999$
@@ -183,11 +82,11 @@ The following simulation parameters are used:
   * `end` = $\frac{1}{10NumTilings} = \frac{1}{80}$
 
   
-| Algorithm      | Parameters        | Train                                                                                                      | Evaluation                                                                                                | 
-|----------------|-------------------|------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| Sarsa          | $\epsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_SemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         |
-| Expected-Sarsa | $\epsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientExpectedSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_SemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> |
-| Q-Learning     | $\epsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientQLearning_Train_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_SemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     |
+| Algorithm      | Parameters           | Train                                                                                                      | Evaluation                                                                                                | 
+|----------------|----------------------|------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| Sarsa          | $\varepsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_SemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         |
+| Expected-Sarsa | $\varepsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientExpectedSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_SemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> |
+| Q-Learning     | $\varepsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientQLearning_Train_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_SemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     |
 
 
 ### n-Step Semi-Gradient Sarsa
@@ -227,14 +126,14 @@ The following simulation parameters are used:
   
 | Algorithm      | Parameters                 | Train                                                                                                           | Evaluation                                                                                                     | 
 |----------------|----------------------------|-----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
-| Sarsa          | $n = 4$, $\epsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_4StepSemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         |
-| Expected-Sarsa | $n = 4$, $\epsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientExpectedSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_4StepSemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> |
-| Q-Learning     | $n = 4$, $\epsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientQLearning_Train_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_4StepSemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     |
+| Sarsa          | $n = 4$, $\varepsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientSarsa_Train_eps_0.01.png" alt="Grid" width="400"/>         | <img src="images/results/BaseReward_4StepSemiGradientSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/>         |
+| Expected-Sarsa | $n = 4$, $\varepsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientExpectedSarsa_Train_eps_0.01.png" alt="Grid" width="400"/> | <img src="images/results/BaseReward_4StepSemiGradientExpectedSarsa_Eval_eps_0.01.png" alt="Grid" width="400"/> |
+| Q-Learning     | $n = 4$, $\varepsilon = 0.01$ | <img src="images/results/BaseReward_4StepSemiGradientQLearning_Train_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_4StepSemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     |
 
 
 #### Comparing different n-steps
 
-* $\epsilon = 0.01$
+* $\varepsilon = 0.01$
 
 | Algorithm      | $n = 2$                                                                                                        | $n = 4$                                                                                                        | $n = 6$                                                                                                        | $n = 8$                                                                                                        |
 |----------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
@@ -271,81 +170,13 @@ def reward_shaper_velocity(
 
 
 ## Continuing Semi-Gradient Control
-
-### Average Reward
-Like the discounted setting, the average reward setting applies to continuing problems, 
-problems for which the interaction between agent and environment goes on and on forever 
-without termination or start states. Unlike that setting, however, there is no discounting—the agent 
-cares just as much about delayed rewards as it does about immediate reward.
-
-In the average-reward setting, the quality of a policy $\pi$  is defined as the average rate of reward, 
-or  simply _average reward_ $r(\pi)$, while following that policy.
-
-
-$r(\pi) \overset{\cdot}{=} \lim_{{h \to \infty}} \frac{1}{h} \sum_{{t=1}}^{h} \mathbb{E} \left[ R_t \mid S_0, A_{0:t-1} \sim \pi \right]$
-
-$\hspace{1cm} = \lim_{{t \to \infty}} \mathbb{E} \left[ R_t \mid S_0, A_{0:t-1} \sim \pi \right]$
-
-$\hspace{1cm} = \sum_{s} \mu_{\pi}(s) \sum_{a} \pi(a \mid s) \sum_{s',r} p(s', r \mid s, a)r$
-
-The second and third equations hold if the steady-state distribution 
-$\mu_{\pi}(s) \overset{\cdot}{=} \lim_{{t \to \infty}} \Pr \{ S_t = s \mid A_{0:t-1} \sim \pi \}$
-exists and is independent of $S_0$, in other words, if the MDP is _ergodic_. 
-In an ergodic MDP, the starting state and any early decision made by the agent 
-can have only a temporary effect, in the long run the expectation of being in 
-a state depends only on the policy and the MDP transition probabilities.
-
-For most practical purposes it may be adequate simply to order policies 
-according to their average reward per time step $r(\pi)$. All 
-policies that attain the maximal value of $r(\pi)$ are considered to be optimal.
-
-In the average-reward setting, returns are defined in terms of 
-differences between rewards and the average reward:
-
-$G_{t} \overset{\cdot}{=} R_{t+1} - r(\pi) + R_{t+2} - r(\pi) + R_{t+3} - r(\pi) + \dots$
-
-which are known as the __differential return__, and the corresponding 
-value functions are known as _differential value functions_.
-
-
-### Differential Value Functions
-Differential value functions are defined in terms of the new return just as 
-conventional value functions were defined in terms of the discounted return; 
-therefore the same notation is used. Differential value functions also have 
-Bellman equations, just slightly different from those of the episodic setting.
-Note that we remove $\gamma$ and replace rewards by the difference of the 
-reward and the true average reward
-
-* $v_{\pi}(s) = \sum_{a} \pi(a \mid s) \sum_{r, s'} p(s', r \mid s, a) \left[ r - r(\pi) + v_{\pi}(s') \right]$
-* $q_{\pi}(s, a) = \sum_{r, s'} p(s', r \mid s, a) \left[ r - r(\pi) + \sum_{a'} \pi(a' \mid s') q_{\pi}(s', a') \right]$ $\hspace{1cm}(1)$
-* $v_*(s) = \max_{a} \sum_{r, s'} p(s', r \mid s, a) \left[ r - \max_{\pi} r(\pi) + v_*(s') \right]$
-* $q_*(s, a) = \sum_{r, s'} p(s', r \mid s, a) \left[ r - \max_{\pi} r(\pi) + \max_{a'} q_*(s', a') \right]$  $\hspace{1cm}(2)$
-
-The differential form of TD errors is defined as:
-* $\delta_{t} = R_{t+1} - \bar{R}_t + \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_t)$
-* $\delta_{t} = R_{t+1} - \bar{R}_t + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w}_t) - \hat{q}(S_t, A_t, \mathbf{w}_t)$ $\hspace{1cm}(3)$
-
-where $\bar{R}_t$ is an estimate at time $t$ of the average reward $r(\pi)$.
+See explication here: [summary.ipynb](summary.ipynb)
 
 
 ### Differential Semi-Gradient Sarsa
 The differential semi-gradient Sarsa algorithm (for estimating q) is shown below:
 
 <img src="images/DifferentialSemiGradientSarsa.png" alt="Grid" width="800"/>
-
-which leverages the differential form of the TD error to update the weights $(3)$.
-
-#### Q-Learning
-If we would like to implement the QLearning (i.e. SarsaMax), using the definition in $(2)$ 
-we could use the following TD error:
-* $\delta_{t} = R_{t+1} - \max{({R}_t}) + \max_a{\hat{q}(S_{t+1}, a, \mathbf{w}_t)} - \hat{q}(S_t, A_t, \mathbf{w}_t)$  $\hspace{1cm}(4)$
-
-where $\max({{R}_t})$ is an estimate of $\max_\pi{r(\pi)}$ in $(2)$ and is simply
-the maximum reward seen so far.
-
-#### Expected Sarsa
-Similar to the tabular case, expected sarsa can be formulated as:
-* $\delta_{t} = R_{t+1} - \bar{R}_t + \sum_{a}{\pi(a|S_{t+1})\hat{q}(S_{t+1}, a, \mathbf{w}_t)} - \hat{q}(S_t, A_t, \mathbf{w}_t)$ $\hspace{1cm}(5)$
 
 #### Experiments
 The same MountainCar environment is used for these experiments, where the 
@@ -358,38 +189,20 @@ since a continuing reward of "-1" has the same average reward (of -1).
 
 * Parameters
   * $100k$ steps to approximate continuing task 
-  * $\epsilon$ linearly decayed over $\frac{100k}{3}$ steps
+  * $\varepsilon$ linearly decayed over $\frac{100k}{3}$ steps
   
 
-| Algorithm      | Parameters  | Results                                                                                                     | 
-|----------------|-------------|-------------------------------------------------------------------------------------------------------------|
-| Sarsa          | $eps = 0.3$ | <img src="images/results/BaseReward_DifferentialSemiGradientSarsa_eps_0.3.png" alt="Grid" width="400"/> |
-| Expected Sarsa | $eps = 0.3$ | <img src="images/results/BaseReward_DifferentialSemiGradientExpectedSarsa_eps_0.3.png" alt="Grid" width="400"/>     |
+| Algorithm      | Parameters  | Results                                                                                                         | 
+|----------------|-------------|-----------------------------------------------------------------------------------------------------------------|
+| Sarsa          | $eps = 0.3$ | <img src="images/results/BaseReward_DifferentialSemiGradientSarsa_eps_0.3.png" alt="Grid" width="400"/>         |
+| Expected Sarsa | $eps = 0.3$ | <img src="images/results/BaseReward_DifferentialSemiGradientExpectedSarsa_eps_0.3.png" alt="Grid" width="400"/> |
 | Q-Learning     | $eps = 0.3$ | <img src="images/results/BaseReward_DifferentialSemiGradientQLearning_eps_0.3.png" alt="Grid" width="400"/>     |
 
-For other $\epsilon$ settings, please refer to `images/results` folder.
+For other $\varepsilon$ settings, please refer to `images/results` folder.
 
 
 ### Differential Semi-gradient n-step Sarsa
-
-In order to generalize to n-step bootstrapping, we need an n-step 
-version of the TD error. Starting with the n-step return:
-
-$G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n Q_{t+n-1}(S_{t+n}, A_{t+n}),
-\quad n \geq 1, 0 \leq t < T-n$
-
-and representing it in its differential form with _function approximation_:
-
-$G_{t:t+n} = R_{t+1} - \bar{R}_{t+n-1} + \cdots + R_{t+n} - \bar{R}_{t+n-1} + \hat{q}(S_{t+n}, A_{t+n}, \mathbf{w}_{t+n-1})$
-
-where $\bar{R}$ is an estimate of $r(\pi)$ and $n\geq1$ and $t+n < T$.
-If $t+n \geq T$ then $G_{t:t+n} = G_{t}$ as usual.
-
-The $n$-step TD error is then defined as:
-
-$\delta_{t} = G_{t:t+n} - \hat{q}(S_t, A_t, \mathbf{w})$
-
-after which we can apply our usual semi-gradient Sarsa update.
+See explication here: [summary.ipynb](summary.ipynb)
 
 <img src="images/Differential_nStep_Semi_Gradient_Sarsa.png.png" alt="Grid" width="800"/>
 
@@ -402,7 +215,7 @@ case is also used.
 
 * Parameters
   * $100k$ steps to approximate continuing task 
-  * $\epsilon$ linearly decayed over $\frac{100k}{3}$ steps
+  * $\varepsilon$ linearly decayed over $\frac{100k}{3}$ steps
   * $\beta$ = 0.02 (much smaller than the $n$=1 Sarsa)
 
 | Parameter  | Results                                                                                                        | 
@@ -410,7 +223,7 @@ case is also used.
 | eps = 0.05 | <img src="images/results/BaseReward_DifferentialSemiGradient_4StepSarsa_eps_0.05.png" alt="Grid" width="400"/> |
 | eps = 0.1  | <img src="images/results/BaseReward_DifferentialSemiGradient_4StepSarsa_eps_0.1.png" alt="Grid" width="400"/>  |
 
-More experiments with different starting $\epsilon$ are located in `images/results`
+More experiments with different starting $\varepsilon$ are located in `images/results`
 
 ## Environment: [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car/#mountain-car)
 The Mountain Car MDP is a deterministic MDP that consists of a car placed 
