@@ -28,8 +28,8 @@ See excplication here: [summary.ipynb](summary.ipynb)
 - [x]  Differential Semi-Gradient QLearning (Section: 10.3): `agents.py/DifferentialSemiGradientQLearning`
 - [x]  Differential Semi-Gradient Expected Sarsa (extension of Sarsa): `agents.py/DifferentialSemiGradientExpectedSarsa`
 - [x]  DifferentialSemiGradient_nStepSarsa (Section: 10.5): `agents.py/DifferentialSemiGradient_nStepSarsa`
-- [ ]   DifferentialSemiGradient_nStepExpectedSarsa (extension of Sarsa)
-- [ ]   DifferentialSemiGradient_nStepQLearning (extension of Sarsa)
+- [x]   DifferentialSemiGradient_nStepExpectedSarsa (extension of Sarsa): `agents.py/DifferentialSemiGradient_nStepExpectedSarsa`
+- [x]   DifferentialSemiGradient_nStepQLearning (extension of Sarsa): `agents.py/DifferentialSemiGradient_nStepQLearning`
 
 
 ## Environment
