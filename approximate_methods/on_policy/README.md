@@ -14,7 +14,7 @@
 - [Differential Semi-gradient n-step Sarsa](#Differential-Semi-gradient-n-step-Sarsa)
 
 ## Theoretical Background
-See excplication here: [summary.ipynb](summary.ipynb)
+See expanded discussion of the algorithms and concepts covered here: [summary.ipynb](summary.ipynb)
 
 
 ## Implemented Algorithms
