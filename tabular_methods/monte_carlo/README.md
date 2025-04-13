@@ -28,6 +28,7 @@ Topics covered in the notebook:
 * __Off-policy Prediction via Importance Sampling__
 * __Off-Policy MC Control__
 
+
 ## On-Policy First Visit
 <img src="images/MCOnPolicyFirstVisit.png" alt="Grid" width="700"/>
 
