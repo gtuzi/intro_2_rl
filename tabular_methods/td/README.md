@@ -12,6 +12,7 @@
 
 ## Introduction
 This section contains methods from Chapter 6 & 7 in [Sutton & Barto RL Book].
+Expanded discussions are in [summary](summary.ipynb)
 
 ## Implemented Algorithms
 - [x] Sarsa (Section: 6.4): `agents/Sarsa`
@@ -21,11 +22,12 @@ This section contains methods from Chapter 6 & 7 in [Sutton & Barto RL Book].
 - [x] nStepsSarsaOffPolicy (Section: 7.3): `agents/nStepsSarsaOffPolicy`
 - [x] QSigmaOffPolicy (Section 7.6): `agents/QSigmaOffPolicy`
 
+
 ## Algorithms
 
 ### Sarsa
 
-<img src="images/SarsaAlgo.png" alt="Grid" width="2004"/>
+<img src="images/SarsaAlgo.png" alt="Grid" width="800"/>
 
 #### Experiments
 
@@ -128,7 +130,7 @@ The following parameters used for the Sarsa algorithm
 
 ### Sarsa-Max (Q Learning)
 
-<img src="images/QLearningAlgo.png" alt="Grid" width="2026"/>
+<img src="images/QLearningAlgo.png" alt="Grid" width="800"/>
 
 
 #### Experiments
@@ -179,7 +181,7 @@ The following parameters used for the Sarsa algorithm
 
 ### nStep Sarsa
 
-<img src="images/nStepSarsa.png" alt="Grid" width="2002"/>
+<img src="images/nStepSarsa.png" alt="Grid" width="800"/>
 
 #### Experiments
 
