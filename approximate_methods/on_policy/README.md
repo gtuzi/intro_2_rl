@@ -14,7 +14,20 @@
 - [Differential Semi-gradient n-step Sarsa](#Differential-Semi-gradient-n-step-Sarsa)
 
 ## Theoretical Background
-See expanded discussion of the algorithms and concepts covered here: [summary.ipynb](summary.ipynb)
+See expanded discussion of the algorithms and concepts covered here: [summary.ipynb](summary.ipynb).
+
+Topics covered in the notebook:
+* __Linear Methods__
+* __Prediction Objective__
+  * Stochastic Gradient
+  * Stochastic Semi-Gradient
+* __Episodic Control__
+  * One-Step Semi-Gradient
+  * $n$-Step Semi-Gradient
+* __Continuous Control: Average Reward Setting__
+  * Differential Semi-Gradient
+  * One-Step Differential Semi-Gradient
+  * $n$-Step Differential Semi-Gradient
 
 
 ## Implemented Algorithms
