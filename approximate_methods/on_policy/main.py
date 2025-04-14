@@ -483,7 +483,9 @@ def run_env_episodic(
             gamma = behavioral_agent.discount
 
         for episode in tqdm(
-                range(num_episodes), desc=f'Episodes for seed_{seed}'):
+                range(num_episodes),
+                desc=f'Episodes for seed_{seed}'
+        ):
             rewards_over_time = []
 
             # Noise state reset (not exploration level). Clear any trajectories

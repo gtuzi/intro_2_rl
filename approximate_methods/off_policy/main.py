@@ -2,6 +2,7 @@ import os
 import random
 from typing import List, Callable, Union, Optional
 
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,6 +30,7 @@ from shared.utils import (
     NoiseSchedule
 )
 from tabular_methods.utils import DiscreteActionRandomAgent
+import time
 
 global ENV_NAME
 global RENDER
@@ -42,7 +44,9 @@ def plot(
         y_label: str = 'Returns = Sum(Rewards)',
         x_label: str = 'Episodes',
         title: str = 'Algo',
-        save = True
+        save = True,
+        min_y_val = None,
+        max_y_val = None
 ):
     # Function to create raw dataframes from the sequences
     def create_raw_df(sequences, group_name):
@@ -100,6 +104,9 @@ def plot(
         plt.plot(group_data['episodes'], group_data['max'], linestyle='--',
                  color='gray', alpha=0.7)
 
+    if (min_y_val is not None) and (max_y_val is not None):
+        plt.ylim(min_y_val, max_y_val)
+
     # Add labels and title
     plt.xlabel(x_label)
     plt.ylabel(y_label)
@@ -115,6 +122,8 @@ def plot(
         fname = f'{save_dir}/{title}_{trail}.png'
         fname = fname.replace(' ', '')
         fname = fname.replace(":", "_")
+        fname = fname.replace(",", "_")
+        fname = fname.replace("-", "_")
         plt.savefig(fname) if save else None
     else:
         plt.show()
@@ -277,7 +286,10 @@ def run_env_episodic(
         eval_num_episodes: int = 10,
         evaluate_frequency: int = 5,
         greedy_eval: bool = True,
-        train_seeds=(1, 2, 3, 4)
+        train_seeds=(1, 2, 3, 4),
+        root_log: str = '',
+        do_log: bool = False,
+        log_freq: int = 10
 ):
     V0_over_seeds = []
     eval_V0_over_seeds = []
@@ -287,9 +299,28 @@ def run_env_episodic(
     returns_over_seeds = []
     eval_returns_over_seeds = []
 
+    writer = None
+    log_folder = f'runs/episodic/{root_log}/{int(time.time())}'
+
     for seed_i, seed in enumerate(train_seeds):
         random.seed(seed)
         np.random.seed(seed)
+
+        if do_log:
+            if writer is not None:
+                writer.close()
+                del writer
+
+            writer = SummaryWriter(f'{log_folder}/seed_{seed_i}')
+            try:
+                target_agent.writer = writer
+            except:
+                pass
+
+            try:
+                behavioral_agent.writer = writer
+            except:
+                pass
 
         returns_over_episodes = []
         eval_rreturns_over_episodes = []
@@ -314,7 +345,8 @@ def run_env_episodic(
         with tqdm(
                 total=num_episodes,
                 desc=f'Train - seed_{seed}',
-                ncols=100) as pbar:
+                ncols=100
+        ) as pbar:
 
             for episode in range(num_episodes):
 
@@ -357,13 +389,49 @@ def run_env_episodic(
 
                     G0 += (gamma ** t) * float(reward_raw)
 
+
                     rhop = None
-                    if (target_agent is not None) and (
-                    isinstance(target_agent, SoftPolicy)
+                    if (
+                            (target_agent is not None) and
+                            (isinstance(target_agent, SoftPolicy))
                     ):
                         target_next_p = target_agent.get_sa_probability(
                             next_state, next_action)
                         rhop = target_next_p / next_p
+
+
+                    # region log
+                    if (
+                            (writer is not None) and
+                            ((t % log_freq == 0) or terminated)
+                    ):
+
+                        writer.add_scalar(
+                            'reward_raw',
+                            reward_raw,
+                            t
+                        )
+
+                        writer.add_scalar(
+                            'reward',
+                            reward,
+                            t
+                        )
+
+                        if rhop is not None:
+                            writer.add_scalar(
+                                'rhop',
+                                rhop,
+                                t
+                            )
+
+                        if terminated:
+                            writer.add_scalar(
+                                'G0',
+                                G0,
+                                t
+                            )
+                    # endregion log
 
                     e = Experience(
                         s=state,
@@ -378,10 +446,10 @@ def run_env_episodic(
                         t=t
                     )
 
-                    behavioral_agent.step(e)
+                    behavioral_agent.step(e, log_step=t)
 
                     if target_agent is not None:
-                        target_agent.step(e)
+                        target_agent.step(e, log_step=t)
 
                     if done:
                         break
@@ -510,7 +578,9 @@ def nstep_semigradient_sarsa_experiments(
         epses=(0.01, 0.1, 1.),
         seeds=(1, 2),
         do_performance_plot=True,
-        base_name: str = ''):
+        base_name: str = '',
+        do_log: bool = False,
+):
 
     train_returns_over_seeds_over_over_agent = []
     eval_returns_over_seeds_over_over_agent = []
@@ -581,8 +651,10 @@ def nstep_semigradient_sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
             eval_num_episodes=1,
-            evaluate_frequency=10,
-            train_seeds=seeds)
+            evaluate_frequency=5,
+            train_seeds=seeds,
+            do_log=do_log
+        )
 
         train_returns_over_seeds_over_over_agent.append(
             train_returns_over_seeds)
@@ -597,16 +669,26 @@ def nstep_semigradient_sarsa_experiments(
         eval_G0_returns_over_seeds_over_over_agent.append(
             eval_G0_over_seeds)
 
-        legend.append(f'eps: {eps}, nSarsaSteps: {n_sarsa_steps}')
+        legend.append(f'eps: {eps} - nSarsaSteps: {nstep_sarsa}')
 
         if do_performance_plot:
             plot(train_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'SemiGradient_{n_sarsa_steps}SarsaOffPolicy_Train')
+                 title=base_name + f'OffPolicy_SemiGradient_{nstep_sarsa}Sarsa_Train',
+                 x_label='Steps',
+                 y_label='Sum(r)',
+                 min_y_val=-500,
+                 max_y_val=-50
+                 )
 
             plot(eval_returns_over_seeds_over_over_agent,
                  legend=legend,
-                 title=base_name + f'SemiGradient_{n_sarsa_steps}SarsaOffPolicy_Eval')
+                 title=base_name + f'Offpolicy_SemiGradient_{nstep_sarsa}Sarsa_Eval',
+                 x_label='Steps',
+                 y_label='Sum(r)',
+                 min_y_val=-500,
+                 max_y_val=-50
+            )
 
         train_returns_over_seeds_over_over_agent.clear()
         eval_returns_over_seeds_over_over_agent.clear()
@@ -619,7 +701,8 @@ def nstep_semigradient_sarsa_experiments(
 
 if __name__ == '__main__':
 
-    n_sarsa_steps = 4
+    do_log = True
+    n_sarsa_steps = 1
 
     epses = (0.1, ) # (0.01, 0.05, 0.1, 0.3, 0.5)
     seeds = tuple(range(0, 3)) # tuple(range(0, 10))
@@ -630,8 +713,8 @@ if __name__ == '__main__':
 
     if ENV_NAME == 'MountainCar':
         if episodic:
-            num_episodes = 3000
-            T = 200
+            num_episodes = 20
+            T = 400
             MAX_EPISODE_STEPS = T
         else:
             num_episodes = None
@@ -676,11 +759,11 @@ if __name__ == '__main__':
             nstep_sarsa=n_sarsa_steps,
             eps_builder=build_greedy_eps_sched,
             reward_shaper=base_reward,
-            update_coefficient=build_update_coefficient_sched(
-                start=1 / (2 * 8), end=1 / (2 * 8)),
+            update_coefficient=0.1, # build_update_coefficient_sched(start=1 / (2 * 8), end=1 / (2 * 8)),
             epses=epses,
             seeds=seeds,
-            base_name=''
+            base_name='',
+            do_log=do_log
         )
 
     exit(0)

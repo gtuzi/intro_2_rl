@@ -1,6 +1,155 @@
 [Sutton & Barto RL Book]: http://incompleteideas.net/book/RLbook2020.pdf
 
 
-# Off-policy Control with Approximation
+# Off-policy Methods with Approximation
 
-### Methods here need debugging
+## Introduction
+The extension to function approximation is significantly different and 
+harder for off-policy learning than it is for  on-policy learning. 
+The tabular off-policy methods readily extend to semi-gradient algorithms, 
+but these algorithms do not converge as robustly as  they do under on-policy 
+training. In off-policy learning we try to learn a value function for a target policy
+$\pi$, given data due to a different behavior policy $b$.
+
+For the _prediction_ case, both policies are static and given, and we try
+to learn/approximate the value functions $\hat{q} \approx q_{pi}$ 
+or $\hat{v} \approx v_{\pi}$. For the _control_ case we learn action values 
+$\hat{q}$ and both policies change, where the target policy $\pi$ being 
+greedy wrt to $\hat{q}$ and behavioral $b$ is $\varepsilon$-soft wrt $\hat{q}$.
+
+#### Challenges with Off-Policy
+Two challenges present themselves in the off-policy with approximation
+* _Target_ (value) of the update $\rightarrow$ dealt with importance sampling (IS)
+* _Distribution_ of the updates $\rightarrow$ IS for semi-gradient methods, true gradients without IS
+
+### Semi-Gradient Methods
+The tabular IS methods can be extended for the off-policy semi-gradient case, 
+in dealing with the learning target. These methods, however, do not address
+the update distribution.
+
+IS used in the tabular form, are adopted here by replacing the tabular 
+update of $Q$ or $V$ to approximated method parametrized by $\mathbf{w}$.
+
+The per-step IS ratio is defined as:
+
+$$
+    \rho_{t} \overset{\cdot}{=} \rho_{t:t} =\frac{\pi(A_t | S_t)}{b(A_t | S_t)}
+$$
+
+#### One-Step
+
+The following is the development for the one-step case, both for prediction
+($\hat{v}$) and control ($\hat{q}$)
+
+###### Prediction 
+TD-errors are:
+
+* Episodic
+
+$\delta_{t} \overset{\cdot}{=} R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}_{t}) - \hat{v}(S_{t}, \mathbf{w}_{t})$
+
+
+* Continuing 
+
+$\delta_{t} \overset{\cdot}{=} R_{t+1} - \bar{R}_t + \gamma\hat{v}(S_{t+1}, \mathbf{w}_{t}) - \hat{v}(S_{t}, \mathbf{w}_{t})$
+
+###### Control
+TD-errors are as follows for each control aglorithm:
+* __Sarsa__
+  * Episodic: 
+$\delta_{t} \overset{\cdot}{=} R_{t+1} + \gamma\hat{q}(S_{t+1}, A_{t+1}, \mathbf{w}_{t}) - \hat{q}(S_{t}, A_{t}, \mathbf{w}_{t})$
+  * Continuing: 
+$\delta_{t} \overset{\cdot}{=} R_{t+1} - \bar{R}_t + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w}_{t}) - \hat{q}(S_{t}, A_{t}, \mathbf{w}_{t})$
+
+* __Expected Sarsa__
+  * Episodic: 
+  $\delta_{t} \overset{\cdot}{=} R_{t+1} + \gamma \sum_a \pi(a | S_{t+1}) \hat{q}(S_{t+1}, a, \mathbf{w}_{t}) - \hat{q}(S_{t}, A_{t}, \mathbf{w}_{t})$
+  * Continuing: 
+  $\delta_{t} \overset{\cdot}{=} R_{t+1} - \bar{R}_t + \sum_a \pi(a | S_{t+1}) \hat{q}(S_{t+1}, a, \mathbf{w}_{t}) - \hat{q}(S_{t}, A_{t}, \mathbf{w}_{t})$
+
+* __Q-Learning__
+  * Episodic:
+  $\delta_{t} \overset{\cdot}{=} R_{t+1} + \gamma \max_a \hat{q}(S_{t+1}, a, \mathbf{w}_{t}) - \hat{q}(S_{t}, A_{t}, \mathbf{w}_{t})$
+  * Continuing: 
+  $\delta_{t} \overset{\cdot}{=} R_{t+1} - \bar{R}_t + \max_a \hat{q}(S_{t+1}, a, \mathbf{w}_{t}) - \hat{q}(S_{t}, A_{t}, \mathbf{w}_{t})$
+
+###### Update
+The update procedure is as follows:
+
+* $\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \rho_{t}\delta_{t}\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t}) $ (prediction)
+* $\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \delta_{t}\nabla_{\mathbf{w}}\hat{q}(S_{t}, A_{t}, \mathbf{w}_{t}) $ (control)
+
+Note that for the _control_ case ($\hat{q}$) we __do not use__
+IS ratio. This is because we're estimating the value for $(S_t, A_t)$ following 
+$\pi$. This means, we're at $A_t$ already, and we care how the ratios of the subsequent
+actions, i.e. $A_{t+1:t+n}$ are taken not how we got to $A_t$. So, for the 
+one-step case, the control algorithm is the same as the on-policy.
+
+Another way to look at it is when we consider the following identity 
+$v(s) = \mathbb{E}_{\pi(\cdot|s)}[\mathbb{E}_{P(\cdot|s, a)}[r + \gamma v_{\pi}(s')]] = \sum_{a}\pi(a|s) \mathbb{E}_{P(\cdot|s, a)}[r + \gamma v_{\pi}(s')]$, 
+therefore the appropriate IS adjustment is  needed for the sampled actions $a \sim b(\cdot|s)$, 
+in order to obtain the sample-estimate of  the expectation $\mathbb{E}_{\pi(\cdot|s)}$. 
+
+For the $q(s, a) = \mathbb{E}_{P(\cdot|s, a)}[r + \gamma v_{\pi}(s')]
+= \mathbb{E}_{P(\cdot|s, a)}[r + \gamma  \mathbb{E}_{\pi(\cdot|s'), P}[q_{\pi}(s', a')]]$ we're 
+already starting our analysis at $a$,  i.e. there is no $\mathbb{E}_{\pi(\cdot|s)}$ 
+expectation that depends on the $a$ under consideration; and we're 
+bootsrapping  $q(s', a')$, i.e. not estimating it.
+
+
+#### Multi-Step
+In the multi-step case the one-step algorithms are extended as follows:
+
+###### Target
+
+__Prediction__
+* $G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + ... + \gamma^{n-1}R_{t+n} + \gamma^{n}\hat{v}(S_{t+n}, \mathbf{w}_{t+n - 1})$ (episodic)
+* $G_{t:t+n} = R_{t+1} - \bar{R}_{t} + - \bar{R}_{t+1} + ... + R_{t+n} - \bar{R}_{t+n-1} + \hat{v}(S_{t+n}, \mathbf{w}_{t+n - 1})$ (continuing)
+
+__Control__
+
+_Sarsa_
+* $G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + ... + \gamma^{n-1}R_{t+n} + \gamma^{n}\hat{q}(S_{t+n}, A_{t+n}, \mathbf{w}_{t+n - 1})$ (episodic)
+* $G_{t:t+n} = R_{t+1} - \bar{R}_{t} + R_{t+2} - \bar{R}_{t+1} + ... + R_{t+n} - \bar{R}_{t+n-1} + \hat{q}(S_{t+n}, A_{t+n}, \mathbf{w}_{t+n - 1})$ (continuing)
+
+_Expected Sarsa_
+* $G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + ... + \gamma^{n-1}R_{t+n} + \gamma^{n}\sum_{a}\pi(a | S_{t+n})\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n - 1})$ (episodic)
+* $G_{t:t+n} = R_{t+1} - \bar{R}_{t} + R_{t+2} - \bar{R}_{t+1} + ... + R_{t+n} - \bar{R}_{t+n-1} + \sum_{a}\pi(a | S_{t+n}) \hat{q}(S_{t+n}, a, \mathbf{w}_{t+n - 1})$ (continuing)
+
+_Q-Learning_
+* $G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + ... + \gamma^{n-1}R_{t+n} + \gamma^{n}\max_{a}\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n - 1})$ (episodic)
+* $G_{t:t+n} = R_{t+1} - \bar{R}_{t} + R_{t+2} - \bar{R}_{t+1} + ... + R_{t+n} - \bar{R}_{t+n-1} + \max_{a}\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n - 1})$ (continuing)
+
+
+__Update__ 
+The update rule for the $n$-Step are as follows:
+
+* $\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha (\prod_{k=\textbf{t}}^{t+n-1} \rho_{k})[G_{t:t+n} - \hat{v}(S_{t}, \mathbf{w}_{t+n-1})] \nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t+n-1})$ (prediction)
+* $\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha (\prod_{k=\textbf{t+1}}^{t+n} \rho_{k}) [G_{t:t+n} - \hat{q}(S_{t}, A_{t}, \mathbf{w}_{t+n-1})] \nabla_{\mathbf{w}}\hat{q}(S_{t}, A_{t}, \mathbf{w}_{t+n-1})$ (control)
+
+Here also, just like in the one-step setting, for action-value
+we do not IS weigh the $R_t$, since we're estimating $q(s, a)$, but we do weigh
+the subsequent rewards as their choice depends on the appropriate (IS adjusted)
+probability $\pi$. This makes sense for the tabular case, where each $(S_t, A_t)$
+update is independent of others. But for the function approximation approach
+this assumption does not hold. So for $\hat{v}$ the IS weights are 
+synchronized with the actions which generated sampled rewards, whereas 
+for $\hat{q}$ they are shifted one step forward, i.e. synchronized 
+the next rewards, i.e. $R_{t+1:t+n}$ and the last $\hat{q}(S_{t+n}, A_{t+n})$
+
+Note that $\rho_k = 1$ for $k \ge T$ and $G_{t:t+n} = G_t$ for $t+n \ge T$
+
+### Off-Policy Divergence
+One issue with off-policy with function approximation is the update 
+distribution divergence. For example, in the following images I am comparing
+the update distributions between the on-policy Sarsa vs off-policy 1-step Sarsa
+where the 1-step Sarsa uses the on-policy Sarsa as its behavioral policy.
+
+| On - Policy Sarsa: Update Distribution                                             | Off-Policy Sarsa: Update Distribution                                               |
+|------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
+| <img src="images/on_policy_sarsa_update_distribution.png" alt="Grid" width="400"/> | <img src="images/off_policy_sarsa_update_distribution.png" alt="Grid" width="400"/> |
+
+The divergence, of the update for the target policy becomes pronounced with 
+increasing learning rates $\alpha$.
+
+### TBD

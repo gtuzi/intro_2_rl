@@ -1,4 +1,4 @@
-from typing import Union, Callable, Any
+from typing import Union, Callable, Any, Optional
 import numpy as np
 import time
 
@@ -11,8 +11,12 @@ from shared.utils import LinearSchedule
 from torch.utils.tensorboard import SummaryWriter
 
 
+#######################################
+# ----------- n-step ---------------- #
+#######################################
+
+
 class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
-    writer_T = 0
 
     def __init__(
             self,
@@ -46,21 +50,21 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
         self.nstep_sarsa = nstep_sarsa
         self.update_coefficient = update_coefficient
         self.trajectory = []
+        self._writer: Optional[SummaryWriter] = None
 
-    def __del__(self):
-        try:
-            self.writer.close()
-        except:
-            pass
+    @property
+    def writer(self) -> SummaryWriter:
+        return self._writer
+
+    @writer.setter
+    def writer(self, w: SummaryWriter):
+        if w is not None:
+            assert isinstance(w, SummaryWriter)
+        self._writer = w
 
     def initialize(self):
         self.trajectory = []
         self.t = 0
-
-        # Create a SummaryWriter instance
-        _c = int(time.time())
-        self.writer = SummaryWriter(f'runs/nstep_offpolicy/{_c}')
-        SemiGradient_nStepsSarsaOffPolicy.writer_T = 0
 
         if isinstance(self.eps, NoiseSchedule):
             # Reset noise to starting exploration
@@ -82,7 +86,7 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
         if isinstance(self.update_coefficient, LinearSchedule):
             self.update_coefficient.reset()
 
-    def step(self, e: Experience):
+    def step(self, e: Experience, **kwargs):
 
         self.trajectory.append(e)
 
@@ -93,76 +97,89 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
             tau = 0
 
         if tau >= 0:
-            self.update(tau)
+            self.update(tau, **kwargs)
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
         self.t += 1
 
-    def update(self, tau: int):
+    def update(self, tau: int, **kwargs):
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
 
         # starting from min(n-steps, T/done) back
         tau_end = min(tau+self.nstep_sarsa, len(self.trajectory))
 
+        # -------------------------------------------------------- #
+        # G_{t:t+n} = sum_{k=t}^{t+n-1}{\gamma ^{k - t} R_{k + 1}} + Q(S_{t+n}, A_{t+n})
+        # G1: sum_{k=t}^{t+n-1}{\gamma ^{k - t} R_{k + 1}}
+        # G2: \gamma^{n}q(S_{t+n}, A_{t+n})
+        # G_{t:t+n} = G1 + G2
+        # -------------------------------------------------------- #
+
+        # G1 = sum_{k = t}^{t+n}{R_{k}}
         target = sum(
             [
-                # Ref: 7.3 algorithm box
-                # (On-policy n-step Sarsa for estimating Q=q* or q_pi)
-                # Notationally, for a[t], the book uses reward as r[t+1].
-                # So while the sample target (G) starts the accumulation
-                # of rewards at tau+1, this means that tau+1 indexes the reward
-                # in the (s[tau], a[tau], r[tau+1], s[tau+1]) experience.
-                # So here - G = sum_i(tau + 1):min(tau + n, T)(R[i])
-                # Eq: 7.4
+                # Ref: 7.3 algorithm box, Eq: 7.4
+                # R_{t+1} <- (A_t, S_t)
                 (self.discount ** i) * e.r
                 for i, e in enumerate(self.trajectory[tau:tau_end])
             ]
         )
 
+        #
         # Episodic: tau + n < T
+        # G2: \gamma^{n}q(S_{t+n}, A_{t+n})
         experience_tau_end = self.trajectory[tau_end - 1]
         if not experience_tau_end.done:
             # Episode not terminated
             target += (
                     (self.discount ** self.nstep_sarsa) *
                     self.state_action_value(
-                        experience_tau_end.sp, experience_tau_end.ap)
+                        experience_tau_end.sp,
+                        experience_tau_end.ap
+                    )
             ) # Eq: 7.4
 
-
-        # Refer to the definition of G at (7.4) and rho at (7.10)
-        # G_t:t+h = R[t+1] + ...
-        # rho_t:t+h = prod(pi(a[t] | s[t])/b(a[t] | s[t]), ...)
-        #
-        # Rho, however, is computed for one (a,s) ahead of the current rho
-        # In a way, rho is looking at the (a|s) following the r[tau+1],
-        # i.e a[tau+1] and s[tau + 1]
-        # But since we don't have any (a, s) following r[tau + n_steps] this
-        # is truncated one step earlier.
-
         rho = [
-            self.get_sa_probability(e.sp, e.ap) / e.pp
-            for e in self.trajectory[tau:min(tau_end, len(self.trajectory) - 1)]
+            self.get_sa_probability(e.s, e.a) / e.p
+            for e in self.trajectory[tau+1:tau_end]
         ]
+
+        if not experience_tau_end.done:
+            # Add the \rho for Q(S_{t+n}, A_{t+n})
+            rho.append(self.get_sa_probability(
+                experience_tau_end.sp,
+                experience_tau_end.ap
+            ) / experience_tau_end.pp)
 
         # rho = []
         # for e in self.trajectory[tau:tau_end]:
         #     p = self.get_sa_probability(e.sp, e.ap)
         #     rho.append(np.clip(p / e.pp, 1e-3, 1.))
 
-
+        rho_prod = None
         if len(rho) > 0:
             rho_prod = np.prod(rho)  # (7.10)
         else:
-            rho_prod = 1.
+            assert experience_tau_end.done
+            rho_prod = 1. # On-policy
+
 
         # --- Learn: Eq: (11.6) --- #
-        experience_tau = self.trajectory[tau]
-        td_error = target - self.state_action_value(
-            experience_tau.s, experience_tau.a)
+        qhat =  self.state_action_value(
+            self.trajectory[tau].s,
+            self.trajectory[tau].a
+        )
 
-        grad_w = self.feature_fn(experience_tau.s, experience_tau.a)
+        td_error = target - qhat
+
+        grad_w = self.feature_fn(
+            self.trajectory[tau].s,
+            self.trajectory[tau].a
+        )
 
         if isinstance(self.update_coefficient, LinearSchedule):
             alpha = self.update_coefficient.value
@@ -172,83 +189,92 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
         else:
             raise Exception("Invalid type for update_coefficient")
 
-        self.w += alpha * rho_prod * td_error * grad_w
+        assert rho_prod is not None, "rho_prod is None"
+
+        update = alpha * rho_prod * td_error * grad_w
+        self.w += update
 
         # Logs
-        if (self.t % 10) == 0:
-            SemiGradient_nStepsSarsaOffPolicy.writer_T += 1
-            t = SemiGradient_nStepsSarsaOffPolicy.writer_T
+        if (self._writer is not None) and (log_step is not None):
 
-            self.writer.add_histogram('weights', self.w, t)
-            self.writer.add_histogram('grad_w', grad_w, t)
-            self.writer.add_histogram('rho', rho, t)
-            self.writer.add_scalar('grad_w_norm', np.linalg.norm(self.w), t)
-            self.writer.add_scalar('weights_norm', np.linalg.norm(grad_w), t)
-            self.writer.add_scalar('td_error', td_error, t)
-            self.writer.add_scalar('target', target, t)
-            self.writer.add_scalar('rho_prod', rho_prod, t)
-            self.writer.add_scalar('alpha', alpha, t)
+            root_name = f'off_policy/semi_gradient/{self.nstep_sarsa}/sarsa/'
 
-    def update_per_decision(self, tau: int):
-        # starting from min(n-steps, T/done) back
-        tau_end = min(tau + self.nstep_sarsa, len(self.trajectory))
+            self._writer.add_histogram(root_name + 'weights', self.w, log_step)
+            self._writer.add_histogram(root_name + 'grad_w', grad_w, log_step)
+            self._writer.add_histogram(root_name + 'update', update, log_step)
 
-        rhos = [
-            self.get_sa_probability(e.s, e.a) / e.p
-            for e in self.trajectory[tau:tau_end]
-        ]
+            if len(rho) > 0:
+                self._writer.add_histogram(root_name + 'rho', np.array(rho).reshape(-1), log_step)
 
-        rewards = [
-            # Notationally, in the book, for a[t], reward is r[t+1].
-            # So while the book starts the accumulation of rewards at
-            # tau+1, this means that tau+1 indexes the
-            # (s[tau], a[tau], r[tau+1], s[tau+1]) experience
-            (self.discount ** i) * e.r
-            for i, e in enumerate(self.trajectory[tau:tau_end])
-        ]
+            self._writer.add_scalar(root_name + 'grad_w_norm', np.linalg.norm(grad_w), log_step)
+            self._writer.add_scalar(root_name + 'weights_norm', np.linalg.norm(self.w), log_step)
+            self._writer.add_scalar(root_name + 'td_error', td_error, log_step)
+            self._writer.add_scalar(root_name + 'qhat', qhat, log_step)
+            self._writer.add_scalar(root_name + 'target', target, log_step)
+            self._writer.add_scalar(root_name + 'rho_prod', rho_prod, log_step)
+            self._writer.add_scalar(root_name + 'alpha', alpha, log_step)
 
-        # --- Per-decision target (~G[tau]) ---- #
-        # G[tau] = sum(~R[tau:tau_end] + Q(s'[tau_end], a'[tau_end]))
-        target = sum([rh * re for rh, re in zip(rhos, rewards)])
 
-        experience_tau_end = self.trajectory[tau_end-1]
-
-        # If this is the last experience in the episode
-        if not experience_tau_end.done:
-            # Episode not terminated
-            rho_end = self.get_sa_probability(experience_tau_end.sp, experience_tau_end.ap) / experience_tau_end.pp
-            target += rho_end * (self.discount ** self.nstep_sarsa) * self.state_action_value(experience_tau_end.sp, experience_tau_end.ap)
-
-        # --- TD Method --- #
-
-        td_error = (target - self.state_action_value(
-            self.trajectory[tau].s, self.trajectory[tau].a))
-
-        # ---- Learn ---- #
-        grad_w = self.feature_fn(self.trajectory[tau].s, self.trajectory[tau].a)
-
-        if isinstance(self.update_coefficient, LinearSchedule):
-            alpha = self.update_coefficient.value
-            self.update_coefficient.step()
-        elif isinstance(self.update_coefficient, float):
-            alpha = self.update_coefficient
-        else:
-            raise Exception("Invalid type for update_coefficient")
-
-        grad_w = np.clip(grad_w, -0.1, 0.1)
-
-        self.w += alpha * td_error * grad_w
-
-        if (self.t % 10) == 0:
-            SemiGradient_nStepsSarsaOffPolicy.writer_T += 1
-            t = SemiGradient_nStepsSarsaOffPolicy.writer_T
-
-            self.writer.add_histogram('weights', self.w, t)
-            self.writer.add_histogram('grad_w', grad_w, t)
-            self.writer.add_scalar('grad_w_norm', np.linalg.norm(self.w), t)
-            self.writer.add_scalar('weights_norm', np.linalg.norm(grad_w), t)
-            self.writer.add_scalar('td_error', td_error, t)
-            self.writer.add_scalar('target', target, t)
-            self.writer.add_scalar('rho', np.prod(rhos), t)
-            self.writer.add_scalar('alpha', alpha, t)
+    # def update_per_decision(self, tau: int):
+    #     # starting from min(n-steps, T/done) back
+    #     tau_end = min(tau + self.nstep_sarsa, len(self.trajectory))
+    #
+    #     rhos = [
+    #         self.get_sa_probability(e.s, e.a) / e.p
+    #         for e in self.trajectory[tau:tau_end]
+    #     ]
+    #
+    #     rewards = [
+    #         # Notationally, in the book, for a[t], reward is r[t+1].
+    #         # So while the book starts the accumulation of rewards at
+    #         # tau+1, this means that tau+1 indexes the
+    #         # (s[tau], a[tau], r[tau+1], s[tau+1]) experience
+    #         (self.discount ** i) * e.r
+    #         for i, e in enumerate(self.trajectory[tau:tau_end])
+    #     ]
+    #
+    #     # --- Per-decision target (~G[tau]) ---- #
+    #     # G[tau] = sum(~R[tau:tau_end] + Q(s'[tau_end], a'[tau_end]))
+    #     target = sum([rh * re for rh, re in zip(rhos, rewards)])
+    #
+    #     experience_tau_end = self.trajectory[tau_end-1]
+    #
+    #     # If this is the last experience in the episode
+    #     if not experience_tau_end.done:
+    #         # Episode not terminated
+    #         rho_end = self.get_sa_probability(experience_tau_end.sp, experience_tau_end.ap) / experience_tau_end.pp
+    #         target += rho_end * (self.discount ** self.nstep_sarsa) * self.state_action_value(experience_tau_end.sp, experience_tau_end.ap)
+    #
+    #     # --- TD Method --- #
+    #
+    #     td_error = (target - self.state_action_value(
+    #         self.trajectory[tau].s, self.trajectory[tau].a))
+    #
+    #     # ---- Learn ---- #
+    #     grad_w = self.feature_fn(self.trajectory[tau].s, self.trajectory[tau].a)
+    #
+    #     if isinstance(self.update_coefficient, LinearSchedule):
+    #         alpha = self.update_coefficient.value
+    #         self.update_coefficient.step()
+    #     elif isinstance(self.update_coefficient, float):
+    #         alpha = self.update_coefficient
+    #     else:
+    #         raise Exception("Invalid type for update_coefficient")
+    #
+    #     grad_w = np.clip(grad_w, -0.1, 0.1)
+    #
+    #     self.w += alpha * td_error * grad_w
+    #
+    #     if (self.t % 10) == 0:
+    #         SemiGradient_nStepsSarsaOffPolicy.writer_T += 1
+    #         t = SemiGradient_nStepsSarsaOffPolicy.writer_T
+    #
+    #         self.writer.add_histogram('weights', self.w, t)
+    #         self.writer.add_histogram('grad_w', grad_w, t)
+    #         self.writer.add_scalar('grad_w_norm', np.linalg.norm(self.w), t)
+    #         self.writer.add_scalar('weights_norm', np.linalg.norm(grad_w), t)
+    #         self.writer.add_scalar('td_error', td_error, t)
+    #         self.writer.add_scalar('target', target, t)
+    #         self.writer.add_scalar('rho', np.prod(rhos), t)
+    #         self.writer.add_scalar('alpha', alpha, t)
 

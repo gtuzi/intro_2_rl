@@ -108,25 +108,30 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
         else:
             raise Exception("Invalid type for update_coefficient")
 
-        self.w += alpha * td_error * grad_w
+        update = alpha * td_error * grad_w
+        self.w += update
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
         if (self._writer is not None) and (log_step is not None):
-            self._writer.add_scalar('target', tgt, log_step)
-            self._writer.add_scalar('td_error', td_error, log_step)
-            self._writer.add_scalar('q', qhat, log_step)
-            self._writer.add_scalar('q_next', next_qhat, log_step)
-            self._writer.add_scalar('alpha', alpha, log_step)
+            root_name = f'on_policy/semi_gradient/sarsa/'
+
+            self._writer.add_scalar(root_name + 'target', tgt, log_step)
+            self._writer.add_scalar(root_name + 'td_error', td_error, log_step)
+            self._writer.add_scalar(root_name +'q', qhat, log_step)
+            self._writer.add_scalar(root_name + 'q_next', next_qhat, log_step)
+            self._writer.add_scalar(root_name + 'alpha', alpha, log_step)
 
             if isinstance(self.eps, NoiseSchedule):
                 e = self.eps.value
             else:
                 e = self.eps
 
-            self._writer.add_scalar('epsilon', e, log_step)
-            self.writer.add_histogram('grad_w', grad_w, log_step)
+            self._writer.add_scalar(root_name + 'epsilon', e, log_step)
+            self.writer.add_histogram(root_name + 'grad_w', grad_w, log_step)
+            self.writer.add_histogram(root_name + 'update', update, log_step)
+
 
 class SemiGradientExpectedSarsa(SemiGradientSarsa):
     """
