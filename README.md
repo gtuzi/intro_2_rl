@@ -15,11 +15,13 @@
 
 ## Introduction
 Sutton & Barto's introductory book to RL is a fundamental reference for anyone starting off in RL or any RL practictioner. 
-In this project I implement several (a selection) of the "boxed algorithms" - the algorithms shown in the grey boxes in the book.
-The environments used are not necessarily that used in the book. I try to 
-leverage existing environments (e.g. [Gymnasium]), and wrap the algorithms into
+In this project I implement several (a selection) of the "boxed algorithms" - 
+the algorithms shown in the grey boxes in the book, and additional algos whether they come 
+from the exercises, or just natural extensions (e.g. Sarsa & Expected Sarsa).
+The environments used for the simulations are not necessarily those used in the book. 
+I try to leverage existing environments (e.g. [Gymnasium]), and wrap the algorithms into
 agents which adhere to its interface. The idea here is these agents should work 
-accross environments providing they provide Gymnasium-like front end.
+across environments.
 
 ## Features
 * Algorithms are implemented in Python/Numpy. 
