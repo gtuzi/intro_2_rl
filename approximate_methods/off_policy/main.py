@@ -446,10 +446,10 @@ def run_env_episodic(
                         t=t
                     )
 
-                    behavioral_agent.step(e, log_step=t)
+                    behavioral_agent.step(e, log_step=t + episode * T)
 
                     if target_agent is not None:
-                        target_agent.step(e, log_step=t)
+                        target_agent.step(e, log_step=t + episode * T)
 
                     if done:
                         break
@@ -615,6 +615,8 @@ def nstep_semigradient_sarsa_experiments(
         update_coefficient_behavior = update_coefficient
         update_coefficient_target = update_coefficient
 
+    gamma = 0.99
+
     for eps in epses:
 
         behavior_agent = SemiGradientSarsa(
@@ -622,7 +624,7 @@ def nstep_semigradient_sarsa_experiments(
             action_space_dims=int(env.action_space.n),
             update_coefficient=update_coefficient_behavior,
             feature_fn=feature_fn,
-            discount=0.99,
+            discount=gamma,
             eps=eps  # Always exploratory
         )
 
@@ -632,7 +634,7 @@ def nstep_semigradient_sarsa_experiments(
             nstep_sarsa=nstep_sarsa,
             update_coefficient=update_coefficient_target,
             feature_fn=feature_fn,
-            discount=0.2,
+            discount=gamma,
             eps= eps_builder(eps)  # Becomes greedy-deterministic
         )
 
@@ -701,8 +703,8 @@ def nstep_semigradient_sarsa_experiments(
 
 if __name__ == '__main__':
 
-    do_log = True
-    n_sarsa_steps = 1
+    do_log = False
+    n_sarsa_steps = 4
 
     epses = (0.1, ) # (0.01, 0.05, 0.1, 0.3, 0.5)
     seeds = tuple(range(0, 3)) # tuple(range(0, 10))
@@ -713,8 +715,8 @@ if __name__ == '__main__':
 
     if ENV_NAME == 'MountainCar':
         if episodic:
-            num_episodes = 20
-            T = 400
+            num_episodes = 100
+            T = 500
             MAX_EPISODE_STEPS = T
         else:
             num_episodes = None

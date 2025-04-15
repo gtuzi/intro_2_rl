@@ -1,7 +1,6 @@
 [Sutton & Barto RL Book]: http://incompleteideas.net/book/RLbook2020.pdf
 
-
-# Off-policy Methods with Approximation
+# *Ongoing*: Off-policy Methods with Approximation
 
 ## Introduction
 The extension to function approximation is significantly different and 
@@ -141,15 +140,20 @@ Note that $\rho_k = 1$ for $k \ge T$ and $G_{t:t+n} = G_t$ for $t+n \ge T$
 
 ### Off-Policy Divergence
 One issue with off-policy with function approximation is the update 
-distribution divergence. For example, in the following images I am comparing
-the update distributions between the on-policy Sarsa vs off-policy 1-step Sarsa
-where the 1-step Sarsa uses the on-policy Sarsa as its behavioral policy.
+distribution divergence. An example of such divergence is Baird's example. 
+In this example, the _dashed_ line (actions) take the system to one of the upper 
+states which land into any of the with equal probability. The _solid_ line
+(the other action) takes the system to the seventh state. In this example
+the behavioral policy $b$ takes _dashed_ action with $\frac{6}{7}$ probability
+and _solid_ action with $\frac{1}{7}$ so that the next state distribution
+under $b$ is uniform, i.e. $b(\cdot|S_{t+1}) \sim U$. 
 
-| On - Policy Sarsa: Update Distribution                                             | Off-Policy Sarsa: Update Distribution                                               |
-|------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
-| <img src="images/on_policy_sarsa_update_distribution.png" alt="Grid" width="400"/> | <img src="images/off_policy_sarsa_update_distribution.png" alt="Grid" width="400"/> |
+The target $\pi$ policy takes only the _solid_ line action with probability 1. 
+The reward is 0 on all transitions.
 
-The divergence, of the update for the target policy becomes pronounced with 
-increasing learning rates $\alpha$.
+<img src="images/Bairds_example.png" alt="Grid" width="400"/>
 
-### TBD
+Using the semi-gradient update for TD(0) (update rule as above) and even DP for 
+offline learning:
+
+$\mathbf{w}_{k + 1} = \mathbf{w}_{k} + \frac{\alpha}{|\mathcal{S}|}\sum_{s}(\mathbb{E}_{\pi}[R_{t} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_k)] - \hat{v}(S_t, \mathbf{w}_k))\nabla_{\mathbf{w}}\hat{v}(S_t, \mathbf{w}_k)$

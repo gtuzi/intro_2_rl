@@ -91,10 +91,10 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
         if 'log_step' in kwargs:
             log_step = kwargs['log_step']
 
-        next_qhat = self.state_action_value(sp, ap) * (1 - done)
+        qhat_next = self.state_action_value(sp, ap) * (1 - done)
         qhat = self.state_action_value(s, a)
 
-        tgt = r + self.discount * next_qhat
+        tgt = r + self.discount * qhat_next
         td_error = tgt - qhat
 
         # Grad_wi(sum(xi * wi)) = xi
@@ -117,11 +117,13 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
         if (self._writer is not None) and (log_step is not None):
             root_name = f'on_policy/semi_gradient/sarsa/'
 
+            self._writer.add_scalar(root_name + 'weights_norm', np.linalg.norm(self.w), log_step)
             self._writer.add_scalar(root_name + 'target', tgt, log_step)
             self._writer.add_scalar(root_name + 'td_error', td_error, log_step)
-            self._writer.add_scalar(root_name +'q', qhat, log_step)
-            self._writer.add_scalar(root_name + 'q_next', next_qhat, log_step)
+            self._writer.add_scalar(root_name + 'qhat', qhat, log_step)
+            self._writer.add_scalar(root_name + 'qhat_next', qhat_next, log_step)
             self._writer.add_scalar(root_name + 'alpha', alpha, log_step)
+            self._writer.add_scalar(root_name + 'grad_w_norm', np.linalg.norm(grad_w), log_step)
 
             if isinstance(self.eps, NoiseSchedule):
                 e = self.eps.value
@@ -129,8 +131,9 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
                 e = self.eps
 
             self._writer.add_scalar(root_name + 'epsilon', e, log_step)
-            self.writer.add_histogram(root_name + 'grad_w', grad_w, log_step)
-            self.writer.add_histogram(root_name + 'update', update, log_step)
+            self._writer.add_histogram(root_name + 'grad_w', grad_w, log_step)
+            self._writer.add_histogram(root_name + 'update', update, log_step)
+            self._writer.add_histogram(root_name + 'weights', self.w, log_step)
 
 
 class SemiGradientExpectedSarsa(SemiGradientSarsa):

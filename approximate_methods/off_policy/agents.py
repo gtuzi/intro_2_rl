@@ -10,6 +10,20 @@ from shared.utils import LinearSchedule
 
 from torch.utils.tensorboard import SummaryWriter
 
+##################################################
+# ------------- Baird's Example ---------------- #
+##################################################
+
+
+class BairdsExampleAgent:
+    def __init__(self, action_probs: list):
+        self.action_probs = np.array(action_probs)
+
+        self.w = np.zeros((8, ))
+
+    def feature_fn(self, state: int):
+        pass
+
 
 #######################################
 # ----------- n-step ---------------- #
@@ -133,15 +147,18 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
         # Episodic: tau + n < T
         # G2: \gamma^{n}q(S_{t+n}, A_{t+n})
         experience_tau_end = self.trajectory[tau_end - 1]
+
+        qhat_next = None
         if not experience_tau_end.done:
             # Episode not terminated
-            target += (
+            qhat_next = (
                     (self.discount ** self.nstep_sarsa) *
                     self.state_action_value(
-                        experience_tau_end.sp,
-                        experience_tau_end.ap
+                        experience_tau_end.sp, experience_tau_end.ap
                     )
-            ) # Eq: 7.4
+            )
+
+            target += qhat_next  # Eq: 7.4
 
         rho = [
             self.get_sa_probability(e.s, e.a) / e.p
@@ -162,7 +179,8 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
 
         rho_prod = None
         if len(rho) > 0:
-            rho_prod = np.prod(rho)  # (7.10)
+            # rho_prod = np.prod(rho)  # (7.10)
+            rho_prod = 1.  # Force On-Policy updates
         else:
             assert experience_tau_end.done
             rho_prod = 1. # On-policy
@@ -196,24 +214,26 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
 
         # Logs
         if (self._writer is not None) and (log_step is not None):
-
             root_name = f'off_policy/semi_gradient/{self.nstep_sarsa}/sarsa/'
+            self._writer.add_scalar(root_name + 'weights_norm', np.linalg.norm(self.w), log_step)
+            self._writer.add_scalar(root_name + 'target', target, log_step)
+            self._writer.add_scalar(root_name + 'td_error', td_error, log_step)
+            self._writer.add_scalar(root_name + 'qhat', qhat, log_step)
+
+            if qhat_next is not None:
+                self._writer.add_scalar(root_name + 'qhat_next', qhat_next, log_step)
+            self._writer.add_scalar(root_name + 'alpha', alpha, log_step)
+            self._writer.add_scalar(root_name + 'grad_w_norm', np.linalg.norm(grad_w), log_step)
+            self._writer.add_scalar(root_name + 'rho_prod', rho_prod, log_step)
+
 
             self._writer.add_histogram(root_name + 'weights', self.w, log_step)
             self._writer.add_histogram(root_name + 'grad_w', grad_w, log_step)
             self._writer.add_histogram(root_name + 'update', update, log_step)
 
             if len(rho) > 0:
-                self._writer.add_histogram(root_name + 'rho', np.array(rho).reshape(-1), log_step)
-
-            self._writer.add_scalar(root_name + 'grad_w_norm', np.linalg.norm(grad_w), log_step)
-            self._writer.add_scalar(root_name + 'weights_norm', np.linalg.norm(self.w), log_step)
-            self._writer.add_scalar(root_name + 'td_error', td_error, log_step)
-            self._writer.add_scalar(root_name + 'qhat', qhat, log_step)
-            self._writer.add_scalar(root_name + 'target', target, log_step)
-            self._writer.add_scalar(root_name + 'rho_prod', rho_prod, log_step)
-            self._writer.add_scalar(root_name + 'alpha', alpha, log_step)
-
+                self._writer.add_histogram(
+                    root_name + 'rho', np.array(rho).reshape(-1), log_step)
 
     # def update_per_decision(self, tau: int):
     #     # starting from min(n-steps, T/done) back
