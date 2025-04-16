@@ -140,7 +140,9 @@ Note that $\rho_k = 1$ for $k \ge T$ and $G_{t:t+n} = G_t$ for $t+n \ge T$
 
 ### Off-Policy Divergence
 One issue with off-policy with function approximation is the update 
-distribution divergence. An example of such divergence is Baird's example. 
+distribution divergence. An example of such divergence is Baird's example 
+(refer to `bairds_main.py` for the implementation).
+
 In this example, the _dashed_ line (actions) take the system to one of the upper 
 states which land into any of the with equal probability. The _solid_ line
 (the other action) takes the system to the seventh state. In this example
@@ -167,17 +169,20 @@ On-Policy for the Sarsa case means that we force $\rho = 1$
 
 
 ###### DP
-$\mathbf{w}_{k + 1} = \mathbf{w}_{k} + \frac{\alpha}{|\mathcal{S}|}\sum_{s}([\mathbb{E}_{S_{t+1} \sim P(\cdot | S_t = s, a \sim \pi(\cdot|S_t = s))}[R_{t} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_k) | S_t = s] - \hat{v}(S_t = s, \mathbf{w}_k)]\nabla_{\mathbf{w}}\hat{v}(S_t = s, \mathbf{w}_k))$
+For the DP case, we have access to the environment dynamics $P$. 
+On-Policy for the DP case means that we use $\pi = b$ probabilities.
+Also note that $P(r \ne 0, \cdot | \cdot) = 0$. 
 
-_Note_ that $P(r \ne 0, \cdot | \cdot) = 0$. Went a little verbose here for clarity.
+* $\mathbf{w}_{k + 1} = \mathbf{w}_{k} + \frac{\alpha}{|\mathcal{S}|}\sum_{s}([\mathbb{E}_{S_{t+1} \sim P(\cdot | S_t = s, a \sim \pi(\cdot|S_t = s))}[R_{t} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_k) | S_t = s] - \hat{v}(S_t = s, \mathbf{w}_k)]\nabla_{\mathbf{w}}\hat{v}(S_t = s, \mathbf{w}_k))$
+
+* Went a little verbose here for clarity.
 
 | Off-Policy                                                                 | On-Policy                                                                 |
 |----------------------------------------------------------------------------|---------------------------------------------------------------------------|
 | <img src="images/results/Bairds_DP_OffPolicy.png" alt="Grid" width="400"/> | <img src="images/results/Bairds_DP_OnPolicy.png" alt="Grid" width="400"/> |
 
-On-Policy for the DP case means that we use $\pi = b$
-
-TBD
 
 ###### TD(0) - Q-Learning
 * $\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \rho_{t}(R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}_{t}) - \hat{v}(S_{t}, \mathbf{w}_{t}))\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t}) $
+
+TBD
