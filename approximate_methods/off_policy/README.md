@@ -2,6 +2,12 @@
 
 # *Ongoing*: Off-policy Methods with Approximation
 
+# --- Note ---
+Notes on this README.md are, __for the moment__, being developed. The ongoing 
+work is also copied onto [summary.ipynb](summary.ipynb) - which 
+will be their final destination. Please
+refer to this document for the complete rendering of the formulas.
+
 ## Introduction
 The extension to function approximation is significantly different and 
 harder for off-policy learning than it is for  on-policy learning. 
@@ -175,7 +181,7 @@ Also note that $P(r \ne 0, \cdot | \cdot) = 0$.
 
 * $\mathbf{w}_{k + 1} = \mathbf{w}_{k} + \frac{\alpha}{|\mathcal{S}|}\sum_{s}([\mathbb{E}_{S_{t+1} \sim P(\cdot | S_t = s, a \sim \pi(\cdot|S_t = s))}[R_{t} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_k) | S_t = s] - \hat{v}(S_t = s, \mathbf{w}_k)]\nabla_{\mathbf{w}}\hat{v}(S_t = s, \mathbf{w}_k))$
 
-* Went a little verbose here for clarity.
+Went a little verbose here for clarity.
 
 | Off-Policy                                                                 | On-Policy                                                                 |
 |----------------------------------------------------------------------------|---------------------------------------------------------------------------|
