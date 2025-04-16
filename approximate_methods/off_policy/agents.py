@@ -10,20 +10,6 @@ from shared.utils import LinearSchedule
 
 from torch.utils.tensorboard import SummaryWriter
 
-##################################################
-# ------------- Baird's Example ---------------- #
-##################################################
-
-
-class BairdsExampleAgent:
-    def __init__(self, action_probs: list):
-        self.action_probs = np.array(action_probs)
-
-        self.w = np.zeros((8, ))
-
-    def feature_fn(self, state: int):
-        pass
-
 
 #######################################
 # ----------- n-step ---------------- #

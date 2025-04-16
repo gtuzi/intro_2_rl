@@ -8,7 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from scipy.stats import randint
 import gymnasium as gym
 from gymnasium import Env
 
@@ -35,8 +34,6 @@ import time
 global ENV_NAME
 global RENDER
 global MAX_EPISODE_STEPS
-
-
 
 def plot(
         returns_over_seeds_over_agent: List,
@@ -711,7 +708,6 @@ if __name__ == '__main__':
     episodic = True
 
     RENDER = False
-    ENV_NAME = 'MountainCar'
 
     if ENV_NAME == 'MountainCar':
         if episodic:

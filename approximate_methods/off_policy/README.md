@@ -151,9 +151,33 @@ under $b$ is uniform, i.e. $b(\cdot|S_{t+1}) \sim U$.
 The target $\pi$ policy takes only the _solid_ line action with probability 1. 
 The reward is 0 on all transitions.
 
-<img src="images/Bairds_example.png" alt="Grid" width="400"/>
+<img src="images/Bairds_counterexample.png" alt="Grid" width="400"/>
 
-Using the semi-gradient update for TD(0) (update rule as above) and even DP for 
-offline learning:
+Using the semi-gradient update for offline learning as follows:
 
-$\mathbf{w}_{k + 1} = \mathbf{w}_{k} + \frac{\alpha}{|\mathcal{S}|}\sum_{s}(\mathbb{E}_{\pi}[R_{t} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_k)] - \hat{v}(S_t, \mathbf{w}_k))\nabla_{\mathbf{w}}\hat{v}(S_t, \mathbf{w}_k)$
+###### TD(0) - Sarsa
+Here I am using the behavioral policy $b$ to generate the experiences.
+On-Policy for the Sarsa case means that we force $\rho = 1$
+
+* $\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \rho_{t}(R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}_{t}) - \hat{v}(S_{t}, \mathbf{w}_{t}))\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t}) $
+
+| Off-Policy                                                                    | On-Policy                                                                    |
+|-------------------------------------------------------------------------------|------------------------------------------------------------------------------|
+| <img src="images/results/Bairds_Sarsa_OffPolicy.png" alt="Grid" width="400"/> | <img src="images/results/Bairds_Sarsa_OnPolicy.png" alt="Grid" width="400"/> |
+
+
+###### DP
+$\mathbf{w}_{k + 1} = \mathbf{w}_{k} + \frac{\alpha}{|\mathcal{S}|}\sum_{s}([\mathbb{E}_{S_{t+1} \sim P(\cdot | S_t = s, a \sim \pi(\cdot|S_t = s))}[R_{t} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_k) | S_t = s] - \hat{v}(S_t = s, \mathbf{w}_k)]\nabla_{\mathbf{w}}\hat{v}(S_t = s, \mathbf{w}_k))$
+
+_Note_ that $P(r \ne 0, \cdot | \cdot) = 0$. Went a little verbose here for clarity.
+
+| Off-Policy                                                                 | On-Policy                                                                 |
+|----------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| <img src="images/results/Bairds_DP_OffPolicy.png" alt="Grid" width="400"/> | <img src="images/results/Bairds_DP_OnPolicy.png" alt="Grid" width="400"/> |
+
+On-Policy for the DP case means that we use $\pi = b$
+
+TBD
+
+###### TD(0) - Q-Learning
+* $\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \rho_{t}(R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}_{t}) - \hat{v}(S_{t}, \mathbf{w}_{t}))\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t}) $
