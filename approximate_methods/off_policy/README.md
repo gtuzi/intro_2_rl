@@ -1,6 +1,6 @@
 [Sutton & Barto RL Book]: http://incompleteideas.net/book/RLbook2020.pdf
 
-# *Ongoing*: Off-policy Methods with Approximation
+# *WIP* Off-policy Methods with Approximation
 
 # --- Note ---
 Notes on this README.md are, __for the moment__, being developed. The ongoing 
@@ -332,10 +332,81 @@ From this example we can conclude that $\overline{TDE}$ is not a desirable objec
 ##### Bellman Error
 A better solution woule be minimizing mean square of the Bellman Error 
 $\overline{BE}$. In the A-split example above $\overline{BE} = 0$. Normally
-we wouldn't typically $\overline{BE}$ to be zero. Let's repeat the definition
-of the $\overline{BE}$ from above, then develop the gradient descend.
+we wouldn't typically expect $\overline{BE}$ to be exactly zero. 
+Let's repeat the definition  of the $\overline{BE}$ from above, 
+then develop the gradient descend.
 
 $\overline{BE} = \mathbb{E}_{\mu}[\mathbb{E}_{\pi}[\bar{\delta}_{\mathbf{w}}(s)]^2]$
 
+Let's recall:
 
+$$
+\delta_{t, \mathbf{w}} = \mathbb{E}_{\pi}[R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}) - v(S_{t}, \mathbf{w}) | S_t, A_t \sim \pi]
+$$
 
+The gradient update of the weights then becomes:
+
+$$
+\begin{align}
+\mathbf{w}_{t+1} & = \mathbf{w}_{t} - \frac{1}{2} \alpha \nabla_{\mathbf{w}} (\mathbb{E}_{\pi}[\delta_{t, \mathbf{w}}]^2) \\
+  &= \mathbf{w}_{t} - \frac{1}{2} \alpha \nabla_{\mathbf{w}} (\mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}]^2) \\
+  &= \mathbf{w}_{t} - \alpha \mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}] \nabla_{\mathbf{w}} (\mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}]) \\
+  &= \mathbf{w}_{t} - \alpha \mathbb{E}_{b}[\rho_t (R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}) - v(S_{t}, \mathbf{w}))]\mathbb{E}_{b}[\rho_t  \nabla_{\mathbf{w}}\delta_{t, \mathbf{w}}] \\
+  &= \mathbf{w}_{t} + \alpha \mathbb{E}_{b}[\rho_t (R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}_t) - v(S_{t}, \mathbf{w}_t))]\mathbb{E}_{b}[\rho_t  \nabla_{\mathbf{w}}v(S_{t}, \mathbf{w}_t) - \gamma \rho_t\nabla_{\mathbf{w}}v(S_{t+1}, \mathbf{w}_t)] \\
+\end{align}
+$$
+
+Recall the off-policy $n$-step error $-$ let's call it $\delta_{t:t+n}$ $-$ for the prediction case is: 
+$\delta_{t:t+n} = (\prod_{k=t}^{t+n-1} \rho_{k})[G_{t:t+n} - \hat{v}(S_{t}, \mathbf{w}_{t+n-1})] \nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t+n-1})$
+
+$$
+\begin{align}
+\delta_{t, \mathbf{w}} &= \mathbb{E}_{\pi}[R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}) - v(S_{t}, \mathbf{w}) | S_t, A_t \sim \pi] \\
+    &= \rho_t \mathbb{E}_{b}[R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}) - v(S_{t}, \mathbf{w}) | S_t, A_t \sim b] \\
+    &= \rho_t \mathbb{E}_{b}[R_{t+1} + \gamma v(S_{t+1}, \mathbf{w})| S_t, A_t \sim b] - \rho_t \mathbb{E}_{b}[v(S_{t}, \mathbf{w}) | S_t, A_t \sim b] \\
+\end{align}
+$$
+
+Here, $v_{\pi}(S_t)$ is treated as an expectation wrt 
+to $\pi$, so $\mathbb{E}_{b}[v_{\pi}] = v_{\pi}$ 
+
+###### Discussion
+This brings up an issue with the introductory definitions of this chapter,
+where the authors are IS-weighing the TD-error, not just the target ($R_{t+1}, S_{t+1} \sim b$).
+C.f. to footnote [1] in Ch. 11.5 under the BE development. The problem here
+is the determination of whether $S_t$ sample is generated 
+from $b$ $-$ which corresponds to the original definition, or not. 
+We can make the case similar to the control case where we don't care how we 
+got to take $A_t$ for $\hat{q}(S_t, A_t)$. The authors here  are not 
+clarifying why this different treatment here.
+
+Let's continue with the procedure as presented in the book:
+$$
+\begin{align}
+  \mathbf{w}_{t+1} &= \mathbf{w}_{t} + \alpha \mathbb{E}_{b}[\rho_t (R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}_t)) - v(S_{t}, \mathbf{w}_t)][\nabla_{\mathbf{w}}v(S_{t}, \mathbf{w}_t) - \gamma \mathbb{E}_{b}[\rho_t\nabla_{\mathbf{w}}v(S_{t+1}, \mathbf{w}_t)]]
+\end{align}
+$$
+
+This is called as _residual-gradient algorithm_. If we were to use only the 
+obtained samples, this reduces to the naive residual-gradient above (with some
+minor difference wrt the treatment of $\rho_t$). This is naive because
+the expectation wrt $S_{t+1}$ is multiplied together. Since we're using 
+the same sample $S_{t+1}$ we get a biased estimate of the expectation. To
+obtain an un-biased estimate of the expectation, we would need two independently
+sampled $S_{t+1}$'s. But we only get one sample in the interaction with the 
+environment. There are two ways to de-bias this expectation:
+
+* If the environment is deterministic (i.e. $S_{t+1, k} = S_{t+1, j})$, the
+estimate is un-biase
+* Simulated environment, where we can sample $S_{t+1}$ twice starting from $S_{t}$
+
+For these conditions, the algorithm is guaranteed to converge to a 
+minumm of $\overline{BE}$. This would work for the linear and non-linear
+approximations. In the linear approximation case, the solution is unique.
+However, this is not feasible in real environments.
+
+Authors outline 3 issues with this algorithm (for the two conditions given above):
+* Slow convergence
+* Despite strong convergence guarantees of $\overline{BE}$ the predicted values 
+found can still be incorrect.
+* $\overline{BE}$ is not learnable 
