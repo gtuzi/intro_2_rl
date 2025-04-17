@@ -2,11 +2,10 @@
 
 # *WIP* Off-policy Methods with Approximation
 
-# --- Note ---
-Notes on this README.md are, __for the moment__, being developed. The ongoing 
+_Notes on this README.md are, __for the moment__, being developed. The ongoing 
 work is also copied onto [summary.ipynb](summary.ipynb) - which 
 will be their final destination. Please
-refer to this document for the complete rendering of the formulas.
+refer to this document for the complete rendering of the formulas._
 
 ## Introduction
 The extension to function approximation is significantly different and 
@@ -224,10 +223,10 @@ Any approximation of it $\hat{v}_{\pi} = v_{\mathbf{w}, \pi}$ will yield an erro
 _Bellman Error_ (BE) at state $s$ and is defined as:
 
 $$
-\begin{align}
+\begin{align*}
 \bar{\delta}_{\mathbf{w}}(s) &\overset{\cdot}{=}(\sum_{a}\pi(a | s)\sum_{s', r}P(s', r | s, a)[r - \gamma v_{\mathbf{w}, \pi}(s')]) - v_{\mathbf{w}, \pi}(s) \\
 &= \mathbb{E}_{\pi}[R_{t+1} + \gamma v_{\mathbf{w}, \pi}(S_{t+1}) - v_{\mathbf{w}, \pi}(S_{t}) | S_{t} = s, A_t \sim \pi]
-\end{align}
+\end{align*}
 $$
 
 where we see the relationship between BE and TD error. The vector of 
@@ -243,10 +242,10 @@ which denotes the fraction of time spent on a state over an entire episode.
 Based on $(11.14)$ in the book:
 
 $$
-\begin{align}
+\begin{align*}
   \overline{BE}(\mathbf{w}) &= \sum_{s}\mu(s)[\bar{\delta}_{\mathbf{w}}(s)]^2 \\
   &= \mathbb{E}_{\mu}[\mathbb{E}_{\pi}[\bar{\delta}_{\mathbf{w}}(s)]^2]
-\end{align}
+\end{align*}
 $$
 
 
@@ -267,11 +266,11 @@ A candidate objective function could be $\overline{TDE}(\mathbf{w})$ called
 the _mean squared TD error_:
 
 $$
-  \begin{align}
+  \begin{align*}
     \overline{TDE}(\mathbf{w}) &= \sum_{s}\mu(s)\mathbb{E}[\delta_{t}^2 | S_t = s, A_t \sim \pi] \\
     &= \sum_{s}\mu(s)\mathbb{E}[\rho_t \delta_{t}^2 | S_t = s, A_t \sim b] \\
     &= \mathbb{E}_{b}[\rho_t \delta_{t}^2]
-  \end{align}
+  \end{align*}
 $$
 
 where for $A_t \sim b$, $\mu(s)$ is the on-policy state distribution under $b$ -
@@ -280,10 +279,10 @@ The last equation is of the form needed for SGD; it gives the objective as
 an expectation that can be sampled from experience
 
 $$
-\begin{align}
+\begin{align*}
 \mathbf{w}_t &= \mathbf{w}_t - \frac{1}{2}\alpha \nabla_{\mathbf{w}} (\rho_t \delta_{t}^2) \\
              &= \mathbf{w}_t + \alpha \rho_t \delta_t(\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_t) - \gamma\nabla_{\mathbf{w}}\hat{v}(S_{t+1}, \mathbf{w}_t))
-\end{align}
+\end{align*}
 $$
 
 This is a "complete" gradient and therefore a true SGD - called the _naive 
@@ -347,24 +346,24 @@ $$
 The gradient update of the weights then becomes:
 
 $$
-\begin{align}
+\begin{align*}
 \mathbf{w}_{t+1} & = \mathbf{w}_{t} - \frac{1}{2} \alpha \nabla_{\mathbf{w}} (\mathbb{E}_{\pi}[\delta_{t, \mathbf{w}}]^2) \\
   &= \mathbf{w}_{t} - \frac{1}{2} \alpha \nabla_{\mathbf{w}} (\mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}]^2) \\
   &= \mathbf{w}_{t} - \alpha \mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}] \nabla_{\mathbf{w}} (\mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}]) \\
   &= \mathbf{w}_{t} - \alpha \mathbb{E}_{b}[\rho_t (R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}) - v(S_{t}, \mathbf{w}))]\mathbb{E}_{b}[\rho_t  \nabla_{\mathbf{w}}\delta_{t, \mathbf{w}}] \\
   &= \mathbf{w}_{t} + \alpha \mathbb{E}_{b}[\rho_t (R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}_t) - v(S_{t}, \mathbf{w}_t))]\mathbb{E}_{b}[\rho_t  \nabla_{\mathbf{w}}v(S_{t}, \mathbf{w}_t) - \gamma \rho_t\nabla_{\mathbf{w}}v(S_{t+1}, \mathbf{w}_t)] \\
-\end{align}
+\end{align*}
 $$
 
 Recall the off-policy $n$-step error $-$ let's call it $\delta_{t:t+n}$ $-$ for the prediction case is: 
 $\delta_{t:t+n} = (\prod_{k=t}^{t+n-1} \rho_{k})[G_{t:t+n} - \hat{v}(S_{t}, \mathbf{w}_{t+n-1})] \nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t+n-1})$
 
 $$
-\begin{align}
+\begin{align*}
 \delta_{t, \mathbf{w}} &= \mathbb{E}_{\pi}[R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}) - v(S_{t}, \mathbf{w}) | S_t, A_t \sim \pi] \\
     &= \rho_t \mathbb{E}_{b}[R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}) - v(S_{t}, \mathbf{w}) | S_t, A_t \sim b] \\
     &= \rho_t \mathbb{E}_{b}[R_{t+1} + \gamma v(S_{t+1}, \mathbf{w})| S_t, A_t \sim b] - \rho_t \mathbb{E}_{b}[v(S_{t}, \mathbf{w}) | S_t, A_t \sim b] \\
-\end{align}
+\end{align*}
 $$
 
 Here, $v_{\pi}(S_t)$ is treated as an expectation wrt 
@@ -382,9 +381,9 @@ clarifying why this different treatment here.
 
 Let's continue with the procedure as presented in the book:
 $$
-\begin{align}
+\begin{align*}
   \mathbf{w}_{t+1} &= \mathbf{w}_{t} + \alpha \mathbb{E}_{b}[\rho_t (R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}_t)) - v(S_{t}, \mathbf{w}_t)][\nabla_{\mathbf{w}}v(S_{t}, \mathbf{w}_t) - \gamma \mathbb{E}_{b}[\rho_t\nabla_{\mathbf{w}}v(S_{t+1}, \mathbf{w}_t)]]
-\end{align}
+\end{align*}
 $$
 
 This is called as _residual-gradient algorithm_. If we were to use only the 
