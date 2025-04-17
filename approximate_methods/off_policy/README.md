@@ -163,7 +163,7 @@ The reward is 0 on all transitions.
 
 Using the semi-gradient update for offline learning as follows:
 
-###### TD(0) - Sarsa
+##### TD(0) - Sarsa
 Here I am using the behavioral policy $b$ to generate the experiences.
 On-Policy for the Sarsa case means that we force $\rho = 1$
 
@@ -174,7 +174,7 @@ On-Policy for the Sarsa case means that we force $\rho = 1$
 | <img src="images/results/Bairds_Sarsa_OffPolicy.png" alt="Grid" width="400"/> | <img src="images/results/Bairds_Sarsa_OnPolicy.png" alt="Grid" width="400"/> |
 
 
-###### DP
+##### DP
 For the DP case, we have access to the environment dynamics $P$. 
 On-Policy for the DP case means that we use $\pi = b$ probabilities.
 Also note that $P(r \ne 0, \cdot | \cdot) = 0$. 
@@ -188,7 +188,154 @@ Went a little verbose here for clarity.
 | <img src="images/results/Bairds_DP_OffPolicy.png" alt="Grid" width="400"/> | <img src="images/results/Bairds_DP_OnPolicy.png" alt="Grid" width="400"/> |
 
 
-###### TD(0) - Q-Learning
-* $\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \rho_{t}(R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}_{t}) - \hat{v}(S_{t}, \mathbf{w}_{t}))\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t}) $
+As we can see above, for the off policy cases, weights diverge, whereas 
+the on-policy there is a solution found.
 
-TBD
+##### TD(0) - Q-Learning
+For Q-Learning I'm keeping a separate set of weight vectors for each actions
+as $\mathbf w^{T}_{a}$. The (explicit) update rule is then as follows:
+
+* $\mathbf{w}_{A_t, t+1} = \mathbf{w}_{A_t, t} + \alpha (R_{t+1} + \gamma \max_a \hat{q}(S_{t+1}, a, \mathbf{w}_{a, t}) - \hat{q}(S_{t}, A_t, \mathbf{w}_{A_t, t}))\nabla_{\mathbf{w}_{A_t}}\hat{q}(S_{t}, A_t, \mathbf{w}_{A_t, t}) $
+
+We also note here that the weights diverge, for both actions
+
+
+| <img src="images/results/Bairds_QLearning_SolidAction_Weight.png" alt="Grid" width="400"/> | <img src="images/results/Bairds_QLearning_DashAction_Weight.png" alt="Grid" width="400"/> |
+|--------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
+
+
+### The Deadly Triad
+Likelihood of divergence rises under these three conditions
+
+* Function approximation: generalizing from a state space
+* Bootstrapping: updates based on estimates, as opposed to fully relying on samples (eg MC)
+* Off-Policy Training: Training on a distribution of transitions other than that produced
+by the target policy.Sweeping through the state space and updating all states
+uniformly, as in dynamic programming, does not respect the target policy and is
+an example of on-policy training.
+
+
+### Bellman Error
+The Bellman Equation value function is defined as follows 
+$v_{\pi}(s) = \sum_{a}\pi(a | s)\sum_{s', r}P(s', r | s, a)[r - \gamma v_{\pi}(s')]$, for all $s \in \mathcal{S}$.
+
+The only solution to the Bellman Equation is the true value function $v_{\pi}$.
+Any approximation of it $\hat{v}_{\pi} = v_{\mathbf{w}, \pi}$ will yield an error, which is called
+_Bellman Error_ (BE) at state $s$ and is defined as:
+
+$$
+\begin{align}
+\bar{\delta}_{\mathbf{w}}(s) &\overset{\cdot}{=}(\sum_{a}\pi(a | s)\sum_{s', r}P(s', r | s, a)[r - \gamma v_{\mathbf{w}, \pi}(s')]) - v_{\mathbf{w}, \pi}(s) \\
+&= \mathbb{E}_{\pi}[R_{t+1} + \gamma v_{\mathbf{w}, \pi}(S_{t+1}) - v_{\mathbf{w}, \pi}(S_{t}) | S_{t} = s, A_t \sim \pi]
+\end{align}
+$$
+
+where we see the relationship between BE and TD error. The vector of 
+BE's at _all states_ is the vector: $\bar{\delta}_{\mathbf{w}} \in \mathbb{R}^{|\mathcal{S}|}$
+called the Bellman error vector. The norm of this vector, is the mean square BE
+
+$$
+  \overline{BE}(\mathbf{w}) = \lVert \bar{\delta}_{\mathbf{w}} \lVert^{2}_{\mu}
+$$
+where $\mu$ is the _stationary distribution_ of states under $\pi$ (c.f. (9.3)) - 
+which denotes the fraction of time spent on a state over an entire episode.
+
+Based on $(11.14)$ in the book:
+
+$$
+\begin{align}
+  \overline{BE}(\mathbf{w}) &= \sum_{s}\mu(s)[\bar{\delta}_{\mathbf{w}}(s)]^2 \\
+  &= \mathbb{E}_{\mu}[\mathbb{E}_{\pi}[\bar{\delta}_{\mathbf{w}}(s)]^2]
+\end{align}
+$$
+
+
+It is not possible to reduce $\overline{BE}(\mathbf{w}) = 0$ where $v_{\pi} = v_{\mathbf{w}}$
+but for linear approximation there is a $\mathbf{w}$ for which $\overline{BE}$
+is minimized.
+
+### Gradient Descend on Bellman Error
+SGD is appealing for true gradient methods because of its robust convergence 
+guarantees. 
+
+##### TD Error
+Temporal difference learning uses TD error
+
+$\delta_t = R_{t+1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_{t}, \mathbf{w}_t)$
+
+A candidate objective function could be $\overline{TDE}(\mathbf{w})$ called
+the _mean squared TD error_:
+
+$$
+  \begin{align}
+    \overline{TDE}(\mathbf{w}) &= \sum_{s}\mu(s)\mathbb{E}[\delta_{t}^2 | S_t = s, A_t \sim \pi] \\
+    &= \sum_{s}\mu(s)\mathbb{E}[\rho_t \delta_{t}^2 | S_t = s, A_t \sim b] \\
+    &= \mathbb{E}_{b}[\rho_t \delta_{t}^2]
+  \end{align}
+$$
+
+where for $A_t \sim b$, $\mu(s)$ is the on-policy state distribution under $b$ -
+which is often defined to be the fraction of time spent on $s$. 
+The last equation is of the form needed for SGD; it gives the objective as 
+an expectation that can be sampled from experience
+
+$$
+\begin{align}
+\mathbf{w}_t &= \mathbf{w}_t - \frac{1}{2}\alpha \nabla_{\mathbf{w}} (\rho_t \delta_{t}^2) \\
+             &= \mathbf{w}_t + \alpha \rho_t \delta_t(\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_t) - \gamma\nabla_{\mathbf{w}}\hat{v}(S_{t+1}, \mathbf{w}_t))
+\end{align}
+$$
+
+This is a "complete" gradient and therefore a true SGD - called the _naive 
+residual-gradient_. The residual-gradient converges, but it doesn't converge
+to a desirable place.
+
+##### A-Split Example
+Considering the 3-state episodic Markov Reward Process shown in the image.
+
+<img src="images/A_Split_MRP.png" alt="Grid" width="150"/>
+
+
+Considering $\gamma = 1$, and on-policy ($\rho=1$) the true state 
+values of this MRP should be:
+* $v(A) = \frac{1}{2}$
+* $v(B) = 1$
+* $v(C) = 0$
+
+Using the naive residual-gradient approach the system learns 
+* $\hat{v}(A) = \frac{1}{2}$ which is correct
+* $\hat{v}(B) = \frac{3}{4}$
+* $\hat{v}(C) = \frac{1}{4}$
+
+Let's list the errors at each transition to understand the results.
+Each entry in the table is a TD-error ($\delta_t$)
+
+| $\hat{v}(A) \rightarrow \hat{v}(B)$             | $\hat{v}(A) \rightarrow \hat{v}(C)$              | $\hat{v}(B) \rightarrow Term$         | $\hat{v}(C) \rightarrow Term$    |
+|-------------------------------------------------|--------------------------------------------------|---------------------------------------|----------------------------------|
+| $(0 + \frac{3}{4}) - \frac{1}{2} = \frac{1}{4}$ | $(0 + \frac{1}{4}) - \frac{1}{2} = -\frac{1}{4}$ | $(1 + 0) - \frac{3}{4} = \frac{1}{4}$ | $0 - \frac{1}{4} = -\frac{1}{4}$ |
+
+The average (i.e. sample expectation) TD-error $\overline{TDE} = \frac{1}{16}$. 
+
+Let's compare $\overline{TDE}$ wrt the real values
+
+| $v(A) \rightarrow v(B)$               | $v(A) \rightarrow v(C)$                   | $v(B) \rightarrow Term$ | $v(C) \rightarrow Term$ |
+|---------------------------------------|-------------------------------------------|-------------------------|-------------------------|
+| $(0 + 1) - \frac{1}{2} = \frac{1}{2}$ | $( 0 + 0) - \frac{1}{2} = -\frac{1}{2}$   | $1 - 1 = 0$             | $0 - 0 = 0$             |
+
+The average TD-error $\overline{TDE} = \frac{1}{8}$. 
+
+So the values found with the residual-gradients has a lower $\overline{TDE}$ than
+the true values. Therefore, the true solution has higher expected error.
+
+From this example we can conclude that $\overline{TDE}$ is not a desirable objective.
+
+##### Bellman Error
+A better solution woule be minimizing mean square of the Bellman Error 
+$\overline{BE}$. In the A-split example above $\overline{BE} = 0$. Normally
+we wouldn't typically $\overline{BE}$ to be zero. Let's repeat the definition
+of the $\overline{BE}$ from above, then develop the gradient descend.
+
+$\overline{BE} = \mathbb{E}_{\mu}[\mathbb{E}_{\pi}[\bar{\delta}_{\mathbf{w}}(s)]^2]$
+
+
+

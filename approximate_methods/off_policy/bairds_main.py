@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 
 
-class BairdsExample:
+class BairdsCounterExampleEnvironment:
     def __init__(self, max_steps=None):
         self.num_states = 7
         self.num_actions = 2
@@ -138,6 +138,42 @@ class Pi_Sarsa:
         td_err = tgt - v
         grad_w = feature_extractor(s)
         self.w += self.alpha * rho * td_err * grad_w
+
+
+class Pi_QLearning:
+    def __init__(
+            self,
+            gamma: float = 0.99,
+            alpha: float = 0.01,
+    ):
+        self.reset_weights()
+        self.gamma = gamma
+        self.alpha = alpha
+
+    def reset_weights(self):
+        w1 = np.array([1, 1, 1, 1, 1, 1, 10, 1], dtype=np.float32)
+        w2 = np.array([1, 1, 1, 1, 1, 1, 10, 1], dtype=np.float32)
+        self.w = np.array([w1, w2])
+
+    def reset(self):
+        self.reset_weights()
+
+    def act(self, s):
+        # pi(solid_line|*) = 1
+        return 0
+
+    def q_fn(self, s, a):
+        x = feature_extractor(s)
+        return np.dot(x, self.w[a, ...].squeeze())
+
+    def step(self, s, a, r, sp, ap):
+        q = self.q_fn(s, a)
+        qp = max([self.q_fn(sp, a) for a in [0, 1]])
+        tgt = r + self.gamma * qp
+        td_err = tgt - q
+        grad_w = feature_extractor(s)
+
+        self.w[a, ...] += self.alpha * td_err * grad_w
 
 
 class Pi_DP:
@@ -425,6 +461,57 @@ def off_policy_sarsa(env, alpha = 0.01, gamma = 0.99, num_episodes = 100, force_
     # plot_hist(states_over_time,  root='States Visited')
 
 
+def off_policy_qlearning(env, alpha = 0.01, gamma = 0.99, num_episodes = 100):
+
+    pi = Pi_QLearning(gamma, alpha)
+
+    b = BehavioralPolicy(gamma, alpha)
+
+    weights0_over_time = [deepcopy(pi.w[0])]
+    weights1_over_time = [deepcopy(pi.w[1])]
+    actions_over_time = []
+    states_over_time = []
+    v_over_time = []
+
+    for e in range(num_episodes):
+
+        s = env.reset()
+        a = b.act(s)
+
+        for t in range(env.max_steps):
+
+            states_over_time.append(s)
+            sp, r, done = env.step(a)
+            ap = b.act(sp)
+
+            pi.step(s, a, r, sp, ap)
+            b.step(s, a, r, sp, ap)
+
+            # Collect
+            v_over_time.append(pi.q_fn(s, a))
+            weights0_over_time.append(deepcopy(pi.w[0]))
+            weights1_over_time.append(deepcopy(pi.w[1]))
+            actions_over_time.append(a)
+
+            if done:
+                break
+            else:
+                s = sp
+                a = ap
+
+    plot_vectors_with_grouped_labels(
+        weights0_over_time,
+        labels=[f'w{w + 1}' for w in range(8)],
+        root=f'Weights (Solid Action)'
+    )
+
+    plot_vectors_with_grouped_labels(
+        weights1_over_time,
+        labels=[f'w{w + 1}' for w in range(8)],
+        root=f'Weights (Dashed Action)'
+    )
+
+
 def off_policy_dp(env, alpha = 0.01, gamma = 0.99, num_sweeps = 100, force_on_policy = False):
 
     pi = Pi_DP(env=env, gamma=gamma, alpha=alpha, assume_on_policy=force_on_policy)
@@ -476,12 +563,12 @@ if __name__ == "__main__":
     gamma = 0.99
     alpha = 0.01
 
-    env = BairdsExample(T)
+    env = BairdsCounterExampleEnvironment(T)
 
+    off_policy_qlearning(env, alpha=alpha, gamma=gamma, num_episodes=num_episodes)
 
-    # off_policy_sarsa(env, alpha=alpha, gamma=gamma, num_episodes=num_episodes, force_on_policy=True)
+    off_policy_sarsa(env, alpha=alpha, gamma=gamma, num_episodes=num_episodes, force_on_policy=True)
 
     off_policy_dp(env, num_sweeps=num_episodes, gamma=gamma, alpha=alpha, force_on_policy=True)
-
 
     exit(0)
