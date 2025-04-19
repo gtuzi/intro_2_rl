@@ -215,21 +215,29 @@ an example of on-policy training.
 
 
 ### Bellman Error
+In addressing the stability of off-policy learning, we may want to pursue the 
+robust guarantees of SGD. And to achieve this we may want to re-formulate
+the objective function in such a way that instead of using the diverging 
+semi-gradient approach above, we use an objective function which generates a 
+full gradient. For this, one of the sought after approaches considered is 
+the _Bellman error_.
+
 The Bellman Equation value function is defined as follows 
 $v_{\pi}(s) = \sum_{a}\pi(a | s)\sum_{s', r}P(s', r | s, a)[r - \gamma v_{\pi}(s')]$, for all $s \in \mathcal{S}$.
 
 The only solution to the Bellman Equation is the true value function $v_{\pi}$.
 Any approximation of it $\hat{v}_{\pi} = v_{\mathbf{w}, \pi}$ will yield an error, which is called
-_Bellman Error_ (BE) at state $s$ and is defined as:
+_Bellman Error_ (BE) $\bar{\delta}$ at state $s$ and is defined as:
 
 $$
 \begin{align*}
 \bar{\delta}_{\mathbf{w}}(s) &\overset{\cdot}{=}(\sum_{a}\pi(a | s)\sum_{s', r}P(s', r | s, a)[r - \gamma v_{\mathbf{w}, \pi}(s')]) - v_{\mathbf{w}, \pi}(s) \\
-&= \mathbb{E}_{\pi}[R_{t+1} + \gamma v_{\mathbf{w}, \pi}(S_{t+1}) - v_{\mathbf{w}, \pi}(S_{t}) | S_{t} = s, A_t \sim \pi]
+&= \mathbb{E}_{\pi}[R_{t+1} + \gamma v_{\mathbf{w}, \pi}(S_{t+1}) - v_{\mathbf{w}, \pi}(S_{t}) | S_{t} = s, A_t \sim \pi] \\
+&= \mathbb{E}_{\pi}[\delta_{t,  \mathbf{w}} | S_{t} = s, A_t \sim \pi]
 \end{align*}
 $$
 
-where we see the relationship between BE and TD error. The vector of 
+where we see that __BE is the expected TD error under $\pi$__. The vector of 
 BE's at _all states_ is the vector: $\bar{\delta}_{\mathbf{w}} \in \mathbb{R}^{|\mathcal{S}|}$
 called the Bellman error vector. The norm of this vector, is the mean square BE
 
@@ -244,7 +252,7 @@ Based on $(11.14)$ in the book:
 $$
 \begin{align*}
   \overline{BE}(\mathbf{w}) &= \sum_{s}\mu(s)[\bar{\delta}_{\mathbf{w}}(s)]^2 \\
-  &= \mathbb{E}_{\mu}[\mathbb{E}_{\pi}[\bar{\delta}_{\mathbf{w}}(s)]^2]
+  &= \mathbb{E}_{\mu}[[\bar{\delta}_{\mathbf{w}}(s)]^2]
 \end{align*}
 $$
 
@@ -257,7 +265,7 @@ is minimized.
 SGD is appealing for true gradient methods because of its robust convergence 
 guarantees. 
 
-##### TD Error
+##### TD Error as Objective
 Temporal difference learning uses TD error
 
 $\delta_t = R_{t+1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_{t}, \mathbf{w}_t)$
@@ -328,19 +336,17 @@ the true values. Therefore, the true solution has higher expected error.
 
 From this example we can conclude that $\overline{TDE}$ is not a desirable objective.
 
-##### Bellman Error
-A better solution woule be minimizing mean square of the Bellman Error 
+##### Bellman Error as Objective
+A better objective woule be minimizing mean square of the Bellman Error 
 $\overline{BE}$. In the A-split example above $\overline{BE} = 0$. Normally
 we wouldn't typically expect $\overline{BE}$ to be exactly zero. 
-Let's repeat the definition  of the $\overline{BE}$ from above, 
-then develop the gradient descend.
 
-$\overline{BE} = \mathbb{E}_{\mu}[\mathbb{E}_{\pi}[\bar{\delta}_{\mathbf{w}}(s)]^2]$
-
-Let's recall:
-
+Let's repeat the definition of the $\overline{BE}$ from above:
 $$
-\delta_{t, \mathbf{w}} = \mathbb{E}_{\pi}[R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}) - v(S_{t}, \mathbf{w}) | S_t, A_t \sim \pi]
+\begin{align*}
+\overline{BE} &= \mathbb{E}_{\mu}[[\bar{\delta}_{\mathbf{w}}(s)]^2] \\
+              &= \mathbb{E}_{\mu}[\mathbb{E}_{\pi}[\delta_{t, \mathbf{w}}]^2]
+\end{align*}
 $$
 
 The gradient update of the weights then becomes:
@@ -355,9 +361,16 @@ $$
 \end{align*}
 $$
 
-Recall the off-policy $n$-step error $-$ let's call it $\delta_{t:t+n}$ $-$ for the prediction case is: 
+here, $v_{\pi}(S_t)$ is treated as an expectation wrt to $\pi$, 
+so $\mathbb{E}_{b}[v_{\pi}] = v_{\pi}$
+
+###### Discussion
+
+Recall the off-policy $n$-step error $-$ let's call it $\delta_{t:t+n}$ $-$ for the prediction case is:
+
 $\delta_{t:t+n} = (\prod_{k=t}^{t+n-1} \rho_{k})[G_{t:t+n} - \hat{v}(S_{t}, \mathbf{w}_{t+n-1})] \nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t+n-1})$
 
+so for the one-step TD error is expanded as follows:
 $$
 \begin{align*}
 \delta_{t, \mathbf{w}} &= \mathbb{E}_{\pi}[R_{t+1} + \gamma v(S_{t+1}, \mathbf{w}) - v(S_{t}, \mathbf{w}) | S_t, A_t \sim \pi] \\
@@ -366,18 +379,17 @@ $$
 \end{align*}
 $$
 
-Here, $v_{\pi}(S_t)$ is treated as an expectation wrt 
-to $\pi$, so $\mathbb{E}_{b}[v_{\pi}] = v_{\pi}$ 
+So for the off-policy TD error, the importance sampling weights are used
+for both the target and the estimation. But this does not _exactly_ 
+follow the $\overline{BE}$ udpate above, where it is assumed that 
+$\mathbb{E}_{b}[v_{\pi}] = v_{\pi}$. Note the footnote [1] in Ch. 11.5 under 
+the BE development, the authors briefly mention the discrepancy. 
 
-###### Discussion
-This brings up an issue with the introductory definitions of this chapter,
-where the authors are IS-weighing the TD-error, not just the target ($R_{t+1}, S_{t+1} \sim b$).
-C.f. to footnote [1] in Ch. 11.5 under the BE development. The problem here
-is the determination of whether $S_t$ sample is generated 
-from $b$ $-$ which corresponds to the original definition, or not. 
+The problem here is the determination of whether $S_t$ sample is generated 
+from $b$ $-$ which corresponds to the original definition or not. 
 We can make the case similar to the control case where we don't care how we 
 got to take $A_t$ for $\hat{q}(S_t, A_t)$. The authors here  are not 
-clarifying why this different treatment here.
+clarifying why this different treatment when developing $\overline{BE}$ above.
 
 Let's continue with the procedure as presented in the book:
 $$
@@ -390,7 +402,7 @@ This is called as _residual-gradient algorithm_. If we were to use only the
 obtained samples, this reduces to the naive residual-gradient above (with some
 minor difference wrt the treatment of $\rho_t$). This is naive because
 the expectation wrt $S_{t+1}$ is multiplied together. Since we're using 
-the same sample $S_{t+1}$ we get a biased estimate of the expectation. To
+the same sample $S_{t+1}$ we get a _biased estimate_ of the expectation. To
 obtain an un-biased estimate of the expectation, we would need two independently
 sampled $S_{t+1}$'s. But we only get one sample in the interaction with the 
 environment. There are two ways to de-bias this expectation:
@@ -404,8 +416,40 @@ minumm of $\overline{BE}$. This would work for the linear and non-linear
 approximations. In the linear approximation case, the solution is unique.
 However, this is not feasible in real environments.
 
-Authors outline 3 issues with this algorithm (for the two conditions given above):
+So in this section we showed that BE can be used to formulate an objective
+function which can be used to generate full gradients. 
+However, the algorithm converges to a minimum under the conditions listed above. 
+Moreover, the authors outline 3 additional issues with this algorithm 
+(for the two conditions given above):
 * Slow convergence
 * Despite strong convergence guarantees of $\overline{BE}$ the predicted values 
 found can still be incorrect.
-* $\overline{BE}$ is not learnable 
+* $\overline{BE}$ objctive is actually not learnable - where the authors show 
+that same data distributions can generate two different objective functions.
+This means that the objective function cannot be learned.
+
+
+### Gradient-TD Methods
+In pursuing the off-line stability, "true" SGD methods for minimizing 
+mean squared Projected Bellman Error (PBE), namely $\overline{PBE}$ 
+are considered. Let's start with a few definitions.
+
+##### Projected Bellman Error
+As we showed above, Bellman Error (BE) vector is defined as:
+
+$\bar{\delta}_{\mathbf{w}}(s) \overset{\cdot}{=}(\sum_{a}\pi(a | s)\sum_{s', r}P(s', r | s, a)[r - \gamma v_{\mathbf{w}, \pi}(s')]) - v_{\mathbf{w}, \pi}(s)$
+
+Moreover, the _Bellman operator_ $B_{\pi}: \mathbb{R}^{|\mathcal{S}|} \rightarrow \mathbb{R}^{|\mathcal{S}|}$
+is defined as follows:
+
+$B_{\pi}v(s) \overset{\cdot}{=} \sum_{a}\pi(a | s)\sum_{s', r}P(s', r | s, a)[r - \gamma v(s')]$
+
+So we can also view the error vector in terms of $B_{\pi}$ as: 
+$\bar{\delta}_{\mathbf{w}} = B_{\pi}v_\mathbf{w} - v_\mathbf{w}$
+
+Repeated application of $B_{\pi}$ on $v_{\pi}$ converges to the true value $v_{\pi}$,
+the fixed point of the operator, i.e.: $v_{\pi} = B_{\pi}v_{\pi}$. Note that
+$v_{pi}$ is not an estimate of the value function (DP setting).
+
+
+
