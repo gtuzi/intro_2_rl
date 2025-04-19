@@ -451,5 +451,72 @@ Repeated application of $B_{\pi}$ on $v_{\pi}$ converges to the true value $v_{\
 the fixed point of the operator, i.e.: $v_{\pi} = B_{\pi}v_{\pi}$. Note that
 $v_{pi}$ is not an estimate of the value function (DP setting).
 
+Now, as the operator is applied to $v_{\pi}$, there are intermediate values of 
+$v_{\pi}$ which approach the final value, i.e. the fixed point of $B$. 
+When we use the approximation for the value function 
+$\hat{v}_{\pi}(\cdot, \mathbf{w})$, the application of the operator generates
+$\mathbf{w}$ representable intermediate values of the aproximate value function.
 
+These intermediate values is the projected Bellman error vector $\Pi\bar{\delta}_{\mathbf{w}}$.
+The ($\mu$ weighted) vector norm of this error is another measure of the error
+in the approximation space which is called the mean square BE - $\overline{PBE}$
+defined as:
 
+$$
+   \overline{PBE}(\mathbf{w}) = \lVert \Pi \bar{\delta}_\mathbf{w} \lVert^{2}_{\mu}
+$$
+
+For a linear function approximator, the projection operation is linear, which implies
+that it can be represented as an $\lvert \mathcal{S} \rvert \times \lvert \mathcal{S} \rvert$ matrix
+$$
+\begin{align*}
+\Pi \overset{\cdot}{=} \mathbf{X}(\mathbf{X}^{T}\mathbf{D}\mathbf{X})^{-1}\mathbf{X}^{T}\mathbf{D}
+\end{align*}
+$$
+
+* $\mathbf{D}$ is the $\lvert \mathcal{S} \rvert \times \lvert \mathcal{S} \rvert$ diagonal matrix with
+entries $\mu(s)$ along the diagonal
+* $\mathbf{X}$ is the  $\lvert \mathcal{S} \rvert \times d$ whose rows are the feature 
+vectors $\mathbf{x}(s)^{T}$ of size $d$, one for each state $s$.
+* If the inverse does not exist, the pseudo inverse is used.
+
+With linear function approximation there always exists an approximate value function
+within the $\mathbf{w}$ space where $\overline{PBE}(\mathbf{w}) = 0$. This is 
+the TD fixed point, $\mathbf{w}_{TD}$. As we have shown so far, this point is 
+not always stable under the semi-gradient off-policy approach.
+
+##### Gradient Descend in the Bellman Error
+Now we turn our attention to the stability of off-policy 
+training where we minimize the $\overline{PBE}$ - i.e. use it as the 
+objective function. The gradient of $\overline(PBE)$ (refer to the book
+for the complete derivation):
+
+$$
+\begin{align*}
+\nabla\overline{PBE}(\mathbf{w}) &= 2 (\nabla_{\mathbf{w}} [\mathbf{X}^{T}\mathbf{D}\bar{\delta}_\mathbf{w}]^{T})[\mathbf{X}^{T}\mathbf{D}\mathbf{X}]^{-1}[\mathbf{X}^{T}\mathbf{D}\bar{\delta}_\mathbf{w}]
+\end{align*}
+$$
+
+To turn this into an SGD method, we have to sample something on every 
+time step that has this quantity as its expected value. We have $\mu$ as 
+the stationary distribution of states under the behavior policy. The terms 
+above can then be written as expectations under $\mu$.
+
+* $\mathbf{X}^{T}\mathbf{D}\bar{\delta}_\mathbf{w} = \sum_{s}\mu(s)\mathbf{x}(s)\bar{\delta}_{\mathbf{w}}(s) = \mathbb{E}[\rho_t \delta_t \mathbf{x}_t]$
+* $\mathbf{X}^{T}\mathbf{D}\mathbf{X} = \sum_s \mu(s)\mathbf{x}(s) \mathbf{x}(s)^{T} = \mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]$, 
+note that here the state samples present themselves as following the behavior policy
+
+The gradient of the transpose of the last term:
+
+$$
+\begin{align*}
+\nabla_{\mathbf{w}} \mathbb{E}[\rho_t \delta_t \mathbf{x}_t]^{T} &= \mathbb{E}[\rho_t \nabla_{\mathbf{w}}\delta^{T}_t \mathbf{x}^{T}_t] \\
+&= \mathbb{E}[\rho_t \nabla_{\mathbf{w}}(R_{t+1} + \gamma \mathbf{w}^{T} \mathbf{x}_{t+1} - \mathbf{w}^{T} \mathbf{x}_{t}) \mathbf{x}^{T}_t] 
+\quad\text{(using episodic  $\delta_t$)} \\
+&= \mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t]
+\end{align*}
+$$
+
+After final substitution we get:
+
+__TBD__
