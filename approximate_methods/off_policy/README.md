@@ -546,6 +546,7 @@ Re-writing the gradient, we get
 $\nabla_{\mathbf{w}}\overline{PBE}(\mathbf{w}) = 2\mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t]\mathbf{v} $
 
 
+## ----- NEEDS REVISION !!! ------
 ##### Small diversion - Linear Least Squares Problem
 For a problem of the form: $\mathbf{y} = X \mathbf{w}$, where 
 $\mathbf{y} \in \mathbb{R}^{m}, X \in \mathbb{R}^{m \times n}$ we want 
@@ -571,8 +572,7 @@ $$
 \begin{align*}
 & \mathbf{v} \approx [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t] \Rightarrow\\
 & \mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]\mathbf{v} = \mathbb{E}[\rho_t \delta_t \mathbf{x}_t] \Rightarrow \\
-& \mathbb{E}[\mathbf{x}^{T}_{t}]\mathbf{v} = \mathbb{E}[\rho_t \delta_t] \Rightarrow \\
-& \mathbf{v}^{T} \mathbb{E}[\mathbf{x}_{t}] = \mathbb{E}[\rho_t \delta_t]
+& \mathbb{E}[(\rho_t \delta_t - \mathbf{v}^{T} \mathbf{x}_{t}) \mathbf{x}_t] = \mathbf{0} \Rightarrow
 \end{align*}
 $$
 
