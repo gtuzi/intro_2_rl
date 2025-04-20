@@ -499,12 +499,13 @@ $$
 
 To turn this into an SGD method, we have to sample something on every 
 time step that has this quantity as its expected value. We have $\mu$ as 
-the stationary distribution of states under the behavior policy. The terms 
-above can then be written as expectations under $\mu$.
+the stationary distribution of states under the behavior policy, 
+where $\mathbf{D}$ is the diagonal matrix whose diagonal entries are
+$\mu(s)$ induced by the behavioral policy. 
+The terms above can then be written as expectations under $\mu$.
 
-* $\mathbf{X}^{T}\mathbf{D}\bar{\delta}_\mathbf{w} = \sum_{s}\mu(s)\mathbf{x}(s)\bar{\delta}_{\mathbf{w}}(s) = \mathbb{E}[\rho_t \delta_t \mathbf{x}_t]$
-* $\mathbf{X}^{T}\mathbf{D}\mathbf{X} = \sum_s \mu(s)\mathbf{x}(s) \mathbf{x}(s)^{T} = \mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]$, 
-note that here the state samples present themselves as following the behavior policy
+* $\mathbf{X}^{T}\mathbf{D}\bar{\delta}_\mathbf{w} = \sum_{s}\mu(s)\mathbf{x}(s)\bar{\delta}_{\mathbf{w}}(s) = \mathbb{E}[\rho_t \delta_t \mathbf{x}_t]$ of shape $d$
+* $\mathbf{X}^{T}\mathbf{D}\mathbf{X} = \sum_s \mu(s)\mathbf{x}(s) \mathbf{x}(s)^{T} = \mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]$ of shape $d \times d$
 
 The gradient of the transpose of the last term:
 
@@ -513,10 +514,95 @@ $$
 \nabla_{\mathbf{w}} \mathbb{E}[\rho_t \delta_t \mathbf{x}_t]^{T} &= \mathbb{E}[\rho_t \nabla_{\mathbf{w}}\delta^{T}_t \mathbf{x}^{T}_t] \\
 &= \mathbb{E}[\rho_t \nabla_{\mathbf{w}}(R_{t+1} + \gamma \mathbf{w}^{T} \mathbf{x}_{t+1} - \mathbf{w}^{T} \mathbf{x}_{t}) \mathbf{x}^{T}_t] 
 \quad\text{(using episodic  $\delta_t$)} \\
-&= \mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t]
+&= \mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t], \quad\text{(of shape $d$)}
 \end{align*}
 $$
 
 After final substitution we get:
 
-__TBD__
+$$
+\nabla_{\mathbf{w}}\overline{PBE}(\mathbf{w}) = 2\mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t] [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t]
+$$
+
+So in this formulation the gradient depends on the expectations of next step 
+for first and last term of the gradient. So we cannot sample these expectations
+and multiply them as this would give us a biased estimate. 
+
+One approach is to sample these terms independently and then multiply them 
+together to obtain the unbiased estimate of the gradient. Naiively, this is 
+costly. One alternative is to estimate - and store - two of the terms, 
+while the third term is sampled.
+
+##### Gradient-TD
+Gradient-TD methods estimate  and store the product of the second two factors 
+of $\nabla_{\mathbf{w}}\overline{PBE}(\mathbf{w})$ of sizes $d \times d$ and 
+$d$ with the resulting $\mathbf{v}$ of size $d$, defined as:
+
+$$
+\mathbf{v} \approx [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t]
+$$
+
+Re-writing the gradient, we get 
+$\nabla_{\mathbf{w}}\overline{PBE}(\mathbf{w}) = 2\mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t]\mathbf{v} $
+
+
+##### Small diversion - Linear Least Squares Problem
+For a problem of the form: $\mathbf{y} = X \mathbf{w}$, where 
+$\mathbf{y} \in \mathbb{R}^{m}, X \in \mathbb{R}^{m \times n}$ we want 
+$\mathbf{w}^{*} \in \mathbb{R}^{n}$ s.t. $\mathbf{w}^{*} = \min_{\mathbf{w}}\lVert \mathbf{y} - X \mathbf{w}\rVert^{2}_{2}$.
+
+The solution to this equation, i.e. $\mathbf{w}^{*}$ minimizes the squared 
+error between the target and estimations. This is achieved when the gradient
+w.r.t $\mathbf{w}$ equals zero. 
+
+Instead of directly finding the gradient, we can minimize the objective 
+function $J(\mathbf{w}) = \mathbb{E}_{(y, \mathbf{x}) \sim (\mathbf{y}, X)}[\frac{1}{2}(y - \mathbf{x}^T\mathbf{w})^2]$
+iteratively via SGD, called Least Mean Squares (LMS) algorithm, where we use the 
+sampled examples online as: 
+
+$$
+\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha(y_t - \mathbf{x}^{T}_t\mathbf{w}_t)\mathbf{x}_t
+$$
+
+###### Estimating the second term online
+Let's move some terms around:
+
+$$
+\begin{align*}
+& \mathbf{v} \approx [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t] \Rightarrow\\
+& \mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]\mathbf{v} = \mathbb{E}[\rho_t \delta_t \mathbf{x}_t] \Rightarrow \\
+& \mathbb{E}[\mathbf{x}^{T}_{t}]\mathbf{v} = \mathbb{E}[\rho_t \delta_t] \Rightarrow \\
+& \mathbf{v}^{T} \mathbb{E}[\mathbf{x}_{t}] = \mathbb{E}[\rho_t \delta_t]
+\end{align*}
+$$
+
+So we here have a linear least squares problem where we would want to find 
+$\mathbf{v}$ that minimizes $\mathbf{v}^{*} = \min_{\mathbf{v}}\lVert \vec{\rho}\odot \vec{\delta}  - X \mathbf{v}\rVert^{2}_{2}$.
+
+Note that here $\vec{\rho}\odot \vec{\delta}$ is the $d$-dimensional 
+off-policy vector of TD-errors where $\odot$ is the element-wise multiplication.
+
+Using the SGD approach to find $\mathbf{v}^{*}$, we get the following update in
+terms of LMS algorithm:
+
+$$
+\begin{align*}
+\mathbf{v}_{t+1} &= \mathbf{v}_{t} + \beta(\rho_t \delta_t - \mathbf{w}^{T}_t \mathbf{x}_t)\mathbf{x}_t \\
+&= \mathbf{v}_{t} + \beta \rho_t (\delta_t - \mathbf{w}^{T}_t \mathbf{x}_t)\mathbf{x}_t \quad\text{(augmented with IS ratio)}
+\end{align*}
+$$
+
+###### GTD2
+Now that we can estimate online $\mathbf{v}$, we can turn our attention to the
+gradient of PBE
+
+$$
+\begin{align*}
+\mathbf{w}_{t+1} &= \mathbf{w}_t - \frac{1}{2} \alpha \nabla_{\mathbf{w}}\overline{PBE} \\
+&= \mathbf{w}_t - \alpha \mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t] [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t] \\
+&\approx  \mathbf{w}_t + \alpha \mathbb{E}[\rho_t (\mathbf{x}_t - \gamma \mathbf{x}_{t+1})\mathbf{x}^{T}_t] \mathbf{v}_t \\
+&= \mathbf{w}_t + \alpha \rho_t(\mathbf{x}_t - \gamma \mathbf{x}_{t+1})\mathbf{x}^{T}_t \mathbf{v}_t
+\end{align*}
+$$
+
+This algorithm is called _GTD2_
