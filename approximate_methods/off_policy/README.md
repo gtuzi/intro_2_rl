@@ -547,43 +547,102 @@ $\nabla_{\mathbf{w}}\overline{PBE}(\mathbf{w}) = 2\mathbb{E}[\rho_t (\gamma \mat
 
 
 ## ----- NEEDS REVISION !!! ------
-##### Small diversion - Linear Least Squares Problem
+##### Small but long diversion - Linear Least Squares Problem
 For a problem of the form: $\mathbf{y} = X \mathbf{w}$, where 
-$\mathbf{y} \in \mathbb{R}^{m}, X \in \mathbb{R}^{m \times n}$ we want 
-$\mathbf{w}^{*} \in \mathbb{R}^{n}$ s.t. $\mathbf{w}^{*} = \min_{\mathbf{w}}\lVert \mathbf{y} - X \mathbf{w}\rVert^{2}_{2}$.
+$\mathbf{y} \in \mathbb{R}^{m}, X \in \mathbb{R}^{m \times n}$ we want to find
+$\mathbf{w}^{*} \in \mathbb{R}^{n}$ s.t. $\mathbf{y} = X \mathbf{w}^{*}$. 
+
+But typically this is not possible because this is an over determined system 
+($m > n$, i.e. more equations / samples than unknowns). So, we look for
+$\mathbf{w}^{*}$ which yields best $\hat{\mathbf{y}}$ which approximates
+$\mathbf{y}$ in the least squares sense, i.e.
+$\mathbf{w}^{*} = \arg \min_{\mathbf{w}}\lVert \mathbf{y} - \hat{\mathbf{y}} \rVert^{2}_{2} = \arg \min_{\mathbf{w}}\lVert \mathbf{y} - X \mathbf{w}\rVert^{2}_{2}$.
 
 The solution to this equation, i.e. $\mathbf{w}^{*}$ minimizes the squared 
-error between the target and estimations. This is achieved when the gradient
-w.r.t $\mathbf{w}$ equals zero. 
+error between the target and estimations. 
 
-Instead of directly finding the gradient, we can minimize the objective 
-function $J(\mathbf{w}) = \mathbb{E}_{(y, \mathbf{x}) \sim (\mathbf{y}, X)}[\frac{1}{2}(y - \mathbf{x}^T\mathbf{w})^2]$
-iteratively via SGD, called Least Mean Squares (LMS) algorithm, where we use the 
-sampled examples online as: 
-
+To achieve this we set our objective function - the squared distance - as 
 $$
-\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha(y_t - \mathbf{x}^{T}_t\mathbf{w}_t)\mathbf{x}_t
+\begin{align*}
+J(\mathbf{w}) &= \lVert \mathbf{y} - X \mathbf{w}\rVert^{2} \\
+&= ( \mathbf{y} - X \mathbf{w})^{T}( \mathbf{y} - X \mathbf{w})
+\end{align*}
 $$
 
-###### Estimating the second term online
+The point $\mathbf{w}^{*}$ at which this distance is at a minimum is located
+where the gradient of the objective function is zero 
+(first-order optimality condition)
+
+$$
+\begin{align*}
+& \nabla_{\mathbf{w}}J(\mathbf{w}) = \mathbf{0} \Rightarrow \\
+& 2A^{T}(\mathbf{y} - A\mathbf{x}) = \mathbf{0} \Rightarrow \\
+& A^{T}\mathbf{y} = A^{T}A\mathbf{w} \Rightarrow \\
+& \mathbf{w}^{*} = (A^{T}A)^{-1}A^{T}\mathbf{y} 
+\end{align*}
+$$
+
+An alternative to directly finding  $\mathbf{w}^{*}$ from the closed form solution
+is to use (batch) gradient descend. Note that:
+
+$$
+\begin{align*}
+& J(\mathbf{w}) = \frac{1}{N}\sum^{N}_{i=1}(y_i - \mathbf{x}^{T}_i \mathbf{w})^{2} \quad\text{(normalizing the norm by number of samples)} \Rightarrow \\
+& \nabla_{\mathbf{w}}J(\mathbf{w}) = -\frac{2}{N}\sum^{N}_{i = 1} (y_i - \mathbf{x}^{T}_i \mathbf{w})\mathbf{x}_i
+\end{align*}
+$$
+
+The update takes the form:
+
+$\mathbf{w}_{k+1} = \mathbf{w}_{} - \alpha \nabla_{\mathbf{w}}J(\mathbf{w}_{k}) = \mathbf{w}_{} + \frac{2\alpha}{N}\sum^{N}_{i = 1} (y_i - \mathbf{x}^{T}_i \mathbf{w})\mathbf{x}_i$
+
+But this direct approach has several drawbacks. The dataset can be too large,
+computation of the inverses (closed-form) may not be stable or feasible, or - in our case -
+we don't have access to all the samples and would like to find $\mathbf{w}^{*}$
+in an online fashion. An iterative approach is to use SGD, where we update
+one sample at a time.
+
+Note that:
+
+$$
+\begin{align*}
+& J(\mathbf{w}) = \lim_{N \rightarrow \infty} \frac{1}{N}\sum^{N}_{i=1}(y_i - \mathbf{x}^{T}_i \mathbf{w})^{2} = \mathbb{E}_{y, \mathbf{x} \sim (\mathbf{y}, X)}[(y - \mathbf{x}^{T} \mathbf{w})^{2}] \Rightarrow \\
+& \nabla_{\mathbf{w}}J(\mathbf{w}) =  \mathbb{E}_{y, \mathbf{x} \sim (\mathbf{y}, X)}[\nabla_{\mathbf{w}}(y - \mathbf{x}^{T} \mathbf{w})^{2}] = \mathbb{E}_{y, \mathbf{x} \sim (\mathbf{y}, X)}[\nabla_{\mathbf{w}}\ell(\mathbf{w})] 
+\end{align*}
+$$
+
+If we define objective function in terms of samples - _sample loss_ - $\ell_t(\mathbf{w}) = (y_t - \mathbf{x}^{T}_t \mathbf{w})^{2}$,
+the batch update becomes:
+
+$ \mathbf{w}_{k+1} = \mathbf{w}_{k} - \alpha \nabla_{\mathbf{w}}\mathbb{E}_{y, \mathbf{x} \sim (\mathbf{y}, X)}[\nabla_{\mathbf{w}}\ell_t(\mathbf{w}_k)]$
+
+In the "online" version, called Least Mean Squares (LMS) algorithm, 
+the weights are updated after each sample:
+$$
+\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \nabla_\mathbf{w} \ell_t(\mathbf{w}) = \mathbf{w}_{t} + \alpha(y_t - \mathbf{x}^{T}_t\mathbf{w}_t)\mathbf{x}_t
+$$
+
+##### Estimating the second term online
 Let's move some terms around:
 
 $$
 \begin{align*}
 & \mathbf{v} \approx [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t] \Rightarrow\\
 & \mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]\mathbf{v} = \mathbb{E}[\rho_t \delta_t \mathbf{x}_t] \Rightarrow \\
-& \mathbb{E}[(\rho_t \delta_t - \mathbf{v}^{T} \mathbf{x}_{t}) \mathbf{x}_t] = \mathbf{0} \Rightarrow
+& \mathbb{E}[(\rho_t \delta_t - \mathbf{v}^{T} \mathbf{x}_{t}) \mathbf{x}_t] = \mathbf{0} \Rightarrow \\
+& \mathbb{E}[\nabla_{\mathbf{v}}(\rho_t \delta_t - \mathbf{v}^{T} \mathbf{x}_{t})^2] = \mathbf{0}
 \end{align*}
 $$
 
-So we here have a linear least squares problem where we would want to find 
-$\mathbf{v}$ that minimizes $\mathbf{v}^{*} = \min_{\mathbf{v}}\lVert \vec{\rho}\odot \vec{\delta}  - X \mathbf{v}\rVert^{2}_{2}$.
+The last form is the optimality condition for 
+$\arg \min_{\mathbf{v}}\lVert \vec{\rho}\odot \vec{\delta}  - X \mathbf{v}\rVert^{2}_{2}$
+where $\vec{\rho}\odot \vec{\delta}$ is the $d$-dimensional 
+off-policy vector of TD-errors, and $\odot$ is the element-wise multiplication.
 
-Note that here $\vec{\rho}\odot \vec{\delta}$ is the $d$-dimensional 
-off-policy vector of TD-errors where $\odot$ is the element-wise multiplication.
-
-Using the SGD approach to find $\mathbf{v}^{*}$, we get the following update in
-terms of LMS algorithm:
+Following the discussion form the linear least squares problem, 
+inside the expectation, we have the gradient of the sample loss 
+$\ell_t(\mathbf{v}) = (\rho_t \delta_t - \mathbf{v}^{T} \mathbf{x}_{t})^2$.
+And the online update for finding the minimizer $\mathbf{v}^*$, using the SGD is:
 
 $$
 \begin{align*}
