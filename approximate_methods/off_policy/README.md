@@ -546,7 +546,6 @@ Re-writing the gradient, we get
 $\nabla_{\mathbf{w}}\overline{PBE}(\mathbf{w}) = 2\mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t]\mathbf{v} $
 
 
-## ----- NEEDS REVISION !!! ------
 ##### Small but long diversion - Linear Least Squares Problem
 For a problem of the form: $\mathbf{y} = X \mathbf{w}$, where 
 $\mathbf{y} \in \mathbb{R}^{m}, X \in \mathbb{R}^{m \times n}$ we want to find
@@ -651,9 +650,11 @@ $$
 \end{align*}
 $$
 
-###### GTD2
+##### GTD-X
 Now that we can estimate online $\mathbf{v}$, we can turn our attention to the
 gradient of PBE
+
+###### GTD2
 
 $$
 \begin{align*}
@@ -663,5 +664,24 @@ $$
 &= \mathbf{w}_t + \alpha \rho_t(\mathbf{x}_t - \gamma \mathbf{x}_{t+1})\mathbf{x}^{T}_t \mathbf{v}_t
 \end{align*}
 $$
+ 
+This algorithm is called _GTD2_.
 
-This algorithm is called _GTD2_
+###### TDC
+An improved alternative, called _GTD(0)_ incorportates a gradient 
+correction as follows:
+
+$$
+\begin{align*}
+\mathbf{w}_{t+1} &= \mathbf{w}_t + \alpha \mathbb{E}[\rho_t (\mathbf{x}_t - \gamma \mathbf{x}_{t+1})\mathbf{x}^{T}_t] [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t] \\
+&= \mathbf{w}_t + \alpha (\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_t] - \gamma \rho_t \mathbb{E}[\mathbf{x}_{t+1} \mathbf{x}^{T}_t]) [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t] \\
+&= \mathbf{w}_t + \alpha (\mathbb{E}[\rho_t \delta_t \mathbf{x}_t] - \gamma \rho_t \mathbb{E}[\mathbf{x}_{t+1} \mathbf{x}^{T}_t] [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t]) \quad\text{(distributed the last 2 terms)} \\
+&\approx \mathbf{w}_t + \alpha (\mathbb{E}[\rho_t \delta_t \mathbf{x}_t] - \gamma \rho_t \mathbb{E}[\mathbf{x}_{t+1} \mathbf{x}^{T}_t] \mathbf{v}_t) \quad\text{because: $\mathbf{v} \approx [\mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]]^{-1}\mathbb{E}[\rho_t \delta_t \mathbf{x}_t]$} \\
+&\approx \mathbf{w}_t + \alpha \rho_t (\delta_t \mathbf{x}_t - \gamma \mathbf{x}_{t+1}\mathbf{x}^{T}_{t}\mathbf{v}_t) \quad\text{sampling}
+\end{align*}
+$$
+
+An alternative name for this algorithm is _TD(0) with gradient correction_ (TDC)
+
+Note that both algorithms are both $O(d)$ complexity if 
+$\mathbf{x}^{T}_t \mathbf{v}_t$ is computed first.
