@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from copy import deepcopy
-
+from collections import Counter
 
 class BairdsCounterExampleEnvironment:
     def __init__(self, max_steps=None):
@@ -81,6 +81,7 @@ class BairdsCounterExampleEnvironment:
             raise RuntimeError('Invalid action')
 
 
+#region utilities
 def feature_extractor(s):
     # 7 states, 1 bias
     x = np.zeros(8, dtype=np.float32)
@@ -94,7 +95,10 @@ def feature_extractor(s):
         raise RuntimeError('Invalid state')
     return x
 
+#endregion utilities
 
+
+#region Policies/Algorithms
 class Pi_Sarsa:
 
     def __init__(
@@ -182,13 +186,13 @@ class Pi_DP:
             env,
             gamma: float = 0.99,
             alpha: float = 0.01,
-            assume_on_policy: bool = False,
+            do_behavioral: bool = False,
     ):
         self.env = env
         self.reset_weights()
         self.gamma = gamma
         self.alpha = alpha
-        self.assume_on_policy = assume_on_policy
+        self.do_behavioral = do_behavioral
 
     def reset_weights(self):
         w1 = np.array([1, 1, 1, 1, 1, 1, 10, 1], dtype=np.float32)
@@ -205,38 +209,38 @@ class Pi_DP:
         x = feature_extractor(s)
         return np.dot(x, self.w)
 
-
-    def off_policy_sweep(self):
+    def target_sweep(self):
 
         # Update weights for v_hat(, w)
-        n_states = 7
+        n_states = self.env.num_states
 
         for s in range(n_states):
             # sum_a[p(s' | s, a) * p(a | s)] = p(s' | s)
             # But since p(a == 1| *) = 0
             # => p(s' | s) = p(s' | s, a == 0)
-            pa = [1, 0]
-            vs = []
-            for _a in [0, 1]:
-                # Sweep over s'
-                vs += [
-                    gamma * p * pa[_a] * self.v_fn(_sp)
-                    for p, _sp in zip(env.get_transition(s, 0), range(n_states))
-                ]
 
+            # Bellman Expectation Eq:
+            # v(s) = Sum_a[ pi(a | s)] ( Sum_{s', r}[P(s', r | s, a) (r + gamma * v(s'))] )
+
+            pa = [1, 0] # pi is fixed over actions
+            tgt = 0.
+
+            for _a in [0, 1]:
+                P = env.get_transition(s, _a) # Dynamic prob: P(s' | s, a)
+
+                for _sp in range(n_states):
+                    tgt += pa[_a] * P[_sp] * (0 + gamma * self.v_fn(_sp))
 
             # E[gamma * v(s') | s] = gamma * E[v(s') | s] = Sum_a[p(s', a | s) * v(s')]
             # DP tgt: Sum_s'{R + gamma * E[v(s') | s]} = gamma * Sum_s'{E[v(s') | s]}
             # E[R] = 0
 
-            tgt = 0 + np.sum(vs)
-
             td_errs = tgt - self.v_fn(s)
             grad_w = feature_extractor(s)
 
-            self.w += (self.alpha / n_states) * np.sum(td_errs) * grad_w
+            self.w += (self.alpha / n_states) * td_errs * grad_w
 
-    def on_policy_sweep(self):
+    def behavioral_sweep(self):
 
         # Update weights for v_hat(, w)
         n_states = 7
@@ -246,16 +250,17 @@ class Pi_DP:
             # But since p(a == 1| *) = 0
             # => p(s' | s) = p(s' | s, a == 0)
 
-            vs = []
-            pa = [1/7, 6/7]  # On-policy
-            for a in [0, 1]:
-                vs += [
-                    gamma * p * pa[a] * self.v_fn(_s)
-                    for p, _s in zip(env.get_transition(s, a), range(n_states))
-                ]
             # E[R] = 0
 
-            tgt = 0 + np.sum(vs)
+            # Behavioral
+            pa = [1/7, 6/7]
+
+            tgt = 0.
+            for a in [0, 1]:
+                P = env.get_transition(s, a)
+                for sp in range(n_states):
+                    # Bellman Expectation Eq.
+                    tgt += pa[a] * P[sp] * (0. + gamma * self.v_fn(sp))
 
             td_errs = tgt - self.v_fn(s)
             grad_w = feature_extractor(s)
@@ -263,8 +268,378 @@ class Pi_DP:
             self.w += (self.alpha / n_states) * np.sum(td_errs) * grad_w
 
     def sweep(self):
+        if self.do_behavioral:
+            self.behavioral_sweep()
+        else:
+            self.target_sweep()
+
+
+class GTD2:
+    def __init__(
+            self,
+            env,
+            gamma: float = 0.99,
+            alpha: float = 0.01,
+            beta: float = 0.01,
+            do_behavioral: bool = False,
+    ):
+        self.env = env
+        self.reset_weights()
+        self.gamma = gamma
+        self.alpha = alpha
+        self.beta = beta
+        self.do_behavioral = do_behavioral
+        self.visited_states = []
+
+
+    def reset_weights(self):
+        w1 = np.array([1, 1, 1, 1, 1, 1, 10, 1], dtype=np.float32)
+        self.visited_states = []
+        self.w = w1
+        self.v = np.zeros_like(w1)
+
+    def reset(self):
+        self.reset_weights()
+
+    def act(self, s):
+        # pi(solid_line|*) = 1
+        return 0
+
+    def v_fn(self, s):
+        x = feature_extractor(s)
+        return np.dot(x, self.w)
+
+    def mu(self, s):
+        state_counts = Counter(self.visited_states)
+        return state_counts[s] / len(self.visited_states) if s in state_counts else 0
+
+    def rms_projected_bellman_error(self):
+        """ Collect state visitations, to compute mu(s), but sweep over all else """
+        state_counts = Counter(self.visited_states)
+
+        # r is always zero
+
+        if self.do_behavioral:
+            pa = [1 / self.env.num_states, 6 / self.env.num_states]
+        else:
+            pa = [1, 0]
+
+        be = 0.
+
+        for s in range(self.env.num_states):
+
+            mu = state_counts[s] / len(self.visited_states) if s in state_counts else 0
+            ds = []
+
+            for a in [0, 1]:
+
+                P = self.env.get_transition(s, a)
+
+                for sp in range(7):
+                    d = pa[a] * P[sp] * self.gamma * self.v_fn(sp)
+                    ds.append(d)
+
+            be += mu * (sum(ds) - self.v_fn(s))**2
+
+        return np.sqrt(be)
+
+    def step(self, s, a, r, sp, ap):
+
+        self.visited_states.append(s)
+
+        # Update weights for v_hat(, w)
+
+        if self.do_behavioral:
+            rho = 1.
+        else:
+            rho = 1 / (1 / self.env.num_states) if a == 0 else 0.
+
+
+        x = feature_extractor(s)
+        xp = feature_extractor(sp)
+        v = self.v_fn(s)
+        vp = self.v_fn(sp)
+        tgt = r + self.gamma * vp
+        td_err = tgt - v
+
+
+        # Online version of (11.28)
+        self.v += self.beta * rho * (td_err - np.dot(self.v, x)) * x
+
+        # GTD2
+        self.w += self.alpha * rho * (x - self.gamma * xp) * np.dot(x, self.v)
+
+
+class ExpectedGTD2:
+    def __init__(
+            self,
+            env,
+            gamma: float = 0.99,
+            alpha: float = 0.01,
+            beta: float = 0.01,
+            do_behavioral: bool = False,
+    ):
+        self.env = env
+        self.reset_weights()
+        self.gamma = gamma
+        self.alpha = alpha
+        self.beta = beta
+        self.do_behavioral = do_behavioral
+        self.visited_states = []
+
+
+    def reset_weights(self):
+        w1 = np.array([1, 1, 1, 1, 1, 1, 10, 1], dtype=np.float32)
+        self.visited_states = []
+        self.w = w1
+        self.v = np.zeros_like(w1)
+
+    def reset(self):
+        self.reset_weights()
+
+    def v_fn(self, s):
+        x = feature_extractor(s)
+        return np.dot(x, self.w)
+
+    def mu(self, s):
+        # This is the assumption being made in the book. I don't think
+        # this makes sense for a 2-step process, where state 7 is absorbing.
+        # .. but running with this to replicate the results shown in the book
+        return 1/7
+
+    def rms_projected_bellman_error(self):
+        """ Collect state visitations, to compute mu(s), but sweep over all else """
+
+        # r is always zero
+
+        if self.do_behavioral:
+            pa = [1 / self.env.num_states, 6 / self.env.num_states]
+        else:
+            pa = [1, 0]
+
+        be = 0.
+
+        for s in range(self.env.num_states):
+            ds = []
+
+            for a in [0, 1]:
+
+                P = self.env.get_transition(s, a)
+
+                for sp in range(7):
+                    d = pa[a] * P[sp] * self.gamma * self.v_fn(sp)
+                    ds.append(d)
+
+            be += self.mu(s) * (sum(ds) - self.v_fn(s))**2
+
+        return np.sqrt(be)
+
+    def off_policy_sweep(self):
+        n_states = self.env.num_states
+        pa = [1, 0]  # Target policy
+
+        for s in range(n_states):
+            v = self.v_fn(s)
+            x = feature_extractor(s)
+            for a in [0, 1]:
+                P = self.env.get_transition(s, a)
+                for sp in range(n_states):
+                    tgt = pa[a] * P[sp] * (0 + self.gamma * self.v_fn(sp))
+                    delta_t = tgt - v
+                    xp = feature_extractor(sp)
+
+                    # Normalizing with 2 x n_states since we're iterating
+                    # over x and xp
+                    self.v += (self.beta / (2 * n_states)) * (delta_t - np.dot(self.v.T, x)) * x
+
+                    self.w += (self.alpha / (2 * n_states)) * (x - self.gamma * xp) * np.dot(x.T, self.v)
+
+    def sweep(self):
+        if self.do_behavioral:
+            raise NotImplemented
+        else:
+            self.off_policy_sweep()
+
+
+class TDC:
+    def __init__(
+            self,
+            env,
+            gamma: float = 0.99,
+            alpha: float = 0.01,
+            beta: float = 0.01,
+            assume_on_policy: bool = False,
+    ):
+        self.env = env
+        self.reset_weights()
+        self.gamma = gamma
+        self.alpha = alpha
+        self.beta = beta
+        self.assume_on_policy = assume_on_policy
+        self.visited_states = []
+
+    def reset_weights(self):
+        self.visited_states = []
+        w1 = np.array([1, 1, 1, 1, 1, 1, 10, 1], dtype=np.float32)
+        self.w = w1
+        self.v = np.zeros_like(w1)
+
+    def reset(self):
+        self.reset_weights()
+
+    def act(self, s):
+        # pi(solid_line|*) = 1
+        return 0
+
+    def v_fn(self, s):
+        x = feature_extractor(s)
+        return np.dot(x, self.w)
+
+    def mu(self, s):
+        state_counts = Counter(self.visited_states)
+        return state_counts[s] / len(self.visited_states) if s in state_counts else 0
+
+    def rms_projected_bellman_error(self):
+        """ Collect state visitations, to compute mu(s), but sweep over all else """
+        state_counts = Counter(self.visited_states)
+
+        # r is always zero
+
         if self.assume_on_policy:
-            self.on_policy_sweep()
+            pa = [1 / self.env.num_states, 6 / self.env.num_states]
+        else:
+            pa = [1, 0]
+
+        be = 0.
+
+        for s in range(self.env.num_states):
+
+            mu = state_counts[s] / len(self.visited_states) if s in state_counts else 0
+            ds = []
+
+            for a in [0, 1]:
+
+                P = self.env.get_transition(s, a)
+
+                for sp in range(7):
+                    d = pa[a] * P[sp] * self.gamma * self.v_fn(sp)
+                    ds.append(d)
+
+            be += mu * (sum(ds) - self.v_fn(s))**2
+
+        return np.sqrt(be)
+
+    def step(self, s, a, r, sp, ap):
+
+        self.visited_states.append(s)
+
+        # Update weights for v_hat(, w)
+
+        if self.assume_on_policy:
+            rho = 1.
+        else:
+            rho = 1 / (1 / self.env.num_states) if a == 0 else 0.
+
+        x = feature_extractor(s)
+        xp = feature_extractor(sp)
+        v = self.v_fn(s)
+        vp = self.v_fn(sp)
+        tgt = r + self.gamma * vp
+        td_err = tgt - v
+
+        # Online version of (11.28)
+        self.v += self.beta * rho * (td_err - np.dot(self.v, x)) * x
+
+        # TDC
+        self.w += self.alpha * rho * (td_err * x - self.gamma * xp * np.dot(x, self.v))
+
+
+class ExpectedTDC:
+    def __init__(
+            self,
+            env,
+            gamma: float = 0.99,
+            alpha: float = 0.01,
+            beta: float = 0.01,
+            do_behavioral: bool = False,
+    ):
+        self.env = env
+        self.reset_weights()
+        self.gamma = gamma
+        self.alpha = alpha
+        self.beta = beta
+        self.do_behavioral = do_behavioral
+        self.visited_states = []
+
+    def reset_weights(self):
+        w1 = np.array([1, 1, 1, 1, 1, 1, 10, 1], dtype=np.float32)
+        self.visited_states = []
+        self.w = w1
+        self.v = np.zeros_like(w1)
+
+    def reset(self):
+        self.reset_weights()
+
+    def v_fn(self, s):
+        x = feature_extractor(s)
+        return np.dot(x, self.w)
+
+    def mu(self, s):
+        # This is the assumption being made in the book. I don't think
+        # this makes sense for a 2-step process, where state 7 is absorbing.
+        # .. but running with this to replicate the results shown in the book
+        return 1 / 7
+
+    def rms_projected_bellman_error(self):
+        """ Collect state visitations, to compute mu(s), but sweep over all else """
+
+        # r is always zero
+
+        if self.do_behavioral:
+            pa = [1 / self.env.num_states, 6 / self.env.num_states]
+        else:
+            pa = [1, 0]
+
+        be = 0.
+
+        for s in range(self.env.num_states):
+            ds = []
+
+            for a in [0, 1]:
+
+                P = self.env.get_transition(s, a)
+
+                for sp in range(7):
+                    d = pa[a] * P[sp] * self.gamma * self.v_fn(sp)
+                    ds.append(d)
+
+            be += self.mu(s) * (sum(ds) - self.v_fn(s)) ** 2
+
+        return np.sqrt(be)
+
+    def off_policy_sweep(self):
+        n_states = self.env.num_states
+        pa = [1, 0]  # Target policy
+
+        for s in range(n_states):
+            v = self.v_fn(s)
+            x = feature_extractor(s)
+            for a in [0, 1]:
+                P = self.env.get_transition(s, a)
+                for sp in range(n_states):
+                    tgt = pa[a] * P[sp] * (0 + self.gamma * self.v_fn(sp))
+                    delta_t = tgt - v
+                    xp = feature_extractor(sp)
+
+                    # Normalizing with 2 x n_states since we're iterating
+                    # over x and xp
+                    self.v += (self.beta / (2 * n_states)) * (delta_t - np.dot(self.v.T, x)) * x
+
+                    self.w += (self.alpha / (2 * n_states)) * (delta_t * x - self.gamma * xp * np.dot(x.T, self.v))
+
+    def sweep(self):
+        if self.do_behavioral:
+            raise NotImplemented
         else:
             self.off_policy_sweep()
 
@@ -293,7 +668,10 @@ class BehavioralPolicy:
         grad_w = x
         self.w += self.alpha * td_err * grad_w
 
+#endregion  Policies/Algorithms
 
+
+#region plots
 def plot_hist(data, states_list=None, root: str = ''):
     """
     Plot a normalized histogram over a known set of integer states.
@@ -391,6 +769,10 @@ def plot_plain(data, y_label: str):
     plt.ylabel(y_label)
     plt.show()
 
+#endregion plots
+
+
+#region runs
 
 def sample_mdp(env):
     actions = [0, 1]
@@ -450,10 +832,12 @@ def off_policy_sarsa(env, alpha = 0.01, gamma = 0.99, num_episodes = 100, force_
                 s = sp
                 a = ap
 
+    poltypestr = 'off-policy' if not force_on_policy else 'on-policy'
+
     plot_vectors_with_grouped_labels(
         weights_over_time,
         labels=[f'w{w + 1}' for w in range(8)],
-        root=f'Weights'
+        root=f'Sarsa - {poltypestr}\nWeights'
     )
 
     # plot_plain(v_over_time, y_label=f'V(s)')
@@ -502,19 +886,19 @@ def off_policy_qlearning(env, alpha = 0.01, gamma = 0.99, num_episodes = 100):
     plot_vectors_with_grouped_labels(
         weights0_over_time,
         labels=[f'w{w + 1}' for w in range(8)],
-        root=f'Weights (Solid Action)'
+        root=f'Q-Learning Weights\n(Solid Action)'
     )
 
     plot_vectors_with_grouped_labels(
         weights1_over_time,
         labels=[f'w{w + 1}' for w in range(8)],
-        root=f'Weights (Dashed Action)'
+        root=f'Q-Learning Weights\n(Dashed Action)'
     )
 
 
-def off_policy_dp(env, alpha = 0.01, gamma = 0.99, num_sweeps = 100, force_on_policy = False):
+def dp(env, alpha = 0.01, gamma = 0.99, num_sweeps = 100, force_behavioral = False):
 
-    pi = Pi_DP(env=env, gamma=gamma, alpha=alpha, assume_on_policy=force_on_policy)
+    pi = Pi_DP(env=env, gamma=gamma, alpha=alpha, do_behavioral=force_behavioral)
 
     weights_over_time = [deepcopy(pi.w)]
 
@@ -524,10 +908,206 @@ def off_policy_dp(env, alpha = 0.01, gamma = 0.99, num_sweeps = 100, force_on_po
             # Collect
             weights_over_time.append(deepcopy(pi.w))
 
+    poltypestr = 'target policy' if not force_behavioral else 'behavioral policy'
+
     plot_vectors_with_grouped_labels(
         weights_over_time,
         labels=[f'w{w + 1}' for w in range(8)],
-        root=f'Weights'
+        root=f'DP - {poltypestr}\nWeights'
+    )
+
+
+def off_policy_gtd2(env, alpha = 0.01, beta = 0.01, gamma = 0.99, force_on_policy = False):
+    pi = GTD2(
+        env=env,
+        gamma=gamma,
+        alpha=alpha,
+        beta=beta,
+        do_behavioral=force_on_policy
+    )
+
+    b = BehavioralPolicy(gamma, alpha)
+
+    weights_over_time = [np.concatenate([deepcopy(pi.w), np.array([0.]), np.array([0.])])]
+    actions_over_time = []
+    states_over_time = []
+
+    for e in range(num_episodes):
+
+        s = env.reset()
+        a = b.act(s)
+
+        for t in range(env.max_steps):
+
+            states_over_time.append(s)
+            sp, r, done = env.step(a)
+            ap = b.act(sp)
+
+            pi.step(s, a, r, sp, ap)
+            b.step(s, a, r, sp, ap)
+
+
+            # Collect
+            rmpbe = pi.rms_projected_bellman_error()
+
+            # The "true" value at all states is 0
+            ves = [pi.mu(_s) * ((0. - pi.v_fn(_s)) ** 2) for _s in range(7)]
+
+            weights_over_time.append(np.concatenate([deepcopy(pi.w), np.array([rmpbe]),  np.sqrt(sum(ves))[None]]))
+
+            actions_over_time.append(a)
+
+            if done:
+                break
+            else:
+                s = sp
+                a = ap
+
+    poltypestr = 'off-policy' if not force_on_policy else 'on-policy'
+
+    plot_vectors_with_grouped_labels(
+        weights_over_time[1:],
+        labels=[f'w{w + 1}' for w in range(8)] + ['RMS(PBE)', 'RMS(VE)'],
+        root=f'GTD2 - {poltypestr}\nWeights'
+    )
+
+
+def expected_gtd2(env, alpha = 0.01, beta = 0.01, gamma = 0.99, num_sweeps = 100, force_on_policy = False):
+
+    pi = ExpectedGTD2(
+        env=env,
+        gamma=gamma,
+        alpha=alpha,
+        beta=beta,
+        do_behavioral=force_on_policy
+    )
+
+    weights_over_time = [
+        np.concatenate(
+            [deepcopy(pi.w), np.array([0.]), np.array([0.])]
+        )
+    ]
+
+    for e in range(num_sweeps):
+        for t in range(env.max_steps):
+            pi.sweep()
+            # Collect
+            rmpbe = pi.rms_projected_bellman_error()
+
+            ves = [pi.mu(_s) * ((0. - pi.v_fn(_s)) ** 2) for _s in range(7)]
+            weights_over_time.append(
+                np.concatenate(
+                    [
+                        deepcopy(pi.w),
+                        np.array([rmpbe]),
+                        np.sqrt(sum(ves))[None]
+                    ]
+                )
+            )
+
+    poltypestr = 'off-policy' if not force_on_policy else 'on-policy'
+
+    plot_vectors_with_grouped_labels(
+        weights_over_time,
+        labels=[f'w{w + 1}' for w in range(8)] + ['RMS(PBE)', 'RMS(VE)'],
+        root=f'ExpectedGTD2 - {poltypestr}\nWeights'
+    )
+
+
+def off_policy_tdc(env, alpha = 0.01, beta = 0.01, gamma = 0.99, force_on_policy = False, num_episodes = 100):
+    pi = TDC(
+        env,
+        gamma=gamma,
+        alpha=alpha,
+        beta=beta,
+        assume_on_policy=force_on_policy
+    )
+
+    b = BehavioralPolicy(gamma, alpha)
+
+    weights_over_time = [deepcopy(pi.w)]
+    actions_over_time = []
+    states_over_time = []
+
+    for e in range(num_episodes):
+
+        s = env.reset()
+        a = b.act(s)
+
+        for t in range(env.max_steps):
+
+            states_over_time.append(s)
+            sp, r, done = env.step(a)
+            ap = b.act(sp)
+
+            pi.step(s, a, r, sp, ap)
+            b.step(s, a, r, sp, ap)
+
+            # Collect
+            rmpbe = pi.rms_projected_bellman_error()
+
+            # The "true" value at all states is 0
+            ves = [pi.mu(_s) * ((0. - pi.v_fn(_s)) ** 2) for _s in range(7)]
+
+            weights_over_time.append(np.concatenate(
+                [deepcopy(pi.w), np.array([rmpbe]), np.sqrt(sum(ves))[None]]))
+
+            actions_over_time.append(a)
+
+            if done:
+                break
+            else:
+                s = sp
+                a = ap
+
+    poltypestr = 'off-policy' if not force_on_policy else 'on-policy'
+
+    plot_vectors_with_grouped_labels(
+        weights_over_time[1:],
+        labels=[f'w{w + 1}' for w in range(8)] + ['RMS(PBE)', 'RMS(VE)'],
+        root=f'TDC - {poltypestr}\nWeights'
+    )
+
+
+def expected_tdc(env, alpha = 0.01, beta = 0.01, gamma = 0.99, num_sweeps = 100, force_on_policy = False):
+
+    pi = ExpectedTDC(
+        env=env,
+        gamma=gamma,
+        alpha=alpha,
+        beta=beta,
+        do_behavioral=force_on_policy
+    )
+
+    weights_over_time = [
+        np.concatenate(
+            [deepcopy(pi.w), np.array([0.]), np.array([0.])]
+        )
+    ]
+
+    for e in range(num_sweeps):
+        for t in range(env.max_steps):
+            pi.sweep()
+            # Collect
+            rmpbe = pi.rms_projected_bellman_error()
+
+            ves = [pi.mu(_s) * ((0. - pi.v_fn(_s)) ** 2) for _s in range(7)]
+            weights_over_time.append(
+                np.concatenate(
+                    [
+                        deepcopy(pi.w),
+                        np.array([rmpbe]),
+                        np.sqrt(sum(ves))[None]
+                    ]
+                )
+            )
+
+    poltypestr = 'off-policy' if not force_on_policy else 'on-policy'
+
+    plot_vectors_with_grouped_labels(
+        weights_over_time,
+        labels=[f'w{w + 1}' for w in range(8)] + ['RMS(PBE)', 'RMS(VE)'],
+        root=f'ExpectedTDC - {poltypestr}\nWeights'
     )
 
 
@@ -554,21 +1134,64 @@ def on_policy(env, alpha = 0.01, gamma = 0.99, num_episodes = 100):
             else:
                 s = sp
 
-    plot_hist(next_states_over_time)
+    plot_hist(
+        next_states_over_time,
+        root='State Distribution under Behavioral'
+    )
 
+
+#endregion runs
 
 if __name__ == "__main__":
     T = 2
     num_episodes = 500
     gamma = 0.99
     alpha = 0.01
+    beta = 0.01
 
     env = BairdsCounterExampleEnvironment(T)
 
-    off_policy_qlearning(env, alpha=alpha, gamma=gamma, num_episodes=num_episodes)
+    expected_tdc(
+        env,
+        alpha=0.005,
+        beta=0.05,
+        gamma=gamma,
+        num_sweeps=1*500,
+        force_on_policy=False
+    )
 
-    off_policy_sarsa(env, alpha=alpha, gamma=gamma, num_episodes=num_episodes, force_on_policy=True)
+    exit(0)
 
-    off_policy_dp(env, num_sweeps=num_episodes, gamma=gamma, alpha=alpha, force_on_policy=True)
+    off_policy_tdc(
+        env,
+        alpha=0.005,
+        beta=0.05,
+        gamma=gamma,
+        num_episodes=num_episodes,
+        force_on_policy=False
+    )
+
+    off_policy_qlearning(
+        env,
+        alpha=alpha,
+        gamma=gamma,
+        num_episodes=num_episodes
+    )
+
+    off_policy_sarsa(
+        env,
+        alpha=alpha,
+        gamma=gamma,
+        num_episodes=num_episodes,
+        force_on_policy=True
+    )
+
+    dp(
+        env,
+        num_sweeps=num_episodes,
+        gamma=gamma,
+        alpha=alpha,
+        force_behavioral=True
+    )
 
     exit(0)
