@@ -438,21 +438,27 @@ class ExpectedGTD2:
         n_states = self.env.num_states
         pa = [1, 0]  # Target policy
 
+        delta_v = 0.
+        delta_w = 0.
+        r = 0  # For Baird's counterexample process, r = 0 always
         for s in range(n_states):
             v = self.v_fn(s)
             x = feature_extractor(s)
             for a in [0, 1]:
                 P = self.env.get_transition(s, a)
                 for sp in range(n_states):
-                    tgt = pa[a] * P[sp] * (0 + self.gamma * self.v_fn(sp))
+                    tgt = pa[a] * P[sp] * (r + self.gamma * self.v_fn(sp))
                     delta_t = tgt - v
                     xp = feature_extractor(sp)
 
-                    # Normalizing with 2 x n_states since we're iterating
-                    # over x and xp
-                    self.v += (self.beta / (2 * n_states)) * (delta_t - np.dot(self.v.T, x)) * x
+                    delta_v += (self.beta / (1 * n_states)) * (delta_t - np.dot(self.v.T, x)) * x
 
-                    self.w += (self.alpha / (2 * n_states)) * (x - self.gamma * xp) * np.dot(x.T, self.v)
+                    # Normalizing with 2 x n_states since
+                    # we're iterating over x and xp
+                    delta_w += (self.alpha / (2 * n_states)) * (x - self.gamma * xp) * np.dot(x.T, self.v)
+
+        self.v += delta_v
+        self.w += delta_w
 
     def sweep(self):
         if self.do_behavioral:
@@ -631,10 +637,10 @@ class ExpectedTDC:
                     delta_t = tgt - v
                     xp = feature_extractor(sp)
 
+                    self.v += (self.beta / (1 * n_states)) * (delta_t - np.dot(self.v.T, x)) * x
+
                     # Normalizing with 2 x n_states since we're iterating
                     # over x and xp
-                    self.v += (self.beta / (2 * n_states)) * (delta_t - np.dot(self.v.T, x)) * x
-
                     self.w += (self.alpha / (2 * n_states)) * (delta_t * x - self.gamma * xp * np.dot(x.T, self.v))
 
     def sweep(self):
@@ -917,7 +923,7 @@ def dp(env, alpha = 0.01, gamma = 0.99, num_sweeps = 100, force_behavioral = Fal
     )
 
 
-def off_policy_gtd2(env, alpha = 0.01, beta = 0.01, gamma = 0.99, force_on_policy = False):
+def off_policy_gtd2(env, alpha = 0.01, beta = 0.01, gamma = 0.99, force_on_policy = False, num_episodes=100):
     pi = GTD2(
         env=env,
         gamma=gamma,
@@ -1151,6 +1157,26 @@ if __name__ == "__main__":
 
     env = BairdsCounterExampleEnvironment(T)
 
+    off_policy_tdc(
+        env,
+        alpha=0.005,
+        beta=0.05,
+        gamma=gamma,
+        num_episodes=num_episodes,
+        force_on_policy=False
+    )
+
+    expected_tdc(
+        env,
+        alpha=0.005,
+        beta=0.05,
+        gamma=gamma,
+        num_sweeps=500,
+        force_on_policy=False
+    )
+
+    exit(0)
+
     expected_tdc(
         env,
         alpha=0.005,
@@ -1159,8 +1185,6 @@ if __name__ == "__main__":
         num_sweeps=1*500,
         force_on_policy=False
     )
-
-    exit(0)
 
     off_policy_tdc(
         env,

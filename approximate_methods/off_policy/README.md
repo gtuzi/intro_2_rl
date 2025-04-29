@@ -191,6 +191,7 @@ Here I am using the behavioral policy $b$ to generate the experiences.
 On-Policy for the Sarsa case means that we force $\rho = 1$
 
 * $\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \rho_{t}(R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}_{t}) - \hat{v}(S_{t}, \mathbf{w}_{t}))\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t}) $
+* Implemented in: `` bairds_main.py\Pi_Sarsa``
 
 | Off-Policy                                                                    | On-Policy                                                                    |
 |-------------------------------------------------------------------------------|------------------------------------------------------------------------------|
@@ -203,6 +204,7 @@ On-Policy for the DP case means that we use $\pi = b$ probabilities.
 Also note that $P(r \ne 0, \cdot | \cdot) = 0$.
 
 * $\mathbf{w}_{k + 1} = \mathbf{w}_{k} + \frac{\alpha}{|\mathcal{S}|}\sum_{s}([\mathbb{E}_{S_{t+1} \sim P(\cdot | S_t = s, a \sim \pi(\cdot|S_t = s))}[R_{t} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_k) | S_t = s] - \hat{v}(S_t = s, \mathbf{w}_k)]\nabla_{\mathbf{w}}\hat{v}(S_t = s, \mathbf{w}_k))$
+* Implemented in: `` bairds_main.py\Pi_DP``
 
 Went a little verbose here for clarity.
 
@@ -219,6 +221,7 @@ For Q-Learning I'm keeping a separate set of weight vectors for each actions
 as $\mathbf w^{T}_{a}$. The (explicit) update rule is then as follows:
 
 * $\mathbf{w}_{A_t, t+1} = \mathbf{w}_{A_t, t} + \alpha (R_{t+1} + \gamma \max_a \hat{q}(S_{t+1}, a, \mathbf{w}_{a, t}) - \hat{q}(S_{t}, A_t, \mathbf{w}_{A_t, t}))\nabla_{\mathbf{w}_{A_t}}\hat{q}(S_{t}, A_t, \mathbf{w}_{A_t, t}) $
+* Implemented in: `` bairds_main.py\Pi_QLearning``
 
 We also note here that the weights diverge, for both actions
 
@@ -239,6 +242,7 @@ an example of on-policy training.
 
 
 ### Bellman Error
+
 In addressing the stability of off-policy learning, we may want to pursue the 
 robust guarantees of SGD. And to achieve this we may want to re-formulate
 the objective function in such a way that instead of using the diverging 
@@ -259,7 +263,8 @@ $$
 \bar{\delta}_{\mathbf{w}}(s) &\overset{\cdot}{=}(\sum_{a}\pi(a | s)\sum_{s', r}P(s', r | s, a)[r + \gamma v_{\mathbf{w}, \pi}(s')]) - v_{\mathbf{w}, \pi}(s) \\
 &= \sum_{a}\pi(a | s)\sum_{s', r} P(s', r | s, a)[r + \gamma v_{\mathbf{w}, \pi}(s') - v_{\mathbf{w}, \pi}(s)]  \\
 &= \mathbb{E}_{\pi, P}[R_{t+1} + \gamma v_{\mathbf{w}, \pi}(S_{t+1}) - v_{\mathbf{w}, \pi}(S_{t}) | S_{t} = s, A_t \sim \pi] \quad\text{(sample estimate})\\
-&= \mathbb{E}_{\pi, P}[\delta_{t,  \mathbf{w}} | S_{t} = s, A_t \sim \pi] \quad\text{(TD error is an unbiased estimate of $BE$})
+&= \mathbb{E}_{\pi, P}[\delta_{t,  \mathbf{w}} | S_{t} = s, A_t \sim \pi] \quad\text{(TD error is an unbiased estimate of $BE$}) \\
+&= \mathbb{E}_{\pi}[\delta_{t,  \mathbf{w}} | S_{t}] \quad\text{(simplified notation})
 \end{align*}
 $$
 
@@ -271,7 +276,7 @@ $$
 \begin{align*}
   \overline{BE}(\mathbf{w}) &= \lVert \bar{\delta}_{\mathbf{w}} \lVert^{2}_{\mu} \\
   &= \sum_{s}\mu_{\pi}(s)\bar{\delta}_{\mathbf{w}}(s)^2 \quad\text{(based on 11.11)}  \\
-  &= \sum_{s}\mu_{\pi}(s)(\mathbb{E}_{\pi}[\delta_{t,  \mathbf{w}} | S_{t} = s, A_t \sim \pi])^2  \\
+  &= \sum_{s}\mu_{\pi}(s)(\mathbb{E}_{\pi}[\delta_{t,  \mathbf{w}} | S_{t}])^2  \\
   &= \mathbb{E}_{\mu_{\pi}}[(\mathbb{E}_{\pi}[\delta_{t,  \mathbf{w}} | S_{t}])^2]
 \end{align*}
 $$
@@ -379,7 +384,7 @@ $$
 \begin{align*}
 \mathbf{w}_{t+1} & = \mathbf{w}_{t} - \frac{1}{2} \alpha \nabla_{\mathbf{w}} (\mathbb{E}_{\pi}[\delta_{t, \mathbf{w}} | S_t])^2  \quad\text{($ S_t \sim\mu_{\pi}$)} \\
   &= \mathbf{w}_{t} - \frac{1}{2} \alpha \nabla_{\mathbf{w}} (\mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}} | S_t])^2  \quad\text{($ S_t \sim\mu_{b}$)} \\
-  &= \mathbf{w}_{t} - \alpha \mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}] \nabla_{\mathbf{w}} \mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}]  \quad\text{(omitting the conditional on $S_t$)}\\
+  &= \mathbf{w}_{t} - \alpha \mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}] \nabla_{\mathbf{w}} \mathbb{E}_{b}[\rho_t \delta_{t, \mathbf{w}}]  \quad\text{(omitting the conditional on $S_t \sim \mu_{b}$)}\\
   &= \mathbf{w}_{t} - \alpha \mathbb{E}_{b}[\rho_t (R_{t+1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_{t}, \mathbf{w}_t))]\mathbb{E}_{b}[\rho_t  \nabla_{\mathbf{w}}\delta_{t, \mathbf{w}}] \\
   &= \mathbf{w}_{t} + \alpha \mathbb{E}_{b}[\rho_t (R_{t+1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_{t}, \mathbf{w}_t))]\mathbb{E}_{b}[\rho_t  \nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_t) - \gamma \rho_t\nabla_{\mathbf{w}}\hat{v}(S_{t+1}, \mathbf{w}_t)] \\
   &= \mathbf{w}_{t} + \alpha [\mathbb{E}_{b}[\rho_t (R_{t+1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_t)] - \hat{v}(S_{t}, \mathbf{w}_t)][\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_t) - \gamma \mathbb{E}_{b}[\rho_t\nabla_{\mathbf{w}}\hat{v}(S_{t+1}, \mathbf{w}_t)]] \quad\text{(see discussions below)} \\
@@ -513,7 +518,7 @@ not always stable under the semi-gradient off-policy approach.
 ##### Gradient Descend in the Bellman Error
 Now we turn our attention to the stability of off-policy 
 training where we minimize the $\overline{PBE}$ - i.e. use it as the 
-objective function. The gradient of $\overline(PBE)$ (refer to the book
+objective function. The gradient of $\overline{PBE}$ (refer to the book
 for the complete derivation):
 
 $$
@@ -523,14 +528,14 @@ $$
 $$
 
 To turn this into an SGD method, we have to sample something on every 
-time step that has this quantity as its expected value. We have $\mu$ as 
+time step that has this quantity as its expected value. We have $\mu_b$ as 
 the stationary distribution of states under the behavior policy, 
 where $\mathbf{D}$ is the diagonal matrix whose diagonal entries are
-$\mu(s)$ induced by the behavioral policy. 
-The terms above can then be written as expectations under $\mu$.
+$\mu_b(s)$ induced by the behavioral policy. 
+The terms above can then be written as expectations under $\mu_b$.
 
-* $\mathbf{X}^{T}\mathbf{D}\bar{\delta}_\mathbf{w} = \sum_{s}\mu(s)\mathbf{x}(s)\bar{\delta}_{\mathbf{w}}(s) = \mathbb{E}[\rho_t \delta_t \mathbf{x}_t]$ of shape $d$
-* $\mathbf{X}^{T}\mathbf{D}\mathbf{X} = \sum_s \mu(s)\mathbf{x}(s) \mathbf{x}(s)^{T} = \mathbb{E}[\mathbf{x}_t \mathbf{x}^{T}_{t}]$ of shape $d \times d$
+* $\mathbf{X}^{T}\mathbf{D}\bar{\delta}_\mathbf{w} = \sum_{s}\mu_b(s)\mathbf{x}(s)\bar{\delta}_{\mathbf{w}}(s) = \mathbb{E}_{S_t \sim \mu_b}\Bigl[\mathbb{E}_{{\substack{A_t\sim b(\cdot\mid S_t)\\(R_{t+1},S_{t+1})\sim P}}}\bigl[\rho_t \delta_t \mathbf{x}_t | S_t\bigr]\Bigr] = \mathbb{E}_{\substack{S_t\sim\mu_b \\A_t\sim b(\cdot\mid S_t) \\(R_{t+1},S_{t+1})\sim P}}\Bigl[\rho_t \delta_t \mathbf{x}_t\Bigr] = \mathbb{E}_b[\rho_t \delta_t \mathbf{x}_t] \in \mathbb{R}^d$
+* $\mathbf{X}^{T}\mathbf{D}\mathbf{X} = \sum_s \mu_b(s)\mathbf{x}(s) \mathbf{x}(s)^{T} = \mathbb{E}_{S_t \sim \mu_b}[\mathbf{x}_t \mathbf{x}^{T}_{t}] \in \mathbb{R}^{d \times d}$
 
 The gradient of the transpose of the last term:
 
@@ -539,7 +544,7 @@ $$
 \nabla_{\mathbf{w}} \mathbb{E}[\rho_t \delta_t \mathbf{x}_t]^{T} &= \mathbb{E}[\rho_t \nabla_{\mathbf{w}}\delta^{T}_t \mathbf{x}^{T}_t] \\
 &= \mathbb{E}[\rho_t \nabla_{\mathbf{w}}(R_{t+1} + \gamma \mathbf{w}^{T} \mathbf{x}_{t+1} - \mathbf{w}^{T} \mathbf{x}_{t}) \mathbf{x}^{T}_t] 
 \quad\text{(using episodic  $\delta_t$)} \\
-&= \mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t], \quad\text{(of shape $d$)}
+&= \mathbb{E}[\rho_t (\gamma \mathbf{x}_{t+1} - \mathbf{x}_t)\mathbf{x}^{T}_t] \quad\text{$\in \mathbb{R}^d$}
 \end{align*}
 $$
 
@@ -600,9 +605,9 @@ where the gradient of the objective function is zero
 $$
 \begin{align*}
 & \nabla_{\mathbf{w}}J(\mathbf{w}) = \mathbf{0} \Rightarrow \\
-& 2A^{T}(\mathbf{y} - A\mathbf{x}) = \mathbf{0} \Rightarrow \\
-& A^{T}\mathbf{y} = A^{T}A\mathbf{w} \Rightarrow \\
-& \mathbf{w}^{*} = (A^{T}A)^{-1}A^{T}\mathbf{y} 
+& 2X^{T}(\mathbf{y} - X\mathbf{w}) = \mathbf{0} \Rightarrow \\
+& X^{T}\mathbf{y} = X^{T}X\mathbf{w} \Rightarrow \\
+& \mathbf{w}^{*} = (X^{T}X)^{-1}X^{T}\mathbf{y} 
 \end{align*}
 $$
 
@@ -681,6 +686,7 @@ gradient of PBE
 
 ###### GTD2
 
+The following algorithm is called _GTD2_. Implemented in: `` bairds_main.py\GTD2``
 $$
 \begin{align*}
 \mathbf{w}_{t+1} &= \mathbf{w}_t - \frac{1}{2} \alpha \nabla_{\mathbf{w}}\overline{PBE} \\
@@ -689,8 +695,28 @@ $$
 &= \mathbf{w}_t + \alpha \rho_t(\mathbf{x}_t - \gamma \mathbf{x}_{t+1})\mathbf{x}^{T}_t \mathbf{v}_t
 \end{align*}
 $$
- 
-This algorithm is called _GTD2_.
+
+The _expected_ version of this algorithm, is updated in a DP fashion as:
+
+$$
+\begin{align*}
+\mathbf{v}_{k+1} &= \mathbf{v}_{k} + \frac{\beta}{|\cal{S}|} \sum_{s} \Bigl[\mathbb{E}_{\pi, P}\bigl[\bigl(r + \gamma\hat{v}(\mathbf{x}(s'), \mathbf{w}_k) - \hat{v}(\mathbf{x}(s), \mathbf{w}_k)\bigr) - \mathbf{v}_k^{T}\mathbf{x}(s)\bigr]\mathbf{x}(s) \Bigr] \quad\text{($r = 0$)} \\ 
+\mathbf{w}_{k+1} &= \mathbf{w}_k + \frac{\alpha}{2|\cal{S}|} \sum_{s, s'}\Bigl[(\mathbf{x}(s) - \gamma \mathbf{x}(s'))\mathbf{x}^{T}(s) \mathbf{v}_k\Bigr]
+\end{align*}
+$$
+
+Implemented in: `` bairds_main.py\ExpectedGTD2``
+
+| GTD2                                                               | Expected GTD2                                                              |
+|--------------------------------------------------------------------|----------------------------------------------------------------------------|
+| <img src="images/results/Bairds_GTD2.png" alt="Grid" width="400"/> | <img src="images/results/Bairds_ExpectedGTD2.png" alt="Grid" width="400"/> |
+
+GTD2 run resembles what the authors show in the book. For the expected
+GTD2, $\sqrt{\overline{VE}}$ does tend towards the optimal solution, 
+however it takes too long, since the projected
+error $\sqrt{\overline{PBE}} \approx 0$.
+
+<img src="images/results/Bairds_ExpectedGTD2_longrun.png" alt="Grid" width="400"/>
 
 ###### TDC
 An improved alternative, called _GTD(0)_ incorportates a gradient 
@@ -707,6 +733,13 @@ $$
 $$
 
 An alternative name for this algorithm is _TD(0) with gradient correction_ (TDC)
+Implemented in: `` bairds_main.py\TDC``. The expected version follows the same
+pattern as the ExpectedGTD2, and it is implemented in `` bairds_main.py\ExpectedTDC``
+
+| TDC                                                               | Expected TDC                                                              |
+|-------------------------------------------------------------------|---------------------------------------------------------------------------|
+| <img src="images/results/Bairds_TDC.png" alt="Grid" width="400"/> | <img src="images/results/Bairds_ExpectedTDC.png" alt="Grid" width="400"/> |
+
 
 Note that both algorithms are both $O(d)$ complexity if 
 $\mathbf{x}^{T}_t \mathbf{v}_t$ is computed first.
