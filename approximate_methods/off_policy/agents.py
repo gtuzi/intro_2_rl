@@ -1,6 +1,5 @@
 from typing import Union, Callable, Any, Optional
 import numpy as np
-import time
 
 from approximate_methods.utils import (
     LinearQEpsGreedyAgent,
@@ -283,4 +282,3 @@ class SemiGradient_nStepsSarsaOffPolicy(LinearQEpsGreedyAgent):
     #         self.writer.add_scalar('target', target, t)
     #         self.writer.add_scalar('rho', np.prod(rhos), t)
     #         self.writer.add_scalar('alpha', alpha, t)
-

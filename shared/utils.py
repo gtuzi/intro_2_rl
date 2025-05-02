@@ -1,6 +1,14 @@
-from typing import Dict, Union, Any, List
+from typing import Dict, Union, Any, List, Tuple
 import numpy as np
 import scipy
+
+
+class SoftPolicy:
+    def get_greedy_action(self, s) -> Tuple[int, float]:
+        raise NotImplementedError
+
+    def get_sa_probability(self, s, a) -> float:
+        raise NotImplementedError
 
 
 class NoiseSchedule:

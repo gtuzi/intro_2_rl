@@ -698,8 +698,8 @@ def nstep_semigradient_sarsa_experiments(
         legend.clear()
 
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     do_log = False
     n_sarsa_steps = 4
 
@@ -708,6 +708,7 @@ if __name__ == '__main__':
     episodic = True
 
     RENDER = False
+    ENV_NAME = 'MountainCar'
 
     if ENV_NAME == 'MountainCar':
         if episodic:
@@ -743,6 +744,18 @@ if __name__ == '__main__':
             """
             return LinearSchedule(
                 start, end=0.0, steps=(num_episodes // 2) * T)
+
+        def build_coefficient_sched(start):
+            """
+                Sarsa requires pi --> greedy as one of the conditions for
+                convergence.
+            :param start:
+            :return:
+            """
+            return LinearSchedule(
+                start, end=0.0001 * start, steps=num_episodes * T
+            )
+
     else:
         raise Exception('Continuous not implemented')
 

@@ -46,15 +46,17 @@ intro_2_rl/
 │
 ├── LICENSE.md         # Project license (MIT)
 │
-├── tabular_methods/       # Tabular Methods directory
+├── tabular_methods/       # Tabular methods directory
 │   ├── monte_carlo/       # Source code for Monte Carlo (MC) methods
 │   │   ├── agents.py      # Algorithms from: Ch.5
-│   │   ├── main.py        # Main execution script
+│   │   ├── main.py        # Main execution script.
+│   │   ├── summary.ipynb  # Theoretical development.
 │   │   └── README.md      # Detailed information
 │   │
 │   ├── td/                # Source code for Temporal Difference (TD) & nStep bootstrapping methods
 │   │   ├── agents.py      # Algorithms from: Ch.6,7
 │   │   ├── main.py        # Main execution script
+│   │   ├── summary.ipynb  # Theoretical development.
 │   │   └── README.md      # Detailed information
 │   │
 │   ├── planning/          # Source code for Planning and Learning methods
@@ -66,17 +68,21 @@ intro_2_rl/
 │   │
 │   └── utils.py           # Base agents, utilities
 │
-├── approximate_methods/   # Approximate Methods directory
+├── approximate_methods/   # Approximate methods directory
 │   ├── off_policy/        # Source code for off_policy methods (initial implementation. Needs debugging)
-│   │   ├── agents.py      # Algorithms from: Ch. 11
-│   │   ├── main.py        # Main execution script
+│   │   ├── bairds.py      # Bairds counterexample, implemented examples. 
+│   │   ├── summary.ipynb  # Theoretical development.
 │   ├── on_policy/         # Source code for on_policy methods
 │   │   ├── agents.py      # Algorithms from: Ch. 10
-│   │   ├── main.py        # Main execution script
+│   │   ├── main.py        # Main execution script.
+│   │   ├── summary.ipynb  # Theoretical development.
 │   │   └── README.md      # Detailed information
 │   │
 │   ├── tiles3.py          # Source code for tile-coding
 │   └── utils.py           # Utilities
+│
+├── shared/                # Shared code directory
+│   └── utils.py           # Schedules, samplers, experience 
 │
 └── requirements.txt   # Python dependencies
 

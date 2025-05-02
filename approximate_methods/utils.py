@@ -6,7 +6,7 @@ import torch.nn as nn
 from torchvision import models, transforms
 import torch.nn.functional as F
 
-from shared.policies import SoftPolicy
+from shared.utils import SoftPolicy
 from shared.utils import NoiseSchedule, Experience
 
 class DiscreteActionAgent:
