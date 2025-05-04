@@ -1175,8 +1175,6 @@ if __name__ == "__main__":
         force_on_policy=False
     )
 
-    exit(0)
-
     expected_tdc(
         env,
         alpha=0.005,

@@ -1,7 +1,7 @@
 from typing import Tuple, Optional
 import numpy as np
 
-from shared.policies import SoftPolicy
+from shared.utils import SoftPolicy
 from shared.utils import *
 
 
