@@ -32,7 +32,7 @@ to evaluate a state's value. This approach is called the _backward view_.
 The $n$-step __return__ is defined as:
 $$
 \begin{align*}
-G_{t:t+n} &\overset{\cdot}{=} \sum_{i=t}^{t+n-1}\gamma^{i-t}R_{i+1} + \gamma^{n}\hat{v}(S_{t+n}, \mathbf{w}_{t+n-1}), \quad 0 \le t \le T - n 
+G_{t:t+n} &\overset{\cdot}{=} \sum_{i=t + 1}^{t+n}\gamma^{i-t - 1}R_{i} + \gamma^{n}\hat{v}(S_{t+n}, \mathbf{w}_{t+n-1}), \quad 0 \le t \le T - n 
 \end{align*}
 $$
 
@@ -69,7 +69,7 @@ In this formulation, the $1$-step is given the largest weight $1 - \lambda$,
 next the $2$-step with weight $(1 - \lambda)\lambda$, and so forth - the weight
 decays with $\lambda$. 
 
-For any $n \ge T$ all $n$-step return is the  conventional $G_t$. 
+For any $n$ s.t. $ t + n \ge T$, all $n$-step return is the conventional $G_t = \sum_{i=t+1}^{T} \gamma^{i - t - 1} R_{i}$. 
 So for the remaining traces of same return, their cummulative weight 
 is $\lambda^{T - t - 1}$. An alternative view of weight distribution 
 is given below:
@@ -98,7 +98,7 @@ where we vary the steps.
 Note the recursive relationship of the $n$-step return:
 $$
 \begin{align*}
-G_{t:t+n} &\overset{\cdot}{=} \sum_{i=t}^{t+n-1}\gamma^{i-t}R_{i+1} + \gamma^{n}\hat{v}(S_{t+n}, \mathbf{w}_{t+n-1}) = R_{t+1} + \gamma G_{t+1:t+n},  \quad 0 \le t \le T - n
+G_{t:t+n} &\overset{\cdot}{=} \sum_{i=t+1}^{t+n}\gamma^{i-t - 1}R_{i} + \gamma^{n}\hat{v}(S_{t+n}, \mathbf{w}_{t+n-1}) = R_{t+1} + \gamma G_{t+1:t+n},  \quad 0 \le t \le T - n
 \end{align*}
 $$
 
@@ -195,9 +195,58 @@ prediction algorithm is given as:
 
 <img src="images/td_lambda_prediction_algo.png" alt="Grid" width="550"/>
 
-At each moment we look at the current TD error  and assign it backward to 
-each prior state according to how much that state contributed  to the current 
-eligibility trace at that time.
-
 
 ###### Intuition behind the backward view of TD($\lambda$)
+At each moment we look at the current TD error $\delta_t$ and assign it backward to 
+each prior state $[..., S_{t - i}, ..., S_t+1]$ according to how much that 
+state contributed to the current eligibility trace $\mathbf{z}_t$ at $t$.
+
+<img src="images/td_lambda_backward_view.png" alt="Grid" width="550"/>
+
+At the update of the weights $\mathbf{w}_{t+1}$ the values of those states
+are changed, for when they're encountered again in the future.Consider what 
+happens under TD($\lambda$) for different $\lambda$ values.
+
+* $\lambda = 0$: $\;\; \mathbf{z}_t = \nabla\hat{v}(S_t, \mathbf{w}_t)$. The update
+reduces to the one-step semi-gradient TD update, which is why the algorithm
+is called TD($0$). Only the one state preceding the current one is updated 
+by the TD error. Other states may have their value estimates changed by 
+generalization due to function approximation.
+* $0 \lt \lambda \lt 1$: More of the preceding states are  updated, but each 
+more temporally distant state is updated less because the corresponding  
+eligibility trace is smaller (due to the decay $\gamma \lambda$). Earlier 
+states are given less credit for the TD error.
+* $\lambda = 1$: Credit given to earlier states falls by $\gamma$. We achieve
+MC behavior. Note that the reward is passed back by the trace discounted by 
+$\gamma^k$, which is what we get under MC (but what about the term due to $\hat{v}$'s ?) 
+This is also called as TD($1$). One benefit of using TD($1$) is that
+it allows us to use MC for continuing tasks; and which can be implemented 
+incrementally and online (unlike the vanilla MC which waits for the end of 
+episode). Unlike in MC, if something unusually good or bad happens
+during an episode, control methods based on TD(1) can learn immediately 
+and alter their behavior on that same episode.
+
+
+###### Exercise 12.3
+From Exercise 12.1 we know:
+$$
+\begin{align*}
+G^{\lambda}_{t} &= R_{t+1} + \gamma G^{\lambda}_{t+1}
+\end{align*}
+$$
+
+The error term in the offline algorithm can be expanded as:
+
+$$
+\begin{align*}
+G^{\lambda}_t - \hat{v}(S_t, \mathbf{w}_t) &= R_{t+1} + \gamma G^{\lambda}_{t+1} - \hat{v}(S_t, \mathbf{w}_t) + \gamma \hat{v}(S_{t + 1}, \mathbf{w}_t) - \gamma \hat{v}(S_{t + 1}, \mathbf{w}_t) \\
+&= \delta_t + \gamma(G^{\lambda}_{t+1} - \hat{v}(S_{t + 1}, \mathbf{w}_t)) \\
+&= \delta_t + \gamma(R_{t+2} + \gamma G^{\lambda}_{t+2} - \hat{v}(S_{t + 1}, \mathbf{w}_t) + \gamma\hat{v}(S_{t+2}, \mathbf{w}_t) - \gamma\hat{v}(S_{t+2}, \mathbf{w}_t)) \\
+&= \delta_{t} + \gamma\delta_{t+1} + \gamma^{2}(G^{\lambda}_{t+2} - \hat{v}(S_{t+2}, \mathbf{w}_t)) \\
+&= \delta_{t} + \gamma\delta_{t+1} + \gamma^{2}\delta_{t+2} + ...  \\
+&= \sum_{i=t}^{\infty}\gamma^{i - t}\delta_i \tag*{continuing case}\\
+&= \sum_{i=t}^{T-1}\gamma^{i - t}\delta_i \tag*{where $\delta_t = 0$ for $t \ge T$, episodic case}
+\end{align*}
+$$
+
+Note that TD error here is conditioned on fixed $\mathbf{w}_t$
