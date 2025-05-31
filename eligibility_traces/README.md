@@ -250,3 +250,34 @@ G^{\lambda}_t - \hat{v}(S_t, \mathbf{w}_t) &= R_{t+1} + \gamma G^{\lambda}_{t+1}
 $$
 
 Note that TD error here is conditioned on fixed $\mathbf{w}_t$
+
+
+##### Fig 12.6: compare TD($\lambda$) vs Offline $\lambda$-return Algorithm
+
+Here the "environment" is the 19-state random walk from example 7.1.
+In the description of this example, the authors note that the reward
+from the first state (A) to the terminal state on the left is -1. However,
+while they expand on the 5-state example, it is not clear whether the terminal
+state on the right of the last example has a reward of 0 or +1. Since this 
+is not clear, I am using the 5-state random walk setup where
+on transition from the last state onto the right, a reward of +1 is emitted.
+
+Moreover, the true value of each state is defined as the undiscounted expected
+sum of rewards starting from each respective state. I compute this numerically
+over 300 runs for each initial state for all states. The results are shown 
+in the table below:
+
+| TD($\lambda$)                                                               | Offline $\lambda$-return Algorithm |
+|-----------------------------------------------------------------------------|------------------------------------|
+| <img src="images/experiment_fig12.6_td_lambda.png" alt="Grid" width="350"/> |                                    |
+
+One discrepancy between the graph above and the book is that in the case of
+TD($\lambda$) at $\alpha$ = 0, the error is approximately 0.47 while 
+the authors are at 0.55. As of this writing, it is unclear to me why this is 
+the case. At $\alpha$ = 0, the weights are not updated (i.e. there is no 
+learning). Moreover, per Example 7.1., value function is initialized as 
+$V(s) = 0$. The only other difference are the true values used. This could 
+stem from a disrepancy between the random walk transition probabilities or 
+the insufficient samples used for the state value estimation. I invite
+the curious reader to further investigate this discrepancy. For the moment, I 
+am proceeding with the findings as I generate them.
