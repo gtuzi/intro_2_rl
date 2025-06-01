@@ -252,8 +252,9 @@ $$
 Note that TD error here is conditioned on fixed $\mathbf{w}_t$
 
 
-##### Fig 12.6: compare TD($\lambda$) vs Offline $\lambda$-return Algorithm
+##### Fig 12.6: Compare TD($\lambda$) vs Offline $\lambda$-return Algorithm
 
+###### Note
 Here the "environment" is the 19-state random walk from example 7.1.
 In the description of this example, the authors note that the reward
 from the first state (A) to the terminal state on the left is -1. However,
@@ -281,3 +282,10 @@ stem from a disrepancy between the random walk transition probabilities or
 the insufficient samples used for the state value estimation. I invite
 the curious reader to further investigate this discrepancy. For the moment, I 
 am proceeding with the findings as I generate them.
+
+###### Results
+For each $\lambda$ value, if $\alpha$ is selected optimally for it (or
+smaller), then the two algorithms perform virtually identically. If $\alpha$ 
+is chosen larger than is optimal, however, then the $\lambda$-return 
+algorithm is only a little worse whereas TD($\lambda$) is much worse 
+and may even be unstable.
