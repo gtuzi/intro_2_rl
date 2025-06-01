@@ -1,7 +1,7 @@
 """
     Run the experiment shown on Fig 12.6
 """
-
+from joblib import Parallel, delayed
 from itertools import product
 from tqdm import tqdm
 import numpy as np
@@ -126,89 +126,224 @@ class TD_lambda:
         # Update weights
         self.w = self.w + self.alpha * tde * self.z
 
-def td_lamba_figure(
+
+class OfflineLambdaReturn:
+    def __init__(
+            self,
+            gamma: float,
+            alpha: float,
+            lam: float,
+            n_states: int
+    ):
+        assert 0 <= lam <= 1, f'Expected: 0 <= lam <= 1, got lam={lam}'
+        assert 0 <= alpha <= 1, f'Expected: 0 <= alpha <= 1, got lam={alpha}'
+        assert 0 <= gamma <= 1, f'Expected: 0 <= gamma <= 1, got lam={gamma}'
+        assert n_states > 0
+
+        self.n_states = n_states
+        self.gamma = gamma
+        self.alpha = alpha
+        self.lam = lam
+        self.w = None
+        self.reset_weights()
+        self.t = 0
+        self.buffer = []
+
+    def reset_weights(self):
+        self.w = np.ones(self.n_states, dtype=np.float32) * 0.5 # Per example 7.1
+
+    def reset(self):
+        self.t = 0
+        self.buffer.clear()
+
+    def v_fn(self, s):
+        x = feature_extractor(s, self.n_states)
+        return np.dot(x, self.w)
+
+    def step(self, s, r, sp, done):
+        self.buffer.append((s, r, sp, done))
+        if done:
+            self.learn()
+            self.buffer.clear()
+
+    def learn(self):
+        T = len(self.buffer)
+
+        def Gt_fn(t):
+            assert t >= 0
+
+            if t < T:
+                return sum(
+                    [(self.gamma ** i) * r for i, (s, r, sp, done) in
+                     enumerate(self.buffer[t:])]
+                )
+            else:
+                return 0.
+
+        def Gt_n_fn(t, n):
+            Gt_r = sum([
+                (self.gamma ** i) * r
+                for i, (s, r, sp, done) in enumerate(self.buffer[t:t + n])]
+            )
+
+            return Gt_r + (self.gamma ** n) * self.v_fn(self.buffer[t + n][0])
+
+
+        for t in range(T):
+
+            # ---- (12.3) ----
+            Gtlam = (1. - self.lam) * sum(
+                [
+                    ((self.lam) ** (n - 1)) * Gt_n_fn(t, n)
+                    for n in range(1, T - t)
+                ]
+            ) + (self.lam ** (T - t - 1)) * Gt_fn(t)
+            # --------------
+
+            s = self.buffer[t][0]
+            v = self.v_fn(s)
+            grad_w = feature_extractor(s, n_states=self.n_states)
+            self.w += self.alpha * (Gtlam - v) * grad_w
+
+
+def run_one_experiment(model_type: str, alpha, lam, n_states, n_episodes, true_values, gamma=0.99):
+    """
+    Run exactly ONE “experiment”:
+    - instantiate a fresh MRPX environment
+    - instantiate an OfflineLambdaReturn with (alpha, lam)
+    - run for n_episodes, collecting RMS error at episode end
+    - return the *average* RMS‐error over those n_episodes
+    """
+    env = MRPX(n_states)
+
+    if model_type == 'offline_lambda':
+        estimator = OfflineLambdaReturn(
+            alpha=alpha,
+            lam=lam,
+            gamma=gamma,
+            n_states=n_states + 1  # +1 if MRPX reserves an extra terminal index
+        )
+
+    elif model_type == 'td_lambda':
+        estimator = TD_lambda(
+            alpha=alpha,
+            lam=lam,
+            gamma=gamma,
+            n_states=n_states + 1  # +1 for terminal in MRPX
+        )
+    else:
+        raise NotImplemented
+
+    rms_errors = []
+    for _ in range(n_episodes):
+        # pick a random start state in [0 .. n_states‐1]
+        sinit = np.random.randint(0, n_states)
+        s = env.reset(initial_state=sinit)
+        done = False
+
+        while not done:
+            r, sp, done = env.step()
+            estimator.step(s=s, r=r, sp=sp, done=done)
+            s = sp
+
+        # at episode end, compute RMS‐error across all non‐terminal states
+        se = []
+        for state in range(n_states):
+            se.append((true_values[state] - estimator.v_fn(state)) ** 2)
+        rms_errors.append(np.sqrt(np.mean(se)))
+
+    # return the mean RMS error over all n_episodes
+    return float(np.mean(rms_errors))
+
+
+def return_figure_parallel(
+        model_type: str,
         alphas,
         lambdas,
         n_experiments: int,
-        n_episodes = 10
+        n_episodes: int = 10
 ):
+    """
+    Exactly the same overall structure as your original, except:
+      – We precompute `true_values` once.
+      – We loop over (λ,α) combinations in serial (cheap).
+      – Inside each (λ,α) pair, we launch all n_experiments *in parallel*.
+
+    Returns
+    -------
+    results_array : np.ndarray of shape (len(lambdas), len(alphas))
+        entry [il, ia] = average RMS‐error over n_experiments, for λ=lambdas[il], α=alphas[ia].
+    """
+
     n_states = 19
-    # Just numerically estimate the values for each state
-    # if starting from that state
+    # 1) Precompute “ground truth” state‐values once (ensemble of 50 ests)
     true_values = MRPX.estimate_state_values(
         n_states=n_states,
         num_experiments=500
     )
 
-    results = {
-        (l, a): list() for l, a in product(lambdas, alphas)
-    }
+    # Prepare a 2D array to store final means
+    results_array = np.zeros((len(lambdas), len(alphas)), dtype=np.float64)
 
-    results_array = np.zeros((len(lambdas), len(alphas)))
-
-    for ia, a in enumerate(alphas):
-
-        for il, l in enumerate(lambdas):
-
-            for _ in tqdm(range(n_experiments), desc=f'alpha={a:.2f}, lambda={l: .2f}'):
-
-                env = MRPX(n_states)  # n_states random walk
-
-                estimator = TD_lambda(
-                    alpha=a,
-                    lam=l,
-                    gamma=0.99,
-                    n_states=n_states + 1  # +1 for terminal in MRPX
+    # 2) Loop (λ, α) in serial (this is cheap: just n_states‐grid combinations)
+    for ia, alpha in enumerate(alphas):
+        for il, lam in enumerate(lambdas):
+            # 3) Launch n_experiments calls of run_one_experiment(...) *in parallel*
+            #    Each call returns a single‐experiment‐average‐RMS.
+            #    We use n_jobs=-1 to utilize all CPU cores by default.
+            single_runs = Parallel(n_jobs=-1)(
+                delayed(run_one_experiment)(
+                    model_type=model_type,
+                    alpha=alpha,
+                    lam=lam,
+                    n_states=n_states,
+                    n_episodes=n_episodes,
+                    true_values=true_values,
+                    gamma=0.99
                 )
+                for _ in range(n_experiments)
+            )
 
-                terminal_rewards = []
-                errors = []
+            # 4) Average those n_experiments results to fill results_array
+            results_array[il, ia] = np.mean(single_runs)
 
-                for episode in range(n_episodes):
-                    sinit = np.random.randint(0, n_states)
-                    s = env.reset(initial_state=sinit)
-
-                    done = False
-
-                    while not done:
-                        r, sp, done = env.step()
-                        estimator.step(s=s, r=r, sp=sp, done=done)
-                        s = sp
-
-                    terminal_rewards.append(r)
-
-                    # Figure 12.6: RMS error
-                    # at the end
-                    # of the episode
-                    # over the first
-                    # 10 episodes
-                    state_errors = [
-                        (true_values[s] - estimator.v_fn(s)) ** 2
-                        for s in range(n_states)
-                    ]
-
-                    errors.append(np.sqrt(np.mean(state_errors)))
-
-                results[(l, a)].append(np.mean(errors))
-
-            # Average over experiments
-            results_array[il, ia] = np.mean(results[(l, a)])
+            print(f"{model_type}: Done α={alpha:.3f}, λ={lam:.3f} → {results_array[il, ia]:.4f}")
 
     return results_array
 
 
+
 if __name__ == '__main__':
     alphas = np.linspace(0, 1, num=50)
-    lambdas = [.4, .8, .9, .95, .975, .99, 1.]
+    lambdas = [0., .4, .8, .9, .95, .975, .99, 1.]
 
-    results = td_lamba_figure(
+    results = return_figure_parallel(
+        model_type='offline_lambda',
         alphas=alphas,
         lambdas=lambdas,
-        n_experiments = 100,
+        n_experiments=100,
         n_episodes=10
     )
 
-    plot_multi_curves(results, labels=lambdas, x=alphas)
+    plot_multi_curves(
+        results,
+        title='Offline λ-Return',
+        labels=lambdas,
+        x=alphas)
+
+    results = return_figure_parallel(
+        model_type='td_lambda',
+        alphas=alphas,
+        lambdas=lambdas,
+        n_experiments=100,
+        n_episodes=10
+    )
+
+    plot_multi_curves(
+        results,
+        title='TD(λ)',
+        labels=lambdas,
+        x=alphas)
 
     exit(0)
 

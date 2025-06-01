@@ -267,9 +267,9 @@ sum of rewards starting from each respective state. I compute this numerically
 over 300 runs for each initial state for all states. The results are shown 
 in the table below:
 
-| TD($\lambda$)                                                               | Offline $\lambda$-return Algorithm |
-|-----------------------------------------------------------------------------|------------------------------------|
-| <img src="images/experiment_fig12.6_td_lambda.png" alt="Grid" width="350"/> |                                    |
+| TD($\lambda$)                                                               | Offline $\lambda$-return Algorithm                                                      |
+|-----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
+| <img src="images/experiment_fig12.6_td_lambda.png" alt="Grid" width="350"/> | <img src="images/experiment_fig12.6_offline_lambda_return.png" alt="Grid" width="350"/> |
 
 One discrepancy between the graph above and the book is that in the case of
 TD($\lambda$) at $\alpha$ = 0, the error is approximately 0.47 while 
