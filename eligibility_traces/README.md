@@ -289,3 +289,88 @@ smaller), then the two algorithms perform virtually identically. If $\alpha$
 is chosen larger than is optimal, however, then the $\lambda$-return 
 algorithm is only a little worse whereas TD($\lambda$) is much worse 
 and may even be unstable.
+
+
+### Online $\lambda$-return Algorithm
+
+#### Truncated $\lambda$-return
+Lambda return up to a certain horizon is defined as:
+
+$$
+\begin{align*}
+G^{\lambda}_{t:h} &\overset{\cdot}{=} (1 - \lambda)\sum_{n=1}^{h - t - 1}\lambda^{n-1}G_{t:t+n} + \lambda^{h - t - 1}G_{t:h} \tag*{$0 \le t \le h \le T$}
+\end{align*}
+$$
+
+On each time step as you gather a new increment of data, you go back
+and redo all the updates since the beginning of the current episode. 
+The new updates will be better than the ones you previously made because 
+now they can take into account the time step’s new data.
+
+#### Online form
+The online $\lambda$-return algorithm involves multiple passes over the 
+episode, one at each horizon length (i.e. the number of available steps so far), 
+each generating a different sequence of weight vectors. 
+Using the truncated form above, the update rule at each step 
+in the episode is as follows:
+
+$$
+\begin{align*}
+\mathbf{w}^h_{t+1} &\overset{\cdot}{=} \mathbf{w}^h_{t} + \alpha \bigl[G^{\lambda}_{t:h} - \hat{v}(S_t, \mathbf{w}^h_{t}) \bigr] \nabla\hat{v}(S_t, \mathbf{w}^h_{t})  \tag*{$0 \le t \le h \le T$}
+\end{align*}
+$$
+
+where $\mathbf{w}_t \overset{\cdot}{=} \mathbf{w}^t_t$
+
+Here, at each step $h$ during the episode, we generate an $h$ sequence of weights,
+${\mathbf{w}^h_{1}, \mathbf{w}^h_{2}, ..., \mathbf{w}^h_{h}}$. The advantage 
+here is that we can perform better during the episode, whereas the offline 
+algorithm performs none, as it waits till the episode finishes. Moreover, the
+value of the bootstrap term $\hat{v}$ is better, as it is continuously updated,
+thus generating a better estimate at the end of the episode. The shortcoming
+of this approach is its increased complexity.
+
+The following snapshot from the book depicts how the online form looks
+through a run.
+
+<img src="images/online_algo_example.png" alt="Grid" width="350"/>
+
+### True (Online) TD($\lambda$)
+
+The online $\lambda$-return algorithm is the ideal which the online TD($\lambda$)
+approximates. The "truer" form of TD($\lambda$), approximates the onlin e
+$\lambda$-return algorithm better. Just like the less-true variant, it is a 
+backward-view algorithm using eligibility traces. 
+The sequence of weight vectors produced by the online $\lambda$-return algorithm can
+be arranged in a triangle:
+
+<img src="images/online_td_lambda_triangle.png" alt="Grid" width="350"/>
+
+One row of this triangle is produced on each time step. The weight vectors
+on the diagonal, the $\mathbf{w}^{t}_{t}$, are the only ones really needed.
+For the online algorithm, the diagonal weights are used without super-script as
+$\mathbf{w}_{t} \overset{\cdot}{=} \mathbf{w}^{t}_{t}$; where for the linear model
+ $\hat{v}(s, \mathbf{w}) = \mathbf{w}^{\top}\mathbf{x}(s)$. The update
+rule is defined as:
+
+$$
+\begin{align*}
+\mathbf{w}_{t+1} \overset{\cdot}{=} \mathbf{w}_{t} + \alpha \delta_{t} \mathbf{z}_t + \alpha(\mathbf{w}^{\top}_{t}\mathbf{x}(s_t) - \mathbf{w}^{\top}_{t-1}\mathbf{x}(s_t))(\mathbf{z}_t - \mathbf{x}(s_t)) 
+\end{align*}
+$$
+
+where $\delta_t \overset{\cdot}{=} R_{t + 1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_t)$
+just like in the TD($\delta$) algorithm, and:
+
+$$
+\begin{align*}
+\mathbf{z}_{t} \overset{\cdot}{=} \gamma \lambda \mathbf{z}_{t-1} + (1 - \alpha \gamma \lambda \mathbf{z}^{\top}_{t-1}\mathbf{x}(s_t))\mathbf{x}_t
+\end{align*}
+$$
+
+This algorithm generates the same $\mathbf{w}_t$ as the online algorithm, for $0 \le t \le T$.
+
+The memory requirement of the online TD($\lambda$) are the same as TD($\lambda$).
+Same holds for the compute requirements $O(d)$.
+
+<img src="images/true_online_TD_lambda_algo.png" alt="Grid" width="450"/>

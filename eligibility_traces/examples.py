@@ -1,12 +1,14 @@
 """
-    Run the experiment shown on Fig 12.6
+    Generate experiments and their related figures
 """
+
 from joblib import Parallel, delayed
 from itertools import product
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
+from algorithms import TD_lambda, OfflineLambdaReturn, OnlineLambdaReturn
 from random_walk_mrp import MRPX
 
 #region plots
@@ -73,139 +75,6 @@ def plot_multi_curves(
 #endregion plots
 
 
-def feature_extractor(s, n_states):
-    """ Just one-hot the state """
-    assert 0 <= s < n_states
-    x = np.zeros(n_states, dtype=np.float32)
-    x[s] = 1.
-    return x
-
-
-class TD_lambda:
-    def __init__(
-            self,
-            alpha,
-            lam,
-            gamma: float = 0.99,
-            n_states: int = 6):
-
-        self.n_states = n_states
-        self.v = None
-        self.w = None
-        self.z = None
-        self.gamma = gamma
-        self.lam = lam
-        self.alpha = alpha
-
-        self.reset_weights()
-        self.t = 0
-
-    def reset(self):
-        self.t = 0
-        self.z = np.zeros_like(self.w)
-
-    def reset_weights(self):
-        self.w = np.ones(self.n_states, dtype=np.float32) * 0.5 # Per example 7.1
-        self.z = np.zeros_like(self.w)
-
-    def v_fn(self, s):
-        x = feature_extractor(s, self.n_states)
-        return np.dot(x, self.w)
-
-    def step(self, s, r, sp, done):
-
-        x = feature_extractor(s, self.n_states)
-        dv = x
-
-        # Eligibility trace
-        self.z = self.lam * self.gamma * self.z + dv
-
-        # TD error
-        tde = (r + self.gamma * self.v_fn(sp) * (1 - done)) - self.v_fn(s)
-
-        # Update weights
-        self.w = self.w + self.alpha * tde * self.z
-
-
-class OfflineLambdaReturn:
-    def __init__(
-            self,
-            gamma: float,
-            alpha: float,
-            lam: float,
-            n_states: int
-    ):
-        assert 0 <= lam <= 1, f'Expected: 0 <= lam <= 1, got lam={lam}'
-        assert 0 <= alpha <= 1, f'Expected: 0 <= alpha <= 1, got lam={alpha}'
-        assert 0 <= gamma <= 1, f'Expected: 0 <= gamma <= 1, got lam={gamma}'
-        assert n_states > 0
-
-        self.n_states = n_states
-        self.gamma = gamma
-        self.alpha = alpha
-        self.lam = lam
-        self.w = None
-        self.reset_weights()
-        self.t = 0
-        self.buffer = []
-
-    def reset_weights(self):
-        self.w = np.ones(self.n_states, dtype=np.float32) * 0.5 # Per example 7.1
-
-    def reset(self):
-        self.t = 0
-        self.buffer.clear()
-
-    def v_fn(self, s):
-        x = feature_extractor(s, self.n_states)
-        return np.dot(x, self.w)
-
-    def step(self, s, r, sp, done):
-        self.buffer.append((s, r, sp, done))
-        if done:
-            self.learn()
-            self.buffer.clear()
-
-    def learn(self):
-        T = len(self.buffer)
-
-        def Gt_fn(t):
-            assert t >= 0
-
-            if t < T:
-                return sum(
-                    [(self.gamma ** i) * r for i, (s, r, sp, done) in
-                     enumerate(self.buffer[t:])]
-                )
-            else:
-                return 0.
-
-        def Gt_n_fn(t, n):
-            Gt_r = sum([
-                (self.gamma ** i) * r
-                for i, (s, r, sp, done) in enumerate(self.buffer[t:t + n])]
-            )
-
-            return Gt_r + (self.gamma ** n) * self.v_fn(self.buffer[t + n][0])
-
-
-        for t in range(T):
-
-            # ---- (12.3) ----
-            Gtlam = (1. - self.lam) * sum(
-                [
-                    ((self.lam) ** (n - 1)) * Gt_n_fn(t, n)
-                    for n in range(1, T - t)
-                ]
-            ) + (self.lam ** (T - t - 1)) * Gt_fn(t)
-            # --------------
-
-            s = self.buffer[t][0]
-            v = self.v_fn(s)
-            grad_w = feature_extractor(s, n_states=self.n_states)
-            self.w += self.alpha * (Gtlam - v) * grad_w
-
-
 def run_one_experiment(model_type: str, alpha, lam, n_states, n_episodes, true_values, gamma=0.99):
     """
     Run exactly ONE “experiment”:
@@ -230,6 +99,13 @@ def run_one_experiment(model_type: str, alpha, lam, n_states, n_episodes, true_v
             lam=lam,
             gamma=gamma,
             n_states=n_states + 1  # +1 for terminal in MRPX
+        )
+    elif model_type == 'online_lambda':
+        estimator = OnlineLambdaReturn(
+            alpha=alpha,
+            lam=lam,
+            gamma=gamma,
+            n_states=n_states + 1 # +1 if MRPX reserves an extra terminal index
         )
     else:
         raise NotImplemented
@@ -317,6 +193,26 @@ if __name__ == '__main__':
     alphas = np.linspace(0, 1, num=50)
     lambdas = [0., .4, .8, .9, .95, .975, .99, 1.]
 
+    # -- Debug
+    # alphas = np.linspace(0, 1, num=10)
+    # lambdas = [ .9, .95, .975]
+    # --
+
+    # TODO: "online_lambda" takes way too long
+    results = return_figure_parallel(
+        model_type='online_lambda',
+        alphas=alphas,
+        lambdas=lambdas,
+        n_experiments=100,
+        n_episodes=10
+    )
+
+    plot_multi_curves(
+        results,
+        title='Online λ-Return',
+        labels=lambdas,
+        x=alphas)
+
     results = return_figure_parallel(
         model_type='offline_lambda',
         alphas=alphas,
@@ -331,6 +227,7 @@ if __name__ == '__main__':
         labels=lambdas,
         x=alphas)
 
+    # ------- Figure 12.6 -------- #
     results = return_figure_parallel(
         model_type='td_lambda',
         alphas=alphas,
