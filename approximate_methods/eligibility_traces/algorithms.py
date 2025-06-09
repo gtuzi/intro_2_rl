@@ -11,7 +11,7 @@ def feature_extractor(s, n_states):
     return x
 
 
-class TD_lambda:
+class TDLambda:
     def __init__(
             self,
             alpha,
@@ -20,7 +20,6 @@ class TD_lambda:
             n_states: int = 6):
 
         self.n_states = n_states
-        self.v = None
         self.w = None
         self.z = None
         self.gamma = gamma
@@ -223,3 +222,53 @@ class OnlineLambdaReturn:
             v = self.v_fn(s)
             grad_w = feature_extractor(s, n_states=self.n_states)
             self.w += self.alpha * (Gtlam - v) * grad_w
+
+
+class OnlineTDLambda:
+    def __init__(
+            self,
+            alpha,
+            lam,
+            gamma: float = 0.99,
+            n_states: int = 6):
+        self.n_states = n_states
+        self.v_old = None
+        self.w = None
+        self.z = None
+        self.gamma = gamma
+        self.lam = lam
+        self.alpha = alpha
+
+        self.reset_weights()
+        self.t = 0
+
+    def reset(self):
+        self.t = 0
+        self.z = np.zeros_like(self.w)
+        self.v_old = 0
+
+    def reset_weights(self):
+        self.w = np.ones(self.n_states, dtype=np.float32) * 0.5 # Per example 7.1
+        self.z = np.zeros_like(self.w)
+        self.v_old = 0
+
+    def v_fn(self, s):
+        x = feature_extractor(s, self.n_states)
+        return np.dot(x, self.w)
+
+    def step(self, s, r, sp, done):
+
+        v = self.v_fn(s)
+        vp = self.v_fn(sp)
+
+        delta = (r + self.gamma * vp) - v
+
+        x = feature_extractor(s, self.n_states)
+
+        # Eligibility trace
+        self.z = self.lam * self.gamma * self.z + (1 - self.alpha * self.lam * self.gamma * np.matmul(self.z.T, x)) * x
+
+        # Update weights
+        self.w = self.w + self.alpha * (delta + v - self.v_old) * self.z - self.alpha * (v - self.v_old) * x
+
+        self.v_old = vp

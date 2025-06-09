@@ -36,55 +36,68 @@ across environments.
 - [x] Chapter 8: [Planning](tabular_methods/planning/README.md)
 - [x] Chapter 10: [On-Policy Approximation](approximate_methods/on_policy/README.md)
 - [x] Chapter 11: [Off-Policy Approximation](approximate_methods/off_policy/README.md)
+- [x] Chapter 12: [Eligibility Traces](approximate_methods/eligibility_traces/README.md)
 
 
 ## Code Organization
 ```
 intro_2_rl/
 │
-├── README.md          # Project documentation
+├── README.md                       # Project documentation
 │
-├── LICENSE.md         # Project license (MIT)
 │
-├── tabular_methods/       # Tabular methods directory
-│   ├── monte_carlo/       # Source code for Monte Carlo (MC) methods
-│   │   ├── agents.py      # Algorithms from: Ch.5
-│   │   ├── main.py        # Main execution script.
-│   │   ├── summary.ipynb  # Theoretical development.
-│   │   └── README.md      # Detailed information
+├── LICENSE.md                      # Project license (MIT)
+│
+│
+├── tabular_methods/                # Tabular methods directory
+│   ├── monte_carlo/                # Source code for Monte Carlo (MC) methods
+│   │   ├── agents.py               # Algorithms from: Ch.5
+│   │   ├── main.py                 # Main execution script.
+│   │   ├── summary.ipynb           # Theoretical development.
+│   │   └── README.md               # Detailed information
 │   │
-│   ├── td/                # Source code for Temporal Difference (TD) & nStep bootstrapping methods
-│   │   ├── agents.py      # Algorithms from: Ch.6,7
-│   │   ├── main.py        # Main execution script
-│   │   ├── summary.ipynb  # Theoretical development.
-│   │   └── README.md      # Detailed information
+│   ├── td/                         # Source code for Temporal Difference (TD) & nStep bootstrapping methods
+│   │   ├── agents.py               # Algorithms from: Ch.6,7
+│   │   ├── main.py                 # Main execution script
+│   │   ├── summary.ipynb           # Theoretical development.
+│   │   └── README.md               # Detailed information
 │   │
-│   ├── planning/          # Source code for Planning and Learning methods
-│   │   ├── agents.py      # Algorithms from: Ch.8
-│   │   ├── main.py        # Main execution script
-│   │   ├── envMaze.py     # DynaMaze environment
-│   │   ├── rl_glue.py     # Imported library for DynaMaze environment
-│   │   └── README.md      # Detailed information
+│   ├── planning/                   # Source code for Planning and Learning methods
+│   │   ├── agents.py               # Algorithms from: Ch.8
+│   │   ├── main.py                 # Main execution script
+│   │   ├── envMaze.py              # DynaMaze environment
+│   │   ├── rl_glue.py              # Imported library for DynaMaze environment
+│   │   └── README.md               # Detailed information
 │   │
-│   └── utils.py           # Base agents, utilities
+│   └── utils.py                    # Base agents, utilities
 │
-├── approximate_methods/   # Approximate methods directory
-│   ├── off_policy/        # Source code for off_policy methods (initial implementation. Needs debugging)
-│   │   ├── bairds.py      # Bairds counterexample, implemented examples. 
-│   │   ├── summary.ipynb  # Theoretical development.
-│   ├── on_policy/         # Source code for on_policy methods
-│   │   ├── agents.py      # Algorithms from: Ch. 10
-│   │   ├── main.py        # Main execution script.
-│   │   ├── summary.ipynb  # Theoretical development.
-│   │   └── README.md      # Detailed information
+│
+├── approximate_methods/            # Approximate methods directory
+│   ├── off_policy/                 # Source code for off_policy methods (initial implementation. Needs debugging)
+│   │   ├── bairds.py               # Bairds counterexample, implemented examples. 
+│   │   ├── summary.ipynb           # Theoretical development.
 │   │
-│   ├── tiles3.py          # Source code for tile-coding
-│   └── utils.py           # Utilities
+│   ├── on_policy/                  # Source code for on_policy methods
+│   │   ├── agents.py               # Algorithms from: Ch. 10
+│   │   ├── main.py                 # Main execution script.
+│   │   ├── summary.ipynb           # Theoretical development.
+│   │   └── README.md               # Detailed information
+│   │
+│   ├── eligibility_traces/         # Source code for on_policy methods
+│   │   ├── algorithms.py           # Algorithms shown in the random walk examples
+│   │   ├── random_walk_mrp.py      # Random walk environment.
+│   │   ├── examples.py             # Random walk examples runner.
+│   │   ├── summary.ipynb           # Theoretical development.
+│   │   └── README.md               # Detailed information
+│   │
+│   ├── tiles3.py                   # Source code for tile-coding
+│   └── utils.py                    # Utilities
 │
-├── shared/                # Shared code directory
-│   └── utils.py           # Schedules, samplers, experience 
 │
-└── requirements.txt   # Python dependencies
+├── shared/                         # Shared code directory
+│   └── utils.py                    # Schedules, samplers, experience 
+│
+└── requirements.txt                # Python dependencies
 
 ```
 

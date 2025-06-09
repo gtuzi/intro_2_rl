@@ -85,8 +85,6 @@ class MRP5:
 
 class MRPX:
 
-    import tqdm
-
     """
         Random walk / MRP from example 7.1 in the book.
     """

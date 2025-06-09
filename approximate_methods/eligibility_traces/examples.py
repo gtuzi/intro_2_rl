@@ -3,12 +3,16 @@
 """
 
 from joblib import Parallel, delayed
-from itertools import product
-from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
-from algorithms import TD_lambda, OfflineLambdaReturn, OnlineLambdaReturn
+from algorithms import (
+    TDLambda,
+    OfflineLambdaReturn,
+    OnlineLambdaReturn,
+    OnlineTDLambda
+)
+
 from random_walk_mrp import MRPX
 
 #region plots
@@ -75,7 +79,15 @@ def plot_multi_curves(
 #endregion plots
 
 
-def run_one_experiment(model_type: str, alpha, lam, n_states, n_episodes, true_values, gamma=0.99):
+def run_one_experiment(
+        model_type: str,
+        alpha: float,
+        lam: float,
+        n_states: int,
+        n_episodes: int,
+        true_values,
+        gamma: float=0.99
+):
     """
     Run exactly ONE “experiment”:
     - instantiate a fresh MRPX environment
@@ -94,7 +106,7 @@ def run_one_experiment(model_type: str, alpha, lam, n_states, n_episodes, true_v
         )
 
     elif model_type == 'td_lambda':
-        estimator = TD_lambda(
+        estimator = TDLambda(
             alpha=alpha,
             lam=lam,
             gamma=gamma,
@@ -106,6 +118,13 @@ def run_one_experiment(model_type: str, alpha, lam, n_states, n_episodes, true_v
             lam=lam,
             gamma=gamma,
             n_states=n_states + 1 # +1 if MRPX reserves an extra terminal index
+        )
+    elif model_type == 'online_td_lambda':
+        estimator = OnlineTDLambda(
+            alpha=alpha,
+            lam=lam,
+            gamma=gamma,
+            n_states=n_states + 1  # +1 for terminal in MRPX
         )
     else:
         raise NotImplemented
@@ -199,8 +218,9 @@ if __name__ == '__main__':
     # --
 
     # TODO: "online_lambda" takes way too long
+
     results = return_figure_parallel(
-        model_type='online_lambda',
+        model_type='online_td_lambda',
         alphas=alphas,
         lambdas=lambdas,
         n_experiments=100,
@@ -209,7 +229,7 @@ if __name__ == '__main__':
 
     plot_multi_curves(
         results,
-        title='Online λ-Return',
+        title='Online/True TD(λ)',
         labels=lambdas,
         x=alphas)
 

@@ -1,6 +1,8 @@
 [Sutton & Barto RL Book]: http://incompleteideas.net/book/RLbook2020.pdf
 
 
+
+
 # Eligibility Traces
 
 Eligibility traces (ET)s unify and generalize TD and Monte Carlo methods. When TD
@@ -368,9 +370,21 @@ $$
 \end{align*}
 $$
 
-This algorithm generates the same $\mathbf{w}_t$ as the online algorithm, for $0 \le t \le T$.
+The trace used in this algorithm is called the _Dutch trace_, whereas the original
+trace in TD($\lambda$) is referred to as the _accumulating trace_. This 
+algorithm generates the same $\mathbf{w}_t$ as the online algorithm, 
+for $0 \le t \le T$.
 
 The memory requirement of the online TD($\lambda$) are the same as TD($\lambda$).
 Same holds for the compute requirements $O(d)$.
 
 <img src="images/true_online_TD_lambda_algo.png" alt="Grid" width="450"/>
+
+The following shows the run of Online TD($\lambda$):
+
+<img src="images/experiment_fig12.6_online_td_lambda.png" alt="Grid" width="450"/>
+
+### Implementation
+The algorithms presented so far - for the random walk are located in the
+`algorithms.py` module.
+
