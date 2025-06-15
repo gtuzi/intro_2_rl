@@ -1,9 +1,8 @@
 [Sutton & Barto RL Book]: http://incompleteideas.net/book/RLbook2020.pdf
 
-
-
-
 # Eligibility Traces
+
+A cleaner rendering of the formulas is located [here](summary.ipynb)
 
 Eligibility traces (ET)s unify and generalize TD and Monte Carlo methods. When TD
 methods are augmented with ETs, they produce a family of methods spanning
@@ -387,4 +386,51 @@ The following shows the run of Online TD($\lambda$):
 ### Implementation
 The algorithms presented so far - for the random walk are located in the
 `algorithms.py` module.
+
+
+### Sarsa($\lambda$)
+The traces methods can also be used for state-action values 
+$\hat{q}(s, a, \mathbf{w})$. 
+
+Starting from the n-step return definition:
+
+$$
+\begin{align*}
+G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + ... + \gamma^{n-1}R_{t+n} + \gamma^{n}\hat{q}(S_{t+n}, A_{t+n}, \mathbf{w}_{t + n - 1})
+\end{align*}
+$$
+where $G_{t:t+n} = G_t$ for $t+n \ge T$.
+
+The state-action value for the $\lambda$-return can be used for the $\lambda$-return
+algorithm, just like for the state-value approach. The update in this case is:
+$$
+\begin{align*}
+\mathbf{w}_{t + 1} = \mathbf{w}_{t} + \alpha \bigl[G^{\lambda}_{t} - \hat{q}(S_t, A_t, \mathbf{w}_{t}) \bigr] \nabla \hat{q}(S_t, A_t, \mathbf{w}_{t})  
+\end{align*}
+$$
+for $t = 0, 1, ..., T-1$, where, $G^{\lambda}_t \overset{\cdot}{=}G^{\lambda}_{t:\infty}$.
+
+The temporal-difference method for action values Sarsa($\lambda$), approximates
+this forward view. Its update rule is the same as the state-value TD($\lambda$)'s: 
+$\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \delta_{t}\mathbf{z}_t$, where
+the temporal difference error is defined in terms of the state-action values:
+
+$$
+\begin{align*}
+\delta_t = R_{t+1} + \gamma \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w}_t) - \hat{q}(S_{t}, A_{t}, \mathbf{w}_t)   
+\end{align*}
+$$
+
+and the state-action value eligibility trace is defined as:
+
+$$
+\begin{align*}
+\mathbf{z}_{-1} &\overset{\cdot}{=} \mathbf{0} \\
+\mathbf{z}_{t} &= \gamma \lambda \mathbf{z}_{t-1} + \nabla \hat{q}(S_t, A_t, \mathbf{w}_t), \space \space 0 \le t \le T
+\end{align*}
+$$
+
+The pesudocode for Sarsa($\lambda$) is shown below:
+
+<img src="images/Sarsa_lambda.png" alt="Grid" width="550"/>
 
