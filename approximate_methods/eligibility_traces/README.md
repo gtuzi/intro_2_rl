@@ -190,7 +190,7 @@ $$
 \end{align*}
 $$
 
-So here we have the update depending on the value of the current TD erro and
+So here we have the update depending on the value of the current TD error and
 the accumulation of features of past events, i.e. _backward_ view. The 
 prediction algorithm is given as:
 
@@ -433,4 +433,101 @@ $$
 The pesudocode for Sarsa($\lambda$) is shown below:
 
 <img src="images/Sarsa_lambda.png" alt="Grid" width="550"/>
+
+Note that here the authors are highlighting the use-case with binary features.
+This allows for each (active) component of the weights, to either accumulate or replace 
+the trace on reinforcing events. Accumulating traces has longer time span, 
+however it may cause instability in learning. The implementation
+in `agents/SarsaLambda` supports both settings `{accumulate | replace}`.
+Additionally, `{replace_clear}` clears out the trace for other components 
+(cf Figure 12.11). 
+
+Moreover, just like with the true online TD($\lambda$),
+there is a true online Sarsa($\lambda$) variant, with the following pseudocode:
+
+<img src="images/True_online_Sarsa_lambda.png" alt="Grid" width="550"/>
+
+###### Results
+In running the MountainCar environment, the accumulating traces were not 
+stable for certain settings - for Sarsa($\lambda$). 
+On deeper inspection I noticed that larger ET values
+generated larger weight values. As such I used a clipping to avoid `inf` 
+and resulting `NaN` values. The trace replacing method showed to be more stable 
+for both Sarsa($\lambda$).
+Of course, the choice of whether to replace or accumulate traces
+is a hyper-parameter to play around with depending on the 
+environment. For true online Sarsa($\lambda$), this is not a parameter.
+
+As in the book, I am showing the averaged number of steps
+to completion (max horizon 1000 steps) for 50 epochs over 100 trials, where
+$\varepsilon = 0$.
+
+| Traces       | Sarsa($\lambda$)                                                                          | True Online Sarsa($\lambda$)                                                                        |
+|--------------|-------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| Replacing    | <img src="images/SarsaLambda_MountainCar_ReplacingTraces.png" alt="Grid" width="450"/>    | --                                                                                                  |
+| Accumulating | <img src="images/SarsaLambda_MountainCar_AccumulatingTraces.png" alt="Grid" width="450"/> | <img src="images/TrueOnlineSarsaLambda_MountainCar_AccumulatingTraces.png" alt="Grid" width="450"/> |
+
+
+### Variable $\lambda$ and $\gamma$
+In generalizing the TD algorithms, the discounting and bootstrapping parameters
+can be variable {$\lambda_t$, $\gamma_t$} - i.e. at each time step we can 
+have a different value. The bootstrapping parameter can vary its values as
+function of states and actions. The notation becomes: 
+$\lambda \colon \space \mathcal{S} \times \mathcal{A} \to [0,1]$. The
+time variant state-action dependent parameter is thus defined as: 
+$\lambda_t \overset\cdot{=} \lambda(S_t, A_t)$. For the discounting parameter,
+we can vary it as a function of state $\gamma \colon \space \mathcal{S} \to [0, 1]$
+where the time variable parameter is defined as 
+$\gamma_t \overset\cdot{=} \gamma(S_t)$. The _function_ $\gamma$, called the 
+_termination function_, is important as it affects the return 
+(sum of discounted rewards), the random variable we are trying to estimate.
+
+
+###### Variable Discounting
+With these notations the (variable) discounted return is (re)defined as:
+
+$$
+\begin{align*}
+G_t & \overset \cdot{=} R_{t+1} + \gamma_{t+1}G_{t+1} \\
+& = R_{t+1} + \gamma_{t+1} R_{t+2} +  \gamma_{t+1} \gamma_{t+2} R_{t+3} + \gamma_{t+1} \gamma_{t+2} \gamma_{t+3} R_{t+4} + \dots \\
+& = \sum_{k = t} ^{\infty}\bigr(\prod_{i=t+1} ^{k} \gamma_{i} \bigl)R_{k+1}
+\end{align*}
+$$
+
+where it is required that $\prod_{k=t}^{\infty}\gamma_{k} = 0$, 
+with probability 1, so that the sums above are finite. 
+This definition enables the episodic setting and its algorithms to 
+be presented in terms of a single stream of experience, without special 
+terminal states, start distributions, or termination times. A terminal state
+becomes a state at which $\gamma(s) = 0$ and which transitions to the start 
+distribution. 
+
+Using a constant $\gamma(\cdot) = c$ the classical episodic setting
+is recovered, thus making it a special case. _State dependent termination_ (SDT)
+includes other prediction cases such as _pseudo termination_, in which we 
+seek to predict a quantity without altering the flow of the Markov process. 
+SDTs unify episodic with discounted-continuing cases.
+
+
+###### Variable Bootstrapping
+The generalization to variable bootstrapping is a change in the solution 
+strategy. The generalization affects the $\lambda$-returns for states 
+and actions. The two forms (state values & action values) are recursively 
+defined as follows:
+
+$$
+\begin{align*}
+G_t^{\lambda s} & \overset \cdot{=} R_{t+1} + \gamma_{t+1}\bigl((1 - \lambda_{t+1}) \hat{v}(S_{t+1}, \mathbf{w}_t) + \lambda_{t+1}G_{t+1}^{\lambda s} \bigr) \\
+G_t^{\lambda a} & \overset \cdot{=} R_{t+1} + \gamma_{t+1}\bigl((1 - \lambda_{t+1}) \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w}_t) + \lambda_{t+1}G_{t+1}^{\lambda a} \bigr) \tag{Sarsa} \\
+G_t^{\lambda a} & \overset \cdot{=} R_{t+1} + \gamma_{t+1}\bigl((1 - \lambda_{t+1}) \bar{V}_{t}(S_{t+1}) + \lambda_{t+1}G_{t+1}^{\lambda a} \bigr) \tag{Expected Sarsa}
+\end{align*}
+$$
+
+where for the Expected Sarsa we have: $\hat{V}_{t}(s) \overset \cdot{=} \sum_{a} \pi(a|s)\hat{q}(s, a, \mathbf{w}_t)$
+
+
+### Off-Policy Traces with Control Variates
+
+TBD
+
 
