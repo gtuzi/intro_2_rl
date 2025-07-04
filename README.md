@@ -53,13 +53,13 @@ intro_2_rl/
 │   ├── monte_carlo/                # Source code for Monte Carlo (MC) methods
 │   │   ├── agents.py               # Algorithms from: Ch.5
 │   │   ├── main.py                 # Main execution script.
-│   │   ├── summary.ipynb           # Theoretical development.
+│   │   ├── summary.ipynb           # Theoretical development (better rendering).
 │   │   └── README.md               # Detailed information
 │   │
 │   ├── td/                         # Source code for Temporal Difference (TD) & nStep bootstrapping methods
 │   │   ├── agents.py               # Algorithms from: Ch.6,7
 │   │   ├── main.py                 # Main execution script
-│   │   ├── summary.ipynb           # Theoretical development.
+│   │   ├── summary.ipynb           # Theoretical development (better rendering).
 │   │   └── README.md               # Detailed information
 │   │
 │   ├── planning/                   # Source code for Planning and Learning methods
@@ -80,14 +80,16 @@ intro_2_rl/
 │   ├── on_policy/                  # Source code for on_policy methods
 │   │   ├── agents.py               # Algorithms from: Ch. 10
 │   │   ├── main.py                 # Main execution script.
-│   │   ├── summary.ipynb           # Theoretical development.
+│   │   ├── summary.ipynb           # Theoretical development (better rendering).
 │   │   └── README.md               # Detailed information
 │   │
 │   ├── eligibility_traces/         # Source code for on_policy methods
 │   │   ├── algorithms.py           # Algorithms shown in the random walk examples
 │   │   ├── random_walk_mrp.py      # Random walk environment.
 │   │   ├── examples.py             # Random walk examples runner.
-│   │   ├── summary.ipynb           # Theoretical development.
+│   │   ├── agents.py               # Implementation of agents (eg. Sarsa).
+│   │   ├── main.py                 # Main running script of agents.
+│   │   ├── summary.ipynb           # Theoretical development (better rendering).
 │   │   └── README.md               # Detailed information
 │   │
 │   ├── tiles3.py                   # Source code for tile-coding
