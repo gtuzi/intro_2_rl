@@ -341,13 +341,9 @@ Implementation of TTD($\lambda$) is in `algorithms/TTDLambda`. Below
 I am generating the same graphs (i.e. experiments) as those generated
 for TD($\lambda$) above using the 19-state random walk environment.
 
-| $n$ |                                                                |
-|-----|----------------------------------------------------------------|
-| 1   | <img src="images/ttd_lambda_n_1.png" alt="Grid" width="250"/>  |
-| 5   | <img src="images/ttd_lambda_n_5.png" alt="Grid" width="250"/>  |
-| 10  | <img src="images/ttd_lambda_n_10.png" alt="Grid" width="250"/> |
-| 20  | <img src="images/ttd_lambda_n_20.png" alt="Grid" width="250"/> |
-| 40  | <img src="images/ttd_lambda_n_40.png" alt="Grid" width="250"/> |
+| <img src="images/ttd_lambda_n_1.png" alt="Grid" width="250"/>  | <img src="images/ttd_lambda_n_5.png" alt="Grid" width="250"/>  | <img src="images/ttd_lambda_n_10.png" alt="Grid" width="250"/> |
+|----------------------------------------------------------------|----------------------------------------------------------------|----------------------------------------------------------------|
+| <img src="images/ttd_lambda_n_20.png" alt="Grid" width="250"/> | <img src="images/ttd_lambda_n_40.png" alt="Grid" width="250"/> |
 
 As we can see, for longer step sizes the estimate becomes more accurate, but 
 it also becomes more sensitive to the learning rate / step size $\alpha$.
