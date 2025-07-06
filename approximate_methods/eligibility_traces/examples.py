@@ -5,9 +5,11 @@
 from joblib import Parallel, delayed
 import numpy as np
 import matplotlib.pyplot as plt
+from typing_extensions import Optional
 
 from algorithms import (
     TDLambda,
+    TTDLambda,
     OfflineLambdaReturn,
     OnlineLambdaReturn,
     OnlineTDLambda
@@ -86,7 +88,8 @@ def run_one_experiment(
         n_states: int,
         n_episodes: int,
         true_values,
-        gamma: float=0.99
+        gamma: float=0.99,
+        n_steps: Optional[int] = None,
 ):
     """
     Run exactly ONE “experiment”:
@@ -110,6 +113,14 @@ def run_one_experiment(
             alpha=alpha,
             lam=lam,
             gamma=gamma,
+            n_states=n_states + 1  # +1 for terminal in MRPX
+        )
+    elif model_type == 'ttd_lambda':
+        estimator = TTDLambda(
+            alpha=alpha,
+            lam=lam,
+            gamma=gamma,
+            n_steps=n_steps,
             n_states=n_states + 1  # +1 for terminal in MRPX
         )
     elif model_type == 'online_lambda':
@@ -151,12 +162,13 @@ def run_one_experiment(
     return float(np.mean(rms_errors))
 
 
-def return_figure_parallel(
+def experiments_parallel(
         model_type: str,
         alphas,
         lambdas,
         n_experiments: int,
-        n_episodes: int = 10
+        n_episodes: int = 10,
+        n_steps: Optional[int] = None
 ):
     """
     Exactly the same overall structure as your original, except:
@@ -192,6 +204,7 @@ def return_figure_parallel(
                     alpha=alpha,
                     lam=lam,
                     n_states=n_states,
+                    n_steps=n_steps,
                     n_episodes=n_episodes,
                     true_values=true_values,
                     gamma=0.99
@@ -212,14 +225,25 @@ if __name__ == '__main__':
     alphas = np.linspace(0, 1, num=50)
     lambdas = [0., .4, .8, .9, .95, .975, .99, 1.]
 
-    # -- Debug
-    # alphas = np.linspace(0, 1, num=10)
-    # lambdas = [ .9, .95, .975]
-    # --
-
     # TODO: "online_lambda" takes way too long
 
-    results = return_figure_parallel(
+    for n_steps in [1, 5, 10, 20, 40]:
+        results = experiments_parallel(
+            model_type='ttd_lambda',
+            alphas=alphas,
+            lambdas=lambdas,
+            n_experiments=100,
+            n_episodes=10,
+            n_steps=n_steps
+        )
+
+        plot_multi_curves(
+            results,
+            title=f'TTD(λ): n = {n_steps}',
+            labels=lambdas,
+            x=alphas)
+
+    results = experiments_parallel(
         model_type='online_td_lambda',
         alphas=alphas,
         lambdas=lambdas,
@@ -233,7 +257,7 @@ if __name__ == '__main__':
         labels=lambdas,
         x=alphas)
 
-    results = return_figure_parallel(
+    results = experiments_parallel(
         model_type='offline_lambda',
         alphas=alphas,
         lambdas=lambdas,
@@ -248,7 +272,7 @@ if __name__ == '__main__':
         x=alphas)
 
     # ------- Figure 12.6 -------- #
-    results = return_figure_parallel(
+    results = experiments_parallel(
         model_type='td_lambda',
         alphas=alphas,
         lambdas=lambdas,

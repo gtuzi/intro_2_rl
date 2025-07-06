@@ -1,4 +1,6 @@
 [Sutton & Barto RL Book]: http://incompleteideas.net/book/RLbook2020.pdf
+[Seijen 2016]: https://arxiv.org/pdf/1512.04087 
+
 
 # Eligibility Traces
 
@@ -294,7 +296,7 @@ and may even be unstable.
 
 ### Online $\lambda$-return Algorithm
 
-#### Truncated $\lambda$-return
+#### $n$-step Truncated $\lambda$-return
 Lambda return up to a certain horizon is defined as:
 
 $$
@@ -303,13 +305,64 @@ G^{\lambda}_{t:h} &\overset{\cdot}{=} (1 - \lambda)\sum_{n=1}^{h - t - 1}\lambda
 \end{align*}
 $$
 
-On each time step as you gather a new increment of data, you go back
-and redo all the updates since the beginning of the current episode. 
-The new updates will be better than the ones you previously made because 
-now they can take into account the time step’s new data.
+The $n$-step truncated $\lambda$-return is defined as $G^{\lambda}_{t:n}$. 
+The updates are delayed by $n$ steps and only take  into account the first 
+$n$ rewards. Note that for the $n$-step return $G_{t:n}$ we only use the 
+$n$-step return, whereas for $G^{\lambda}_{t:n}$ we use the - geometrically 
+weighted $(1 - \lambda)\lambda^{k}$ - sum of 
+$G^{\lambda}_{t:k}$ for $1 \le k \le n$. The longest component update is 
+$n$-steps long, unlike the $\lambda$-return which goes all the way to the 
+end of the episode. Just like with $n$-step bootstrapping, this formulation 
+gives rise to $n$-step truncation of TD($\lambda$), or TTD($\lambda$), 
+which is defined as:
 
-#### Online form
-The online $\lambda$-return algorithm involves multiple passes over the 
+$$
+\begin{align*}
+\mathbf{w}_{t+n} &\overset{\cdot}{=} \mathbf{w}_{t+n-1} + \alpha \bigl(G^{\lambda}_{t:t+n} - \hat{v}(S_{t}, \mathbf{w}_{t+n-1}) \bigr)\nabla_{\mathbf{w}}\hat{v}(S_{t}, \mathbf{w}_{t+n-1}) \tag{$0 \le t \le T$}
+\end{align*}
+$$
+
+Just like the n-step TD methods, the updates are delayed by n-1 steps for each 
+episode, and upon termination n-1 updates are performed. Instead of 
+scaling with $n$, efficient implementations exploit the following 
+recursive formulation:
+
+$$
+\begin{align*}
+G^{\lambda}_{t:t+n} = \hat{v}(S_t, \mathbf{w}_{t-1}) + \sum_{i = t}^{t + k - 1}(\gamma \lambda)^{i - t}\delta^{'}_{i}
+\end{align*}
+$$
+
+_Note_: $\hat{v}(S_t, \cdot)$ is the value at the _beginning_ of the horizon. 
+
+where: $\delta^{'}_{i} \overset\cdot{=} R_{t+1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_{t-1})$
+
+Implementation of TTD($\lambda$) is in `algorithms/TTDLambda`. Below
+I am generating the same graphs (i.e. experiments) as those generated
+for TD($\lambda$) above using the 19-state random walk environment.
+
+| $n$ |                                                                |
+|-----|----------------------------------------------------------------|
+| 1   | <img src="images/ttd_lambda_n_1.png" alt="Grid" width="250"/>  |
+| 5   | <img src="images/ttd_lambda_n_5.png" alt="Grid" width="250"/>  |
+| 10  | <img src="images/ttd_lambda_n_10.png" alt="Grid" width="250"/> |
+| 20  | <img src="images/ttd_lambda_n_20.png" alt="Grid" width="250"/> |
+| 40  | <img src="images/ttd_lambda_n_40.png" alt="Grid" width="250"/> |
+
+As we can see, for longer step sizes the estimate becomes more accurate, but 
+it also becomes more sensitive to the learning rate / step size $\alpha$.
+
+#### The online form of $\lambda$-return
+"The concept of an online forward view contains a paradox. On the one hand, 
+multi-step update targets require data from time steps far beyond the 
+time a state is visited; on the other hand, the online aspect requires that 
+the value of a visited state is updated immediately. The solution to this 
+paradox is to assign a sequence of update targets to each visited state. 
+The first update target in this sequence contains data from only the next 
+time step, the second contains data from the next two time steps, the third 
+from the next three time steps, and so on." [Seijen 2016] - c.f.: 3.1
+
+The online (multi-step) $\lambda$-return algorithm involves multiple passes over the 
 episode, one at each horizon length (i.e. the number of available steps so far), 
 each generating a different sequence of weight vectors. 
 Using the truncated form above, the update rule at each step 

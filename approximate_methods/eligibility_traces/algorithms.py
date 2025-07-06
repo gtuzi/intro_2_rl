@@ -1,4 +1,6 @@
+import copy
 from copy import deepcopy
+from os import wait3
 
 import numpy as np
 
@@ -12,6 +14,9 @@ def feature_extractor(s, n_states):
 
 
 class TDLambda:
+    """
+        Section: 12.2
+    """
     def __init__(
             self,
             alpha,
@@ -54,6 +59,85 @@ class TDLambda:
 
         # Update weights
         self.w = self.w + self.alpha * tde * self.z
+
+
+class TTDLambda:
+    """
+        Section: 12.3
+    """
+    def __init__(
+            self,
+            alpha,
+            lam,
+            n_steps,
+            gamma: float = 0.99,
+            n_states: int = 6):
+
+        self.n_states = n_states
+        self.w = None
+        self.wold = None
+        self.z = None
+        self.n_steps = n_steps
+        self.gamma = gamma
+        self.lam = lam
+        self.alpha = alpha
+        self.buffer = []
+
+        self.reset_weights()
+        self.t = 0
+
+    def reset(self):
+        self.t = 0
+        self.z = np.zeros_like(self.w)
+        self.buffer = []
+
+    def reset_weights(self):
+        self.t = 0
+        self.w = np.ones(self.n_states, dtype=np.float32) * 0.5 # Per example 7.1
+        self.wold = copy.deepcopy(self.w)
+        self.z = np.zeros_like(self.w)
+        self.buffer = []
+
+    def v_fn(self, s):
+        x = feature_extractor(s, self.n_states)
+        return np.dot(x, self.w)
+
+    def step(self, s, r, sp, done):
+        self.t += 1
+        x = feature_extractor(s, self.n_states)
+        xp = feature_extractor(sp, self.n_states)
+
+        # Note the different weights being used here
+        vold = np.dot(x, self.wold)
+        v = np.dot(x, self.w)
+        vp = np.dot(xp, self.w)
+
+        td_error = r + self.gamma * vp * (1 - done) - vold
+        self.buffer.append(dict(td_error=td_error, v=v, vold=vold, vp=vp, grad_w=x))
+
+        if self.t >= self.n_steps:
+            self.learn()
+            _ = self.buffer.pop(0)  # Old falls outside n-th step
+
+        while done and (len(self.buffer) > 0):
+            self.learn()
+            _ = self.buffer.pop(0)
+
+    def learn(self):
+        v, vold, grad_w =  (
+            self.buffer[0]['v'],
+            self.buffer[0]['vold'],
+            self.buffer[0]['grad_w']
+        )
+
+        G = vold + sum([
+            ((self.gamma * self.lam) ** i) * be['td_error']
+            for i, be in enumerate(self.buffer)
+        ])
+
+        # Update weights
+        self.wold = copy.deepcopy(self.w)
+        self.w += self.alpha * (G - v) * grad_w
 
 
 class OfflineLambdaReturn:
