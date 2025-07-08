@@ -169,7 +169,8 @@ a $\gamma \lambda$ factor over time.
 $$
 \begin{align*}
 \mathbf{z}_{-1} &\overset{\cdot}{=} \mathbf{0} \\
-\mathbf{z}_{t} &= \gamma \lambda \mathbf{z}_{t-1} + \nabla_{\mathbf{w}} \hat{v}(S_t, \mathbf{w}_t), \;\; 0 \le t \le T   
+\mathbf{z}_{t} &= \gamma \lambda \mathbf{z}_{t-1} + \nabla_{\mathbf{w}} \hat{v}(S_t, \mathbf{w}_t), \;\; \; 0 \le t \le T \\
+\mathbf{z}_{t} &= \sum_{k=0}^{t}(\gamma \lambda)^{t - k} \nabla_{\mathbf{w}}\hat{v}(S_k, \mathbf{w}) \tag{if we don't update the weight}
 \end{align*}
 $$
 
@@ -254,6 +255,38 @@ $$
 
 Note that TD error here is conditioned on fixed $\mathbf{w}_t$
 
+
+###### Exercise 12.4: Going from forward to backward view: *approximate* equivalence between TD($\lambda$) and offline $\lambda$-return algorithm
+Show that if the weight
+updates over an episode were computed on each step but not actually used to 
+change the weights ($\mathbf{w}$ remained fixed), then the sum of 
+TD($\lambda$)’s weight updates would be the same as the sum of the 
+offline $\lambda$-return algorithm’s updates
+
+We know:
+
+* $\mathbf{z}_{t} = \sum_{k=0}^{t}(\gamma \lambda)^{t - k} \nabla_{\mathbf{w}}\hat{v}(S_k, \mathbf{w}) \tag{if we don't update the weight}$
+* Sum of updates: $\sum_{t=0}^{T - 1}\delta_t(\sum_{k=0}^{t}(\gamma \lambda)^{t - k} \nabla_{\mathbf{w}}\hat{v}(S_k, \mathbf{w}) \tag{if we don't update the weight})$
+* $G^{\lambda}_t - \hat{v}(S_t, \mathbf{w}_t) = \sum_{i=t}^{T-1}\gamma^{i - t}\delta_i$
+* $\bigl[G^{\lambda}_t - \hat{v}(S_t, \mathbf{w}_t) \bigr]\nabla_{\mathbf{w}}\hat{v}(S_t, \mathbf{w}_t)$
+* Sum of updates: $\sum_{t = 0} ^ {T - 1}\bigl[G^{\lambda}_t - \hat{v}(S_t, \mathbf{w}) \bigr]\nabla_{\mathbf{w}}\hat{v}(S_t, \mathbf{w})$
+
+We want to show:$\sum_{t = 0} ^ {T - 1}\bigl[G^{\lambda}_t - \hat{v}(S_t, \mathbf{w}) \bigr]\nabla_{\mathbf{w}}\hat{v}(S_t, \mathbf{w}) = \sum_{t=0}^{T - 1}\delta_t(\sum_{k=0}^{t}(\gamma \lambda)^{t - k} \nabla_{\mathbf{w}}\hat{v}(S_k, \mathbf{w}) \tag{if we don't update the weight})$
+
+Since we're not updating the weight for this exercise, I'm omitting it 
+from the notation for simplicity. $\nabla\hat{v}(s) = \nabla_{\mathbf{w}}\hat{v}(s, \mathbf{w})$
+
+$$
+\begin{align*}
+\sum_{k = 0}^{T-1}[G^{\lambda}_{k} - \hat{v}(S_k)]\nabla \hat{v}(S_k) &= \sum_{k=0}^{T-1}\nabla \hat{v}(S_k)\Bigl(\sum_{i = k} ^ {T-1}\gamma^{i-k}\delta_{i} \Bigr) \\
+&= \sum_{k = 0} ^ {T-1}\sum_{i = k}^{T-1}\gamma^{i - k}\delta_{i} \nabla\hat{v}(S_k) \\
+&= \sum_{i = 0}^{T-1}\sum_{k = 0}^{i} \gamma^{i - k}\delta_{i} \nabla\hat{v}(S_k) \tag{index switch} \\
+&= \sum_{i = 0} ^{T-1}\delta_{i}\Bigl(\sum_{k = 0} ^ {i} \gamma^{i-k} \nabla\hat{v}(S_k) \Bigr)
+\end{align*}
+$$
+
+However, since we are indeed updating the weights online (i.e. at every step)
+with TD($\lambda$), this is not an exact equivalence between the two methods.
 
 ##### Fig 12.6: Compare TD($\lambda$) vs Offline $\lambda$-return Algorithm
 
@@ -373,8 +406,10 @@ $$
 where $\mathbf{w}_t \overset{\cdot}{=} \mathbf{w}^t_t$
 
 Here, at each step $h$ during the episode, we generate an $h$ sequence of weights,
-${\mathbf{w}^h_{1}, \mathbf{w}^h_{2}, ..., \mathbf{w}^h_{h}}$. The advantage 
-here is that we can perform better during the episode, whereas the offline 
+${\mathbf{w}^h_{1}, \mathbf{w}^h_{2}, ..., \mathbf{w}^h_{h}}$. Note that
+$\mathbf{w}_{0}^{h}$ is the weight _inherited from the previous episode_. The 
+last weight $\mathbf{w}^{h}_{h}$ is the final weight determined by the algorithm. 
+The advantage here is that we can perform better during the episode, whereas the offline 
 algorithm performs none, as it waits till the episode finishes. Moreover, the
 value of the bootstrap term $\hat{v}$ is better, as it is continuously updated,
 thus generating a better estimate at the end of the episode. The shortcoming
@@ -385,10 +420,11 @@ through a run.
 
 <img src="images/online_algo_example.png" alt="Grid" width="350"/>
 
-### True (Online) TD($\lambda$)
+### True Online TD($\lambda$)
 
 The online $\lambda$-return algorithm is the ideal which the online TD($\lambda$)
-approximates. The "truer" form of TD($\lambda$), approximates the onlin e
+approximates (also as we showed on Exercise 12.4). 
+The "truer" form of TD($\lambda$), approximates the online
 $\lambda$-return algorithm better. Just like the less-true variant, it is a 
 backward-view algorithm using eligibility traces. 
 The sequence of weight vectors produced by the online $\lambda$-return algorithm can
@@ -517,7 +553,7 @@ $\varepsilon = 0$.
 | Accumulating | <img src="images/SarsaLambda_MountainCar_AccumulatingTraces.png" alt="Grid" width="450"/> | <img src="images/TrueOnlineSarsaLambda_MountainCar_AccumulatingTraces.png" alt="Grid" width="450"/> |
 
 
-### Variable $\lambda$ and $\gamma$
+### Variable $\lambda$ and $\gamma$: generalize the degree of bootstrapping and discounting
 In generalizing the TD algorithms, the discounting and bootstrapping parameters
 can be variable {$\lambda_t$, $\gamma_t$} - i.e. at each time step we can 
 have a different value. The bootstrapping parameter can vary its values as
@@ -576,7 +612,67 @@ where for the Expected Sarsa we have: $\hat{V}_{t}(s) \overset \cdot{=} \sum_{a}
 
 
 ### Off-Policy Traces with Control Variates
+As of the writing of the 2nd edition, 2020 edition of the book, 
+there is no way to incorporate (naiive) importance sampling 
+$\rho_{t:T} = \prod_{k=t}^{T-1}\frac{\pi(A_k | S_k)}{b(A_k | S_k)}$ to the un-truncated target returns $G_{t}^{\lambda}$.
+Instead, per-decision importance sampling (IS) with control variate is used.
 
-TBD
+$$
+\begin{align*}
+G_{t}^{\lambda s} \overset\cdot{=} \rho_t \bigl[R_{t+1} + \gamma_{t+1} \bigl( (1-\lambda_{t+1})\hat{v}(S_{t+1}, \mathbf{w}_t)) + \lambda_{t+1} G_{t+1}^{\lambda s} \bigr) \bigr] + (1 - \rho_t)\hat{v}(S_t, \mathbf{w}_t)
+\end{align*}
+$$
 
+where: $\rho_t = \frac{\pi(A_t | S_t)}{b(A_t | S_t)}$ is the single-step IS 
+ratio. The (untruncated) $\lambda$-return can be approximated in terms of the
+sum of TD-errors:
+
+$\delta_t^{s} \overset \cdot{=} R_{t+1} + \gamma_{t+1}\hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_t)$
+
+as:
+
+$G_{t}^{\lambda s} \approx \hat{v}(S_t, \mathbf{w}_t) + \rho_t \sum_{k = t}^{\infty}\delta_{k}^{s}\prod_{i=t+1}^{k}\gamma_{i}\lambda_{i}\rho_{i}$
+
+The semi-gradient update rule is:
+$$
+\begin{align*}
+\mathbf{w}_{t+1} &= \mathbf{w}_t + \alpha(G^{\lambda s}_{t} - \hat{v}(S_t, \mathbf{w}_t))\nabla_{\mathbf{w}_t}\hat{v}(S_t, \mathbf{w}_t) \\
+&\approx  \mathbf{w}_t + \alpha \Bigl(\rho_t  \sum_{k = t}^{\infty}\delta_{k}^{s}\prod_{i=t+1}^{k}\gamma_{i}\lambda_{i}\rho_{i} \Bigr)\nabla_{\mathbf{w}_t}\hat{v}(S_t, \mathbf{w}_t)
+\end{align*}
+$$
+
+The authors leverage the sum of updates $\sum_{t=0}^\infty \mathbf{w}_{t+1} - \mathbf{w}_t$
+to derive the general accumulating trace:
+
+$\mathbf{z}_{t} \overset \cdot{=} \rho_t(\gamma_t \lambda_t \mathbf{z}_{t-1} +\nabla_{\mathbf{w}_t}\hat{v}(S_t, \mathbf{w}_t))$
+
+The eligibility traces are used in the update rule the same way as in 
+the TD($\lambda$):
+
+$\mathbf{w}_{t+1} = \mathbf{w}_t + \alpha \delta_t^{s} \mathbf{z}_t$
+
+This forms a _general form for TD($\lambda$)_ which can be applied to 
+on or off policy.
+
+* On-policy: $\rho_t = 1$, and we get the original TD($\lambda$) with variable $\gamma_t$ and $\lambda_t$
+* Off-policy: the algorithm often works well, but it's not guaranteed to be stable.
+
+We can use the same steps to derive the off-policy traces for the 
+(state) action values, which would be used in the generalized off-policy 
+Sarsa($\lambda$) algorithms.
+
+$$
+\begin{align*}
+G_{t}^{\lambda a} &\overset \cdot{=} R_{t+1} + \gamma_{t+1} \Bigl( \bigl( 1 - \lambda_{t+1} \bigr) \bar{V}_t(S_{t+1}) + \lambda_{t+1} \bigl(\rho_{t+1} G_{t+1}^{\lambda a} + \bar{V}_t(S_{t+1}) - \rho_{t+1} \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w}_t)  \bigr) \Bigr) \\
+&= R_{t+1} + \gamma_{t+1} \Bigl(\bar{V}_t(S_{t+1}) + \lambda_{t+1} \rho_{t+1} \bigl(G_{t+1}^{\lambda a} - \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w}_t) \bigr) \Bigr)
+\end{align*}
+$$
+
+where: $\bar{V}_t(S_t) = \sum_{a}\pi(a | S_t) \hat{q}(S_t, a, \mathbf{w}_t)$
+
+For the off-policy Expected Sarsa we have the following:
+* $\delta_t ^{a} = R_{t+1} - \gamma_{t+1}\bar{V}_t(S_{t+1}) - \hat{q}(S_t, A_t, \mathbf{w}_t)$
+* $\mathbf{z}_{t} = \gamma_t \lambda_t \rho_t \mathbf{z}_{t - 1} + \nabla_{\mathbf{w}_t}\hat{q}(S_t, A_t, \mathbf{w}_t)$
+
+With the usual weight update rule (see above).
 
