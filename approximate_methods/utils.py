@@ -39,7 +39,7 @@ class LinearQEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
             self,
             feature_size: int,
             action_space_dims: int,
-            discount: float,
+            discount: Union[float, Callable[[Any, ], float]],
             feature_fn: Callable[[Any, int], np.ndarray], # state, action(int) --> np.ndarray
             eps: Union[float, NoiseSchedule] = 0.01
     ):

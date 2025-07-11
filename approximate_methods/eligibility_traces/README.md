@@ -642,23 +642,35 @@ $$
 $$
 
 The authors leverage the sum of updates $\sum_{t=0}^\infty \mathbf{w}_{t+1} - \mathbf{w}_t$
-to derive the general accumulating trace:
+to derive the general accumulating trace $\mathbf{z}_t$. The summation (LHS)
+is an approximation to the RHS because the updates to the value 
+function $\hat{v}$ are being ignored.
 
-$\mathbf{z}_{t} \overset \cdot{=} \rho_t(\gamma_t \lambda_t \mathbf{z}_{t-1} +\nabla_{\mathbf{w}_t}\hat{v}(S_t, \mathbf{w}_t))$
+$$
+\begin{align*}
+\sum_{t=0}^\infty \mathbf{w}_{t+1} - \mathbf{w}_t & \approx \sum_{t=0}^\infty  \sum_{k = t}^{\infty} \alpha \rho_t \nabla\hat{v}(S_t, \mathbf{w}_t) \delta_{k}^{s} \prod_{i=t+1}^{k}\gamma_{i}\lambda_{i}\rho_{i} \tag{forward view} \\
+&= \sum_{k = 0} ^ {\infty} \alpha \delta_{k}^{s} \sum_{t = 0}^{k} \rho_t  \nabla\hat{v}(S_t, \mathbf{w}_t) \prod_{i=t+1}^{k}\gamma_{i}\lambda_{i}\rho_{i} \tag{backward view}\\
+&= \sum_{k = 0} ^ {\infty} \alpha \delta_{k}^{s} \mathbf{z}_k \\
+&= \sum_{k = 0} ^ {\infty} \alpha \delta_{k}^{s} \Bigl(\gamma_k \lambda_k \rho_k \sum_{t = 0}^{k - 1}\rho_t \nabla \hat{v}(S_t, \mathbf{w}_t) \prod_{i=t+1}^{k-1}\gamma_{i}\lambda_{i}\rho_{i} + \rho_k \nabla\hat{v}(S_k, \mathbf{w}_k) \Bigr) \\
+&= \sum_{k = 0} ^ {\infty} \alpha \delta_{k}^{s} \bigl(\rho_k (\gamma_k \lambda_k \mathbf{z}_{k-1} - \nabla\hat{v}(S_k, \mathbf{w}_k)) \bigr) \tag{recursive relationship of the backward view} \\
+&= \sum_{t = 0} ^ {\infty} \alpha \delta_{t}^{s} \bigl(\rho_t (\gamma_t \lambda_t \mathbf{z}_{t-1} - \nabla\hat{v}(S_t, \mathbf{w}_t)) \bigr) \tag{equivalent index notation change} \\
+\end{align*}
+$$
 
-The eligibility traces are used in the update rule the same way as in 
-the TD($\lambda$):
+This eligibility trace,
+along with the original update rule of TD($\lambda$) forms the on/off policy 
+_generalized_ form of TD($\lambda$):
 
-$\mathbf{w}_{t+1} = \mathbf{w}_t + \alpha \delta_t^{s} \mathbf{z}_t$
+* General accumulating trace: $\mathbf{z}_{t} \overset \cdot{=} \rho_t(\gamma_t \lambda_t \mathbf{z}_{t-1} +\nabla_{\mathbf{w}_t}\hat{v}(S_t, \mathbf{w}_t))$
+* Semi-gradient parameter update rule (ref: $(12.7)$): $\mathbf{w}_{t+1} = \mathbf{w}_t + \alpha \delta_t^{s} \mathbf{z}_t$
 
-This forms a _general form for TD($\lambda$)_ which can be applied to 
-on or off policy.
-
+Where for:
 * On-policy: $\rho_t = 1$, and we get the original TD($\lambda$) with variable $\gamma_t$ and $\lambda_t$
 * Off-policy: the algorithm often works well, but it's not guaranteed to be stable.
 
+###### Off-Policy Expected Sarsa($\lambda$)
 We can use the same steps to derive the off-policy traces for the 
-(state) action values, which would be used in the generalized off-policy 
+state-action values, which would be used in the generalized off-policy 
 Sarsa($\lambda$) algorithms.
 
 $$
@@ -671,8 +683,66 @@ $$
 where: $\bar{V}_t(S_t) = \sum_{a}\pi(a | S_t) \hat{q}(S_t, a, \mathbf{w}_t)$
 
 For the off-policy Expected Sarsa we have the following:
-* $\delta_t ^{a} = R_{t+1} - \gamma_{t+1}\bar{V}_t(S_{t+1}) - \hat{q}(S_t, A_t, \mathbf{w}_t)$
-* $\mathbf{z}_{t} = \gamma_t \lambda_t \rho_t \mathbf{z}_{t - 1} + \nabla_{\mathbf{w}_t}\hat{q}(S_t, A_t, \mathbf{w}_t)$
+* $\delta_t ^{a} = R_{t+1} + \gamma_{t+1}\bar{V}_t(S_{t+1}) - \hat{q}(S_t, A_t, \mathbf{w}_t)$ $\; \; \; \; ref \; (12.28)$
+* $\mathbf{z}_{t} = \rho_t \gamma_t \lambda_t \mathbf{z}_{t - 1} + \nabla_{\mathbf{w}_t}\hat{q}(S_t, A_t, \mathbf{w}_t)$ $\; \; \; \; ref \; (12.29)$
+* $\mathbf{w}_{t+1} = \mathbf{w}_t + \alpha \delta_{t}^{a}\mathbf{z}_t$ $\; \; \; \; ref \; (12.7)$
 
-With the usual weight update rule (see above).
 
+##### Tree-Backup($\lambda$)
+In the off-policy learning (Ch. 7), Tree-Backups were introduced as an off-policy
+alternative which does not require imporance sampling.
+
+###### Background: n-Step Tree-Backup
+In the n-step Tree-Backup algorithm the unsampled actions
+are bootstrapped using the estimated value. While the sampled actions 
+are weighted according to the probability of the target policy $\pi$ 
+having taken that action. More concretely, if we have two steps (i.e. 2-step
+Tree-Backup), the target is:
+
+$$
+\begin{align*}
+G_{t:t+2} &\overset \cdot{=} R_{t+1} + \gamma \sum_{a \ne A_{t+1}} \pi(a | S_{t + 1}) \hat{q}(S_{t + 1}, a, \mathbf{w}_{t + 1}) + \gamma \pi(A_{t+1}| S_{t+1}) \Bigl(R_{t+2} + \gamma \sum_{a}\pi(a | S_{t+2}) \hat{q}(S_{t+2}, a, \mathbf{w}_{t + 1}) \Bigr) \tag{unrolled form} \\
+&=  R_{t+1} + \gamma \sum_{a \ne A_{t+1}} \pi(a | S_{t + 1}) \hat{q}(S_{t + 1}, a, \mathbf{w}_{t + 1}) + \gamma \pi(A_{t+1}| S_{t+1})G_{t+1:t+2} \tag{recursive relationship}
+\end{align*}
+$$
+
+In Ch.7, the n-step TB was first presented for the tabular case. The linear 
+approximation is the same, where the action value is estimated 
+by the linear approximator $\hat{q}(s, a, \mathbf{w})$.
+
+The general form of the n-step target is:
+$G_{t:t+n} = R_{t+1} + \gamma \sum_{a \ne A_{t+1}} \pi(a | S_{t + 1}) \hat{q}(S_{t + 1}, a, \mathbf{w}_{t + n - 1}) + \gamma \pi(A_{t+1}| S_{t+1})G_{t+1:t+n}$.
+
+which can also be expressed in terms of the TD errors as:
+$G_{t:t+n} \overset \cdot{=} \hat{q}(S_{t}, A_{t}, \mathbf{w}_{t+n - 1}) + \sum_{k = t}^{t + n - 1} \delta_k \prod_{i = t + 1} ^ k \gamma \pi(A_i | S_i)$
+
+With semi-gradient update rule as follows 
+(_note_ there is no importance sampling involved):
+$\mathbf{w}_{t + n} = \mathbf{w}_{t + n - 1} + \alpha \Bigl(G_{t:t+n} - \hat{q}(S_t, A_t, \mathbf{w}_{t+n - 1}) \Bigr) \nabla \hat{q}(S_t, A_t, \mathbf{w}_{t + n - 1})$
+
+###### Eligibility traces
+The ET version of Tree Backup is called TB($\lambda$). Similar to 
+Q-learning, it has the property that it doesn't use importance sampling 
+for off-policy data. In order to define $\lambda$ return for action-values 
+we start from the recursive form used for online Expected Sarsa:
+
+$$
+\begin{align*}
+G_t^{\lambda a} & \overset \cdot{=} R_{t+1} + \gamma_{t+1}\bigl((1 - \lambda_{t+1}) \bar{V}_{t}(S_{t+1}) + \lambda_{t+1}G_{t+1}^{\lambda a} \bigr) \\
+&= R_{t+1} + \gamma_{t+1}\Bigl[(1 - \lambda_{t+1}) \bar{V}_{t}(S_{t+1}) + \lambda_{t+1}\Bigl(\sum_{a \ne A_{t + 1}} \pi(a | S_{t+1}) \hat{q}(S_{t+1}, a, \mathbf{w}_t) + \pi(A_{t+1} | S_{t+1}) G_{t+1}^{\lambda a} \Bigr)  \Bigr]
+\end{align*}
+$$
+
+with the sum of TD errors form - ignoring the changes in the value function:
+
+$G_{t}^{\lambda a} \approx \hat{q}(S_t, A_t, \mathbf{w}_t) + \sum_{k = t}^{\infty}\delta_{k}^{a} \prod_{i = t + 1} ^ {k} \gamma_i \lambda_i \pi(A_i | S_i) $
+
+where following the usual steps for moving from forward view to the backward
+view, the following eligibility trace is obtained:
+
+$\mathbf{z}_{t} = \gamma_t \lambda_t \pi(A_t | S_t) \mathbf{z}_{t-1} + \nabla \hat{q}(S_t, A_t, \mathbf{w}_t)$
+
+where the probability of taking $A_t$ is used instead of the IS ratio. Finally,
+the update rule is again:
+
+$\mathbf{w}_{t+1}  = \mathbf{w}_t + \alpha\delta_t^{a}\mathbf{z}_t$

@@ -1,5 +1,6 @@
 from typing import Union, Callable, Any, Optional
 import numpy as np
+from numba.np.arraymath import np_tri
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -8,6 +9,9 @@ from approximate_methods.utils import (
     NoiseSchedule,
     Experience)
 from shared.utils import LinearSchedule
+
+
+BIG_NUMBER = 1e8
 
 # ************* Semi-Gradient ************* #
 
@@ -87,19 +91,6 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
             experience.ap, experience.done
         )
 
-        log_step = None
-        if 'log_step' in kwargs:
-            log_step = kwargs['log_step']
-
-        qhat_next = self.state_action_value(sp, ap) * (1 - done)
-        qhat = self.state_action_value(s, a)
-
-        tgt = r + self.discount * qhat_next
-        td_error = tgt - qhat
-
-        # Grad_wi(sum(xi * wi)) = xi
-        grad_w = self.feature_fn(s, a)
-
         if isinstance(self.update_coefficient, LinearSchedule):
             alpha = self.update_coefficient.value
             self.update_coefficient.step()
@@ -108,8 +99,17 @@ class SemiGradientSarsa(LinearQEpsGreedyAgent):
         else:
             raise Exception("Invalid type for update_coefficient")
 
+        log_step = None
+        if 'log_step' in kwargs:
+            log_step = kwargs['log_step']
+
+        qhat_next = self.state_action_value(sp, ap) * (1 - done)
+        qhat = self.state_action_value(s, a)
+        tgt = r + self.discount * qhat_next
+        td_error = tgt - qhat
+        grad_w = self.feature_fn(s, a) # Grad_wi(sum(xi * wi)) = xi
         update = alpha * td_error * grad_w
-        self.w += update
+        self.w = np.clip(self.w + update, -BIG_NUMBER, BIG_NUMBER)
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()

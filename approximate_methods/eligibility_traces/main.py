@@ -10,14 +10,22 @@ import matplotlib.pyplot as plt
 import gymnasium as gym
 from gymnasium import Env
 
-from agents import SarsaLambda, TrueOnlineSarsaLambda
-
+from agents import (
+    SarsaLambda,
+    TrueOnlineSarsaLambda,
+    OffPolicyExpectedSarsaLambda,
+    GQLambda,
+    HQLambda,
+    TBLambda
+)
+from approximate_methods.on_policy.agents import SemiGradientSarsa
 
 from approximate_methods.utils import (
     DiscreteActionAgent,
     SoftPolicy,
     Experience,
-    TileCodingFeature)
+    TileCodingFeature,
+    LinearQEpsGreedyAgent)
 
 from shared.utils import LinearSchedule
 
@@ -88,6 +96,72 @@ def plot_multi_curves(
 #endregion plots
 
 
+def eval_env_episodic(
+        env: Env,
+        agent: LinearQEpsGreedyAgent,
+        T: int = 30,
+        num_episodes: int = 1,
+        greedy: bool = True,
+        seeds = None
+):
+    steps_per_episode = []
+    sum_of_rewards_per_episode = []
+
+    for ei, episode in enumerate(tqdm(
+            range(num_episodes),
+            desc=f'Evaluation Episode'
+    )):
+        # For seeds:
+        # 1 -   None
+        # 2 -   Single value
+        # 3 -   Same as number of episodes
+        seed = None
+        if seeds is not None:
+            if hasattr(seeds, '__getitem__'):
+                assert len(seeds) == num_episodes
+                seed = seeds[ei]
+            elif isinstance(seeds, (float, int)):
+                seed = seeds
+            else:
+                raise Exception("Seed format not recognized", str(seeds))
+
+        # Set the seed for this episode
+        random.seed(seed)
+        np.random.seed(seed)
+
+        # Noise state reset (not exploration level).
+        # Clear any trajectories.
+        # Clear any eligibility traces
+        agent.reset()
+
+        # gymnasium v26 requires users to set seed
+        # when resetting the environment
+        s, info = env.reset(seed=seed)  # s[0]
+        if greedy:
+            a, p = agent.get_greedy_action(s)  # a[0]
+        else:
+            a, p = agent.act(s)
+        R = 0
+
+        for t in range(T):
+            sp, r, terminated, truncated, info = env.step(a)
+            done = terminated or truncated or (t + 1 == T)
+            ap, pp = agent.get_greedy_action(sp)
+
+            R += r
+
+            if done:
+                steps_per_episode.append(t)
+                sum_of_rewards_per_episode.append(R)
+                break
+            else:
+                s = sp
+                a = ap
+                p = pp
+
+    return steps_per_episode, sum_of_rewards_per_episode
+
+
 def run_env_episodic(
         env: Env,
         behavioral_agent: DiscreteActionAgent,
@@ -95,10 +169,16 @@ def run_env_episodic(
         reward_shaper: Callable = lambda reward, state, done, t: reward,
         T: int = 30,
         num_episodes: int = 10,
-        seeds=None
+        seeds=None,
+        do_eval = False,
+        evaluate_frequency = None,
+        eval_num_episodes: int = 1,
+        greedy_eval: bool = True
 ):
     steps_per_episode = []
     sum_of_rewards_per_episode = []
+    eval_steps_per_episode = []
+    eval_sum_of_rewards_per_episode = []
 
     # ----- Unlearn ----- #
     behavioral_agent.initialize()
@@ -131,11 +211,21 @@ def run_env_episodic(
         # Clear any trajectories.
         # Clear any eligibility traces
         behavioral_agent.reset()
+        if target_agent is not None:
+            target_agent.reset()
 
         # gymnasium v26 requires users to set seed
         # when resetting the environment
         s, info = env.reset(seed=seed) # s[0]
         a, p = behavioral_agent.act(s) # a[0]
+
+        rho = None
+        if (target_agent is not None) and (
+                isinstance(target_agent, SoftPolicy)
+        ):
+            target_p = target_agent.get_sa_probability(s, a)
+            rho = target_p / p
+
         R = 0
         for t in range(T):
             sp, r, terminated, truncated, info = env.step(a)
@@ -161,6 +251,7 @@ def run_env_episodic(
                 ap=ap,
                 pp=pp,
                 done=int(done),
+                rho=rho,
                 rhop=rhop,
                 t=t)
 
@@ -177,8 +268,43 @@ def run_env_episodic(
                 s = sp
                 a = ap
                 p = pp
+                rho=rhop
 
-    return steps_per_episode, sum_of_rewards_per_episode
+
+        if (
+                do_eval and
+                (
+                        (
+                                (episode % evaluate_frequency == 0) and
+                                (eval_num_episodes > 0)
+                        ) or
+                        (episode + 1 == num_episodes)  # evaluate last episode
+                )
+        ):
+            eval_agent = behavioral_agent
+
+            if target_agent is not None:
+                eval_agent = target_agent
+
+            steps, sum_r = eval_env_episodic(
+                env,
+                agent=eval_agent,
+                seeds=seed,
+                T=T,
+                num_episodes=eval_num_episodes,
+                greedy=greedy_eval,
+            )
+
+            eval_steps_per_episode += steps
+            eval_sum_of_rewards_per_episode += sum_r
+
+
+    return dict(
+        steps_per_episode=steps_per_episode,
+        sum_of_rewards_per_episode=sum_of_rewards_per_episode,
+        eval_steps_per_episode=eval_steps_per_episode,
+        eval_sum_of_rewards_per_episode=eval_sum_of_rewards_per_episode
+    )
 
 
 def build_env() -> Env:
@@ -237,6 +363,8 @@ def run_one_experiment(
         max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
 
     if model == 'SarsaLambda':
+        do_eval = False
+        target_agent = None
         agent = SarsaLambda(
             feature_size=max_size,
             action_space_dims=int(env.action_space.n),
@@ -246,8 +374,9 @@ def run_one_experiment(
             lam=lam,
             eps=eps_builder(eps),
             trace_mode='accumulate')
-
     elif model == 'TrueOnlineSarsaLambda':
+        do_eval = False
+        target_agent = None
         agent = TrueOnlineSarsaLambda(
             feature_size=max_size,
             action_space_dims=int(env.action_space.n),
@@ -257,20 +386,109 @@ def run_one_experiment(
             lam=lam,
             eps=eps_builder(eps)
         )
+    elif model == 'OffPolicyExpectedSarsaLambda':
+        do_eval = True
+        agent = SemiGradientSarsa(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            update_coefficient=0.1,
+            feature_fn=feature_fn,
+            discount=0.99,
+            eps=0.1  # Always exploratory
+        )
+
+        target_agent = OffPolicyExpectedSarsaLambda(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            update_coefficient=alpha / num_tilings,
+            feature_fn=feature_fn,
+            discount=0.99,
+            lam=lam,
+            eps=eps_builder(eps)
+        )
+    elif model == 'GQLambda':
+        do_eval = True
+        agent = SemiGradientSarsa(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            update_coefficient=0.1,
+            feature_fn=feature_fn,
+            discount=0.99,
+            eps=0.1  # Always exploratory
+        )
+
+        target_agent = GQLambda(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            update_coefficient=0.3 * (alpha / num_tilings),  # updates weights
+            second_update_coefficient=alpha / num_tilings,   # faster updates for z
+            feature_fn=feature_fn,
+            discount=0.99,
+            lam=lam,
+            eps=eps_builder(eps)
+        )
+    elif model == 'HQLambda':
+        do_eval = True
+        agent = SemiGradientSarsa(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            update_coefficient=0.1,
+            feature_fn=feature_fn,
+            discount=0.99,
+            eps=0.1  # Always exploratory
+        )
+
+        target_agent = HQLambda(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            update_coefficient=0.3 * (alpha / num_tilings),  # updates weights
+            second_update_coefficient=alpha / num_tilings,   # faster updates for z
+            feature_fn=feature_fn,
+            discount=0.99,
+            lam=lam,
+            eps=eps_builder(eps)
+        )
+    elif model == 'TBLambda':
+        do_eval = True
+        agent = SemiGradientSarsa(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            update_coefficient=0.1,
+            feature_fn=feature_fn,
+            discount=0.99,
+            eps=0.1  # Always exploratory
+        )
+
+        target_agent = TBLambda(
+            feature_size=max_size,
+            action_space_dims=int(env.action_space.n),
+            update_coefficient=alpha / num_tilings,
+            feature_fn=feature_fn,
+            discount=0.99,
+            lam=lam,
+            eps=eps_builder(eps)
+        )
+
     else:
         raise NotImplemented(f'{model} model not recognized')
 
-    steps_per_episode, sum_of_rewards_per_episode = run_env_episodic(
+    res = run_env_episodic(
         env=env,
         behavioral_agent=agent,
+        target_agent=target_agent,
         reward_shaper=reward_shaper,
         T=T,
         num_episodes=num_episodes,
+        do_eval=do_eval,
+        eval_num_episodes=2,
+        evaluate_frequency=5,
         seeds=seeds)
 
     return dict(
-        steps_per_episode=steps_per_episode,
-        sum_of_rewards_per_episode=sum_of_rewards_per_episode
+        steps_per_episode=res['steps_per_episode'],
+        sum_of_rewards_per_episode=res['sum_of_rewards_per_episode'],
+        eval_steps_per_episode = res['eval_steps_per_episode'],
+        eval_sum_of_rewards_per_episode = res['eval_sum_of_rewards_per_episode']
     )
 
 
@@ -289,6 +507,8 @@ def experiments_parallel(
     # Prepare a 2D array to store final means
     steps_per_episode = np.zeros((len(lambdas), len(alphas)), dtype=np.float64)
     sum_of_rewards_per_episode = np.zeros((len(lambdas), len(alphas)), dtype=np.float64)
+    eval_steps_per_episode = np.zeros((len(lambdas), len(alphas)), dtype=np.float64)
+    eval_sum_of_rewards_per_episode = np.zeros((len(lambdas), len(alphas)), dtype=np.float64)
 
     # Offset the original seeds
     seeds_per_experiment = [
@@ -320,22 +540,54 @@ def experiments_parallel(
             steps = [r['steps_per_episode'] for r in res]
             sum_rewards = [r['sum_of_rewards_per_episode'] for r in res]
 
+            eval_steps = [
+                r['eval_steps_per_episode'] for r in res
+                if r['eval_steps_per_episode'] is not None
+            ]
+
+            eval_sum_rewards = [
+                r['eval_sum_of_rewards_per_episode'] for r in res
+                if r['eval_sum_of_rewards_per_episode'] is not None
+            ]
+
             # 4) Average those n_experiments results to fill results_array
             steps_per_episode[il, ia] = np.mean(steps)
             sum_of_rewards_per_episode[il, ia] = np.mean(sum_rewards)
 
-            print(f"\n{model} - Done α={alpha:.3f}, λ={lam:.3f} → steps/episode: {steps_per_episode[il, ia]:.4f}, sum(r)/episode: {sum_of_rewards_per_episode[il, ia]:.4f}")
+            if len(eval_steps) > 0:
+                eval_steps_per_episode[il, ia] = np.mean(eval_steps)
+
+            if len(eval_sum_rewards) > 0:
+                eval_sum_of_rewards_per_episode[il, ia] = np.mean(eval_sum_rewards)
+
+            print(
+                f"\n{model} - Done "
+                f"α={alpha:.3f}, "
+                f"λ={lam:.3f} → "
+                f"steps/episode: {steps_per_episode[il, ia]:.4f}, "
+                f"sum(r)/episode: {sum_of_rewards_per_episode[il, ia]:.4f}"
+                f"eval steps/episode: {eval_steps_per_episode[il, ia]:.4f}, "
+                f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[il, ia]:.4f}"
+                )
 
     if model == 'SarsaLambda':
         title = 'Sarsa(λ)'
     elif model == 'TrueOnlineSarsaLambda':
-        title = 'True Online Sarsa(λ)'
+        title = 'True-Online Sarsa(λ)'
+    elif model == 'OffPolicyExpectedSarsaLambda':
+        title = 'Expected Sarsa(λ)'
+    elif model == 'GQLambda':
+        title = 'GQ(λ)'
+    elif model == 'HQLambda':
+        title = 'HQ(λ)'
+    elif model == 'TBLambda':
+        title = 'TB(λ)'
     else:
         raise NotImplemented
 
     plot_multi_curves(
         steps_per_episode,
-        title=title,
+        title=title + "(Train)",
         labels=lambdas,
         x=alphas,
         ylabel='Avg. Steps/Episode',
@@ -343,13 +595,36 @@ def experiments_parallel(
 
     plot_multi_curves(
         sum_of_rewards_per_episode,
-        title=title,
+        title=title + "(Train)",
         labels=lambdas,
         x=alphas,
         ylabel='Avg. Sum(Rewards)/Episode',
         ymin= -500,
         ymax= -150
     )
+
+    plot_multi_curves(
+        eval_steps_per_episode,
+        title=title + "(Eval)",
+        labels=lambdas,
+        x=alphas,
+        ylabel='Avg. Steps/Episode',
+        ymin=150,
+        ymax=1000
+    )
+
+    plot_multi_curves(
+        eval_sum_of_rewards_per_episode,
+        title=title + "(Eval)",
+        labels=lambdas,
+        x=alphas,
+        ylabel='Avg. Sum(Rewards)/Episode',
+        ymin=-1000,
+        ymax=-150
+    )
+
+
+# region algo-specific runners
 
 def sarsa_lambda_experiments(
         num_episodes,
@@ -395,13 +670,16 @@ def sarsa_lambda_experiments(
                 trace_mode='replace',
             )
 
-            steps, sum_rewards = run_env_episodic(
+            res = run_env_episodic(
                 env=env,
                 behavioral_agent=agent,
                 reward_shaper=reward_shaper,
                 T=T,
                 num_episodes=num_episodes,
                 seeds=seeds)
+
+            steps = res['steps_per_episode']
+            sum_rewards = res['sum_of_rewards_per_episode']
 
             # Average those n_experiments results to fill results_array
             steps_per_episode[il, ia] = np.mean(steps)
@@ -466,13 +744,16 @@ def true_online_sarsa_lambda_experiments(
                 lam=lam,
                 eps=eps_builder(eps))
 
-            steps, sum_rewards = run_env_episodic(
+            res = run_env_episodic(
                 env=env,
                 behavioral_agent=agent,
                 reward_shaper=reward_shaper,
                 T=T,
                 num_episodes=num_episodes,
                 seeds=seeds)
+
+            steps = res['steps_per_episode']
+            sum_rewards = res['sum_of_rewards_per_episode']
 
             # Average those n_experiments results to fill results_array
             steps_per_episode[il, ia] = np.mean(steps)
@@ -494,15 +775,520 @@ def true_online_sarsa_lambda_experiments(
         ylabel='Avg. Sum(Rewards) / Episode',
         x=alphas)
 
+
+def offline_gq_lambda(
+        num_episodes,
+        T,
+        reward_shaper: Callable,
+        eps_builder: Callable = lambda x: x,
+        alphas = np.linspace(0, 1, num=50),
+        lambdas=(0.99, 0.98, 0.96, 0.92, 0.84, 0.68, 0.),
+        eps=0.1,
+        seeds=(1, 2)
+):
+    env = build_env()
+
+    steps_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+    sum_of_rewards_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+
+    eval_steps_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+    eval_sum_of_rewards_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+
+    num_tilings = 8
+    num_tiles = 8
+    max_size = 4096
+
+    x0_low, x1_low = env.observation_space.low
+    x0_high, x1_high = env.observation_space.high
+
+    '''
+        From Section 10.1:
+            We used 8 tilings, with each tile covering 1/8th of 
+            the bounded distance in each dimension
+    '''
+    feature_fn = TileCodingFeature(
+        max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
+
+    for il, lam in enumerate(lambdas):
+        for ia, alpha in enumerate(alphas):
+            behavior_agent = SemiGradientSarsa(
+                feature_size=max_size,
+                action_space_dims=int(env.action_space.n),
+                update_coefficient=0.1,
+                feature_fn=feature_fn,
+                discount=0.99,
+                eps=0.1  # Always exploratory
+            )
+
+            target_agent = GQLambda(
+                feature_size=max_size,
+                action_space_dims=int(env.action_space.n),
+                update_coefficient=0.7 * (alpha / num_tilings), # updates weights
+                second_update_coefficient=alpha / num_tilings,  # faster updates for q
+                feature_fn=feature_fn,
+                discount=0.99,
+                lam=lam,
+                eps=eps_builder(eps)
+            )
+
+            res = run_env_episodic(
+                env=env,
+                behavioral_agent=behavior_agent,
+                target_agent=target_agent,
+                reward_shaper=reward_shaper,
+                T=T,
+                num_episodes=num_episodes,
+                seeds=seeds,
+                eval_num_episodes=5,
+                do_eval=True,
+                evaluate_frequency=5
+            )
+
+            steps = res['steps_per_episode']
+            sum_rewards = res['sum_of_rewards_per_episode']
+            eval_steps = res['eval_steps_per_episode']
+            eval_sum_rewards = res['eval_sum_of_rewards_per_episode']
+
+            # Average those n_experiments results to fill results_array
+            steps_per_episode[il, ia] = np.mean(steps)
+            sum_of_rewards_per_episode[il, ia] = np.mean(sum_rewards)
+            eval_steps_per_episode[il, ia] = np.mean(eval_steps)
+            eval_sum_of_rewards_per_episode[il, ia] = np.mean(eval_sum_rewards)
+
+            print(
+                f"\n{type(target_agent)}: Done α={alpha:.3f}, "
+                f"λ={lam:.3f} →"
+                f" steps/episode: {steps_per_episode[il, ia]:.4f}, "
+                f"sum(r)/episode: {sum_of_rewards_per_episode[il, ia]:.4f}"
+                f" eval steps/episode: {eval_steps_per_episode[il, ia]:.4f}, "
+                f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[il, ia]:.4f}"
+            )
+
+    plot_multi_curves(
+        steps_per_episode,
+        title='Off-Policy GQ(λ) - Train (Behavioral)',
+        labels=lambdas,
+        ylabel='Avg. Steps / Episode',
+        x=alphas)
+
+    plot_multi_curves(
+        sum_of_rewards_per_episode,
+        title='Off-Policy GQ(λ) - Train (Behavioral)',
+        labels=lambdas,
+        ylabel='Avg. Sum(Rewards) / Episode',
+        x=alphas)
+
+    plot_multi_curves(
+        eval_steps_per_episode,
+        title='Off-Policy GQ(λ) - Eval (Target)',
+        labels=lambdas,
+        ylabel='Avg. Steps / Episode',
+        x=alphas,
+        ymin=200,
+        ymax=1000
+    )
+
+    plot_multi_curves(
+        eval_sum_of_rewards_per_episode,
+        title='Off-Policy GQ(λ) - Eval (Target)',
+        labels=lambdas,
+        ylabel='Avg. Sum(Rewards) / Episode',
+        x=alphas,
+        ymin=-1000,
+        ymax=-200
+    )
+
+
+def offline_hq_lambda(
+        num_episodes,
+        T,
+        reward_shaper: Callable,
+        eps_builder: Callable = lambda x: x,
+        alphas = np.linspace(0, 1, num=50),
+        lambdas=(0.99, 0.98, 0.96, 0.92, 0.84, 0.68, 0.),
+        eps=0.1,
+        seeds=(1, 2)
+):
+    env = build_env()
+
+    steps_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+    sum_of_rewards_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+
+    eval_steps_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+    eval_sum_of_rewards_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+
+    num_tilings = 8
+    num_tiles = 8
+    max_size = 4096
+
+    x0_low, x1_low = env.observation_space.low
+    x0_high, x1_high = env.observation_space.high
+
+    '''
+        From Section 10.1:
+            We used 8 tilings, with each tile covering 1/8th of 
+            the bounded distance in each dimension
+    '''
+    feature_fn = TileCodingFeature(
+        max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
+
+    for il, lam in enumerate(lambdas):
+        for ia, alpha in enumerate(alphas):
+            behavior_agent = SemiGradientSarsa(
+                feature_size=max_size,
+                action_space_dims=int(env.action_space.n),
+                update_coefficient=0.1,
+                feature_fn=feature_fn,
+                discount=0.99,
+                eps=0.1  # Always exploratory
+            )
+
+            target_agent = HQLambda(
+                feature_size=max_size,
+                action_space_dims=int(env.action_space.n),
+                update_coefficient=0.3 * (alpha / num_tilings), # updates weights
+                second_update_coefficient=(alpha / num_tilings),  # faster updates for q
+                feature_fn=feature_fn,
+                discount=0.99,
+                lam=lam,
+                eps=eps_builder(eps)
+            )
+
+            res = run_env_episodic(
+                env=env,
+                behavioral_agent=behavior_agent,
+                target_agent=target_agent,
+                reward_shaper=reward_shaper,
+                T=T,
+                num_episodes=num_episodes,
+                seeds=seeds,
+                eval_num_episodes=5,
+                do_eval=True,
+                evaluate_frequency=5
+            )
+
+            steps = res['steps_per_episode']
+            sum_rewards = res['sum_of_rewards_per_episode']
+            eval_steps = res['eval_steps_per_episode']
+            eval_sum_rewards = res['eval_sum_of_rewards_per_episode']
+
+            # Average those n_experiments results to fill results_array
+            steps_per_episode[il, ia] = np.mean(steps)
+            sum_of_rewards_per_episode[il, ia] = np.mean(sum_rewards)
+            eval_steps_per_episode[il, ia] = np.mean(eval_steps)
+            eval_sum_of_rewards_per_episode[il, ia] = np.mean(eval_sum_rewards)
+
+            print(
+                f"\n{type(target_agent)}: Done α={alpha:.3f}, "
+                f"λ={lam:.3f} →"
+                f" steps/episode: {steps_per_episode[il, ia]:.4f}, "
+                f"sum(r)/episode: {sum_of_rewards_per_episode[il, ia]:.4f}"
+                f" eval steps/episode: {eval_steps_per_episode[il, ia]:.4f}, "
+                f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[il, ia]:.4f}"
+            )
+
+    plot_multi_curves(
+        steps_per_episode,
+        title='Off-Policy HQ(λ) - Train (Behavioral)',
+        labels=lambdas,
+        ylabel='Avg. Steps / Episode',
+        x=alphas)
+
+    plot_multi_curves(
+        sum_of_rewards_per_episode,
+        title='Off-Policy HQ(λ) - Train (Behavioral)',
+        labels=lambdas,
+        ylabel='Avg. Sum(Rewards) / Episode',
+        x=alphas)
+
+    plot_multi_curves(
+        eval_steps_per_episode,
+        title='Off-Policy HQ(λ) - Eval (Target)',
+        labels=lambdas,
+        ylabel='Avg. Steps / Episode',
+        x=alphas,
+        ymin=200,
+        ymax=1000
+    )
+
+    plot_multi_curves(
+        eval_sum_of_rewards_per_episode,
+        title='Off-Policy HQ(λ) - Eval (Target)',
+        labels=lambdas,
+        ylabel='Avg. Sum(Rewards) / Episode',
+        x=alphas,
+        ymin=-1000,
+        ymax=-200
+    )
+
+
+def offline_expected_sarsa_lambda(
+        num_episodes,
+        T,
+        reward_shaper: Callable,
+        eps_builder: Callable = lambda x: x,
+        alphas = np.linspace(0, 1, num=50),
+        lambdas=(0.99, 0.98, 0.96, 0.92, 0.84, 0.68, 0.),
+        eps=0.1,
+        seeds=(1, 2)
+):
+    env = build_env()
+
+    steps_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+    sum_of_rewards_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+
+    eval_steps_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+    eval_sum_of_rewards_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+
+    num_tilings = 8
+    num_tiles = 8
+    max_size = 4096
+
+    x0_low, x1_low = env.observation_space.low
+    x0_high, x1_high = env.observation_space.high
+
+    '''
+        From Section 10.1:
+            We used 8 tilings, with each tile covering 1/8th of 
+            the bounded distance in each dimension
+    '''
+    feature_fn = TileCodingFeature(
+        max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
+
+    for il, lam in enumerate(lambdas):
+        for ia, alpha in enumerate(alphas):
+            behavior_agent = SemiGradientSarsa(
+                feature_size=max_size,
+                action_space_dims=int(env.action_space.n),
+                update_coefficient=0.1,
+                feature_fn=feature_fn,
+                discount=0.99,
+                eps=0.1  # Always exploratory
+            )
+
+            target_agent = OffPolicyExpectedSarsaLambda(
+                feature_size=max_size,
+                action_space_dims=int(env.action_space.n),
+                update_coefficient=alpha / num_tilings, # updates weights
+                feature_fn=feature_fn,
+                discount=0.99,
+                lam=lam,
+                eps=eps_builder(eps)
+            )
+
+            res = run_env_episodic(
+                env=env,
+                behavioral_agent=behavior_agent,
+                target_agent=target_agent,
+                reward_shaper=reward_shaper,
+                T=T,
+                num_episodes=num_episodes,
+                seeds=seeds,
+                eval_num_episodes=1,
+                do_eval=True,
+                evaluate_frequency=1,
+                greedy_eval=False
+            )
+
+            steps = res['steps_per_episode']
+            sum_rewards = res['sum_of_rewards_per_episode']
+            eval_steps = res['eval_steps_per_episode']
+            eval_sum_rewards = res['eval_sum_of_rewards_per_episode']
+
+            # Average those n_experiments results to fill results_array
+            steps_per_episode[il, ia] = np.mean(steps)
+            sum_of_rewards_per_episode[il, ia] = np.mean(sum_rewards)
+            eval_steps_per_episode[il, ia] = np.mean(eval_steps)
+            eval_sum_of_rewards_per_episode[il, ia] = np.mean(eval_sum_rewards)
+
+            print(
+                f"\n{type(target_agent)}: Done α={alpha:.3f}, "
+                f"λ={lam:.3f} →"
+                f" steps/episode: {steps_per_episode[il, ia]:.4f}, "
+                f"sum(r)/episode: {sum_of_rewards_per_episode[il, ia]:.4f}"
+                f" eval steps/episode: {eval_steps_per_episode[il, ia]:.4f}, "
+                f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[il, ia]:.4f}"
+            )
+
+    plot_multi_curves(
+        steps_per_episode,
+        title='Off-Policy ExpectedSarsa(λ) - Train (Behavioral)',
+        labels=lambdas,
+        ylabel='Avg. Steps / Episode',
+        x=alphas)
+
+    plot_multi_curves(
+        sum_of_rewards_per_episode,
+        title='Off-Policy ExpectedSarsa(λ) - Train (Behavioral)',
+        labels=lambdas,
+        ylabel='Avg. Sum(Rewards) / Episode',
+        x=alphas)
+
+    plot_multi_curves(
+        eval_steps_per_episode,
+        title='Off-Policy ExpectedSarsa(λ) - Eval (Target)',
+        labels=lambdas,
+        ylabel='Avg. Steps / Episode',
+        x=alphas,
+        ymin=200,
+        ymax=1000
+    )
+
+    plot_multi_curves(
+        eval_sum_of_rewards_per_episode,
+        title='Off-Policy ExpectedSarsa(λ) - Eval (Target)',
+        labels=lambdas,
+        ylabel='Avg. Sum(Rewards) / Episode',
+        x=alphas,
+        ymin=-1000,
+        ymax=-200
+    )
+
+
+def offline_tb_lambda(
+        num_episodes,
+        T,
+        reward_shaper: Callable,
+        eps_builder: Callable = lambda x: x,
+        alphas = np.linspace(0, 1, num=50),
+        lambdas=(0.99, 0.98, 0.96, 0.92, 0.84, 0.68, 0.),
+        eps=0.1,
+        seeds=(1, 2)
+):
+    env = build_env()
+
+    steps_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+    sum_of_rewards_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+
+    eval_steps_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+    eval_sum_of_rewards_per_episode = np.zeros(
+        (len(lambdas), len(alphas)), dtype=np.float64)
+
+    num_tilings = 8
+    num_tiles = 8
+    max_size = 4096
+
+    x0_low, x1_low = env.observation_space.low
+    x0_high, x1_high = env.observation_space.high
+
+    '''
+        From Section 10.1:
+            We used 8 tilings, with each tile covering 1/8th of 
+            the bounded distance in each dimension
+    '''
+    feature_fn = TileCodingFeature(
+        max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
+
+    for il, lam in enumerate(lambdas):
+        for ia, alpha in enumerate(alphas):
+            behavior_agent = SemiGradientSarsa(
+                feature_size=max_size,
+                action_space_dims=int(env.action_space.n),
+                update_coefficient=0.1,
+                feature_fn=feature_fn,
+                discount=0.99,
+                eps=0.1  # Always exploratory
+            )
+
+            target_agent = TBLambda(
+                feature_size=max_size,
+                action_space_dims=int(env.action_space.n),
+                update_coefficient=alpha / num_tilings, # updates weights
+                feature_fn=feature_fn,
+                discount=0.99,
+                lam=lam,
+                eps=eps_builder(eps)
+            )
+
+            res = run_env_episodic(
+                env=env,
+                behavioral_agent=behavior_agent,
+                target_agent=target_agent,
+                reward_shaper=reward_shaper,
+                T=T,
+                num_episodes=num_episodes,
+                seeds=seeds,
+                eval_num_episodes=1,
+                do_eval=True,
+                evaluate_frequency=1,
+                greedy_eval=False
+            )
+
+            steps = res['steps_per_episode']
+            sum_rewards = res['sum_of_rewards_per_episode']
+            eval_steps = res['eval_steps_per_episode']
+            eval_sum_rewards = res['eval_sum_of_rewards_per_episode']
+
+            # Average those n_experiments results to fill results_array
+            steps_per_episode[il, ia] = np.mean(steps)
+            sum_of_rewards_per_episode[il, ia] = np.mean(sum_rewards)
+            eval_steps_per_episode[il, ia] = np.mean(eval_steps)
+            eval_sum_of_rewards_per_episode[il, ia] = np.mean(eval_sum_rewards)
+
+            print(
+                f"\n{type(target_agent)}: Done α={alpha:.3f}, "
+                f"λ={lam:.3f} →"
+                f" steps/episode: {steps_per_episode[il, ia]:.4f}, "
+                f"sum(r)/episode: {sum_of_rewards_per_episode[il, ia]:.4f}"
+                f" eval steps/episode: {eval_steps_per_episode[il, ia]:.4f}, "
+                f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[il, ia]:.4f}"
+            )
+
+    plot_multi_curves(
+        steps_per_episode,
+        title='Off-Policy TB(λ) - Train (Behavioral)',
+        labels=lambdas,
+        ylabel='Avg. Steps / Episode',
+        x=alphas)
+
+    plot_multi_curves(
+        sum_of_rewards_per_episode,
+        title='Off-Policy TB(λ) - Train (Behavioral)',
+        labels=lambdas,
+        ylabel='Avg. Sum(Rewards) / Episode',
+        x=alphas)
+
+    plot_multi_curves(
+        eval_steps_per_episode,
+        title='Off-Policy TB(λ) - Eval (Target)',
+        labels=lambdas,
+        ylabel='Avg. Steps / Episode',
+        x=alphas,
+        ymin=200,
+        ymax=1000
+    )
+
+    plot_multi_curves(
+        eval_sum_of_rewards_per_episode,
+        title='Off-Policy TB(λ) - Eval (Target)',
+        labels=lambdas,
+        ylabel='Avg. Sum(Rewards) / Episode',
+        x=alphas,
+        ymin=-1000,
+        ymax=-200
+    )
+
+
+# endregion
+
 if __name__ == '__main__':
-
-    model = 'TrueOnlineSarsaLambda'
-    # model = 'SarsaLambda'
-
     do_log = False
-    alphas = np.linspace(0.2, 1.9, num=10)
-    lambdas = [0., 0.68, .84, .92, .96, .98, .99]
-
+    on_policy = False
     RENDER = False
     ENV_NAME = 'MountainCar'
 
@@ -510,9 +1296,14 @@ if __name__ == '__main__':
     T = None
 
     if ENV_NAME == 'MountainCar':
-        num_episodes = 50
+        if on_policy:
+            num_episodes = 50
+        else:
+            num_episodes = 200
         T = 999
         MAX_EPISODE_STEPS = T
+    else:
+        raise NotImplementedError(f"{ENV_NAME} not implemented")
 
     def build_greedy_eps_sched(start):
         """
@@ -531,19 +1322,57 @@ if __name__ == '__main__':
     def base_reward(reward: float, state: np.ndarray, done: bool, t: int):
         return reward
 
-    experiments_parallel(
-        model=model,
-        num_episodes=num_episodes,
-        num_experiments=100,
-        T=T,
-        reward_shaper=base_reward,
-        eps=0.0,
-        eps_builder=build_greedy_eps_sched,
-        alphas=alphas,
-        lambdas=lambdas,
-        seeds=[i for i in range(num_episodes)]
-    )
+    # # -- Debug
+    # alphas = np.linspace(0.01, 4, num=5)
+    # lambdas = [0., 0.01, 0.1, 0.2, 0.4, 0.6, 0.9]
+    # # --
+    #
+    # offline_tb_lambda(
+    #     num_episodes=num_episodes,
+    #     T=T,
+    #     reward_shaper=base_reward,
+    #     eps_builder=build_greedy_eps_sched,
+    #     eps=0.0,
+    #     alphas=alphas,
+    #     lambdas=lambdas,
+    #     seeds=[i for i in range(num_episodes)]
+    # )
+    #
+    # exit(0)
 
+    if on_policy:
+        alphas = np.linspace(0.2, 1.9, num=10)
+        lambdas = [0., 0.68, .84, .92, .96, .98, .99]
 
+        for model in ["SarsaLambda", "TrueOnlineSarsaLambda"]:
+            experiments_parallel(
+                model=model,
+                num_episodes=num_episodes,
+                num_experiments=100,
+                T=T,
+                reward_shaper=base_reward,
+                eps=0.0,
+                eps_builder=build_greedy_eps_sched,
+                alphas=alphas,
+                lambdas=lambdas,
+                seeds=[i for i in range(num_episodes)]
+            )
+    else:
+        # --- Off-policy params
+        alphas = np.linspace(0.01, 4, num=20)
+        lambdas = [0., 0.01, 0.1, 0.2, 0.3, 0.4, 0.6, 0.9]
 
+        for model in ["TBLambda", "OffPolicyExpectedSarsaLambda", "GQLambda"]:
+            experiments_parallel(
+                model=model,
+                num_episodes=num_episodes,
+                num_experiments=20,
+                T=T,
+                reward_shaper=base_reward,
+                eps=0.0,
+                eps_builder=build_greedy_eps_sched,
+                alphas=alphas,
+                lambdas=lambdas,
+                seeds=[i for i in range(num_episodes)]
+            )
 
