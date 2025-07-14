@@ -97,7 +97,7 @@ and one-step TD methods, comparable with the $n$-step bootstrapping methods,
 where we vary the steps.
 
 
-##### Exercise 12.1
+###### Exercise 12.1
 Note the recursive relationship of the $n$-step return:
 $$
 \begin{align*}
@@ -256,12 +256,14 @@ $$
 Note that TD error here is conditioned on fixed $\mathbf{w}_t$
 
 
-###### Exercise 12.4: Going from forward to backward view: *approximate* equivalence between TD($\lambda$) and offline $\lambda$-return algorithm
-Show that if the weight
-updates over an episode were computed on each step but not actually used to 
-change the weights ($\mathbf{w}$ remained fixed), then the sum of 
-TD($\lambda$)’s weight updates would be the same as the sum of the 
-offline $\lambda$-return algorithm’s updates
+###### Exercise 12.4: equivalence of TD($\lambda$) and offline $\lambda$-return 
+We're showing here how we go from forward to backward view and the 
+*approximate* equivalence between TD($\lambda$) and offline $\lambda$-return. 
+algorithm. If the weight updates over an episode were computed on 
+each step but not actually used to change the weights 
+($\mathbf{w}$ remained fixed), then the sum of TD($\lambda$)’s weight updates 
+would be the same as the sum of the offline $\lambda$-return algorithm’s 
+updates.
 
 We know:
 
@@ -693,7 +695,7 @@ In the off-policy learning (Ch. 7), Tree-Backups were introduced as an off-polic
 alternative which does not require imporance sampling.
 
 ###### Background: n-Step Tree-Backup
-In the n-step Tree-Backup algorithm the unsampled actions
+In the $n$-step Tree-Backup algorithm the unsampled actions
 are bootstrapped using the estimated value. While the sampled actions 
 are weighted according to the probability of the target policy $\pi$ 
 having taken that action. More concretely, if we have two steps (i.e. 2-step
@@ -720,7 +722,8 @@ With semi-gradient update rule as follows
 (_note_ there is no importance sampling involved):
 $\mathbf{w}_{t + n} = \mathbf{w}_{t + n - 1} + \alpha \Bigl(G_{t:t+n} - \hat{q}(S_t, A_t, \mathbf{w}_{t+n - 1}) \Bigr) \nabla \hat{q}(S_t, A_t, \mathbf{w}_{t + n - 1})$
 
-###### Eligibility traces
+
+###### TB($\lambda$) eligibility traces
 The ET version of Tree Backup is called TB($\lambda$). Similar to 
 Q-learning, it has the property that it doesn't use importance sampling 
 for off-policy data. In order to define $\lambda$ return for action-values 
@@ -746,3 +749,156 @@ where the probability of taking $A_t$ is used instead of the IS ratio. Finally,
 the update rule is again:
 
 $\mathbf{w}_{t+1}  = \mathbf{w}_t + \alpha\delta_t^{a}\mathbf{z}_t$
+
+TB($\lambda$) is implemented in `agents/TBLambda`
+
+### Stable Off-policy Methods with Traces
+Two additional agents (algorithms) have been implemented.
+
+##### GQ($\lambda$)
+
+###### GTD($\lambda$)
+GTD($\lambda$) is the eligibility-trace algorithm analogous to TDC, the better of the two
+state-value Gradient-TD predictions. Its goal is to learn the $\mathbf{w}_t$ 
+such that $\hat{v}(s, \mathbf{w}_t) = \mathbf{w}_t^{T}\mathbf{x}_t(s) \approx v_{\pi}(s)$
+even from data from a different behavior policy. Its update rule is:
+
+$$
+\mathbf{w}_{t+1} = \mathbf{w}_t + \alpha \delta_{t}^{s} \mathbf{z}_t - \alpha \gamma_{t+1}(1 - \lambda_{t+1})(\mathbf{z}_t^{T}\mathbf{v}_t)\mathbf{x}_{t+1}
+$$
+with:
+$$
+\mathbf{z}_{t} = \rho_t(\lambda_t \gamma_t \mathbf{z}_{t-1} + \nabla \hat{v}(S_t)) 
+$$
+where:
+
+$$
+\delta_t^{s} = R_{t+1} + \gamma_{t+1} \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_t)
+$$
+
+and:
+
+$$
+\mathbf{v}_{t+1} = \mathbf{v}_{t} + \beta \delta_{t}^{s}\mathbf{z}_t - \beta(\mathbf{v}_t^{T} \mathbf{x}_t)\mathbf{x}_t
+$$
+
+$\mathbf{v}_0 = \mathbf{0}$ and $\beta > 0$ is the second step parameter.
+
+###### GQ($\lambda$)
+The action value variant is called GQ($\lambda$), where its goal is learning 
+the $\mathbf{w}_t$ such that 
+$\hat{q}(s, a, \mathbf{w}_t) = \mathbf{w}_t^{T}\mathbf{x}_t(s, a) \approx q_{\pi}(s, a)$.
+If the target policy $\pi$ is biased towards greedy $\hat{q}$ (e.g. $\varepsilon$-greedy, 
+or any other method), GQ($\lambda$) can be used for control.
+
+The update rule is:
+
+$$
+\mathbf{w}_{t+1} = \mathbf{w}_{t} + \alpha \delta_{t}^{a}\mathbf{z}_t - \alpha \gamma_{t + 1}(1 - \lambda_{t+1})(\mathbf{z}_{t}^{T} \mathbf{v}_t)\bar{\mathbf{x}}_{t + 1}  
+$$
+
+where:
+
+$$
+\bar{\mathbf{x}}_t = \sum_{a}\pi(a | S_t)\mathbf{x}_t(S_t, a)
+$$
+
+
+and the action TD error is defined as (the expected Sarsa formulation):
+
+$$
+\delta_{t}^{a} = R_{t+1} + \gamma_{t+1} \mathbf{w}_t^{T}\bar{\mathbf{x}}_{t+1} -  \mathbf{w}_t^{T}\mathbf{x}_t
+$$
+
+The eligibility trace is defined as:
+
+$$
+\mathbf{z}_t = \gamma_t \lambda_t \rho_t \mathbf{z}_{t-1} + \nabla \hat{q}(S_t, A_t, \mathbf{w}_t) =  \gamma_t \lambda_t \rho_t \mathbf{z}_{t-1} + \mathbf{x}_t 
+$$
+
+This is implemented in `agents/GQLambda`
+
+##### HTD($\lambda$) and HQ($\lambda$)
+
+###### HTD($\lambda$)
+HTD($\lambda$) is a a hybrid state-value algorithm combining aspects of GTD($\lambda$) 
+and TD($\lambda$). Its most appealing feature is that it is a strict 
+generalization of TD($\lambda$) to off-policy learning, i.e. if $b = \pi$ 
+HTD($\lambda$) becomes the same as TD($\lambda$), which is not true for 
+GTD($\lambda$). This is appealing because TD($\lambda$) is faster than 
+GTD($\lambda$). 
+
+HTD($\lambda$)'s weight update rule is defined as:
+
+$$
+\begin{align*}
+\delta_t^{s} &= R_{t+1} + \gamma_{t+1} \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_t) \\
+\mathbf{w}_{t+1} & = \mathbf{w}_t + \alpha \delta_t^{s} \mathbf{z}_t + \alpha \bigl((\mathbf{z}_t - \mathbf{z}_t^b)^{T} \mathbf{v}_t \bigr) \bigl(\mathbf{x}_t - \gamma_{t+1} \mathbf{x}_{t+1} \bigr) \\
+\mathbf{v}_{t+1} &= \mathbf{v}_{t} + \beta \delta_t^{s} \mathbf{z}_t - \beta \bigl(\mathbf{z}_{t}^{{b}^T} \mathbf{v}_t \bigr)(\mathbf{x}_t - \gamma_{t+1}\mathbf{x}_{t+1}) \tag{$\mathbf{v}_0 = \mathbf{0}$} \\
+\mathbf{z}_t &= \rho_t \bigl(\gamma_t \lambda_t \mathbf{z}_{t-1} + \mathbf{x}_t \bigr) \tag{$\mathbf{z}_{-1} = \mathbf{0}$} \\
+\mathbf{z}_t^{b} &= \gamma_t \lambda_t \mathbf{z}_{t - 1}^{b} + \mathbf{x}_t \tag{$\mathbf{z}_{-1}^{b} = \mathbf{0}$}
+\end{align*}
+$$
+
+$\mathbf{z}_t^b$ are conventional accumulating eligibility traces for the 
+behavior policy and become equal to $\mathbf{z}_t$ if all $\rho_t$ equal to $1$.
+Note that for state value case $\mathbf{x}_t \overset \cdot{=} \mathbf{x}(S_t)$
+
+###### HQ($\lambda$) (Experimental)
+Following the pattern as for GQ($\lambda$), under the same greedy
+assumptions of the policy for action value function $\hat{q}$, I created
+the control variant HTD($\lambda$), called it HQ($\lambda$), with the 
+following formulas:
+
+$$
+\begin{align*}
+\delta_t^{s} &= R_{t+1} + \gamma_{t+1} \hat{v}(S_{t+1}, \mathbf{w}_t) - \hat{v}(S_t, \mathbf{w}_t)  \\
+\delta_{t}^{a} &= R_{t+1} + \gamma_{t+1} \mathbf{w}_t^{T}\bar{\mathbf{x}}_{t+1} -  \mathbf{w}_t^{T}\mathbf{x}_t \\
+\mathbf{w}_{t+1} & = \mathbf{w}_t + \alpha \delta_t^{a} \mathbf{z}_t + \alpha \bigl((\mathbf{z}_t - \mathbf{z}_t^b)^{T} \mathbf{v}_t \bigr) \bigl(\bar{\mathbf{x}}_t - \gamma_{t+1} \bar{\mathbf{x}}_{t+1} \bigr) \\
+\mathbf{v}_{t+1} &= \mathbf{v}_{t} + \beta \delta_t^{s} \mathbf{z}_t - \beta \bigl(\mathbf{z}_{t}^{{b}^T} \mathbf{v}_t \bigr)(\mathbf{x}_t - \gamma_{t+1}\mathbf{x}_{t+1}) \tag{$\mathbf{v}_0 = \mathbf{0}$} \\
+\mathbf{z}_t &= \rho_t \gamma_t \lambda_t \mathbf{z}_{t-1} + \mathbf{x}_t \tag{$\mathbf{z}_{-1} = \mathbf{0}$} \\
+\mathbf{z}_t^{b} &= \gamma_t \lambda_t \mathbf{z}_{t - 1}^{b} + \mathbf{x}_t \tag{$\mathbf{z}_{-1}^{b} = \mathbf{0}$}
+\end{align*}
+$$
+
+where for action values (i.e. the control case) we have 
+$\mathbf{x}_t \overset \cdot{=} \mathbf{x}(S_t, A_t)$ and the 
+usual definition for linear approximators:
+
+$$
+\hat{v}(S_t, \mathbf{w}_t) = \sum_{a}\pi(a | S_t)\hat{q}(S_t, a, \mathbf{w}_t) = \sum_{a} \pi(a | S_t)\mathbf{w}_t^{T} \mathbf{x}(S_t, a)
+$$
+
+This agent is implemented in `agents/HQLambda`
+
+##### Off Policy Experiments
+Here I am showing the results for the off-policy algorithms presented
+above. In this setup, I set up the following hyper-paramters for each
+agent, as follows:
+
+* Behavioral policy:`on_policy/agents/SemiGradientSarsa`,  $\varepsilon = 0.1, \gamma = 0.99$
+* Expected Sarsa($\lambda$): $\alpha = \frac{\alpha'}{Num. tiles = 8}, \varepsilon = 0.0, \gamma = 0.99$
+* TB($\lambda$): $\alpha = \frac{\alpha'}{Num. tiles = 8}, \varepsilon = 0.0, \gamma = 0.99$
+* GQ($\lambda$): $\alpha = \frac{0.3 \alpha'}{Num. tiles = 8}, \beta = \frac{\alpha'}{Num. tiles = 8}, \varepsilon = 0.0, \gamma = 0.99$
+* HQ($\lambda$): $\alpha = \frac{0.3 \alpha'}{Num. tiles = 8}, \beta = \frac{\alpha'}{Num. tiles = 8}, \varepsilon = 0.0, \gamma = 0.99$
+
+The results presented are only for MountainCar, which was run for maximum
+episode length of 999 steps. 100 episodes and 50 experiments  - 
+each with a different seed - were run. Note that 1 experiment = 100 episodes
+in which only the traces and $\mathbf{v}_t$ were cleared after each episode.
+For each experiment, the agent started unlearned. Also note that the $\lambda$ 
+values are a bit different from the on-policy experiments, in that
+I am exploring more intermediary values, whereas in the on-policy case
+lambdas explored (also in the book) were concentrated near 1 (also refer to 
+figure 12.14 in the book).
+
+
+| <img src="images/OffPolicy_Expected_Sarsa_Lambda.png" alt="Grid" width="450"/> | <img src="images/OffPolicy_TB_Lambda.png" alt="Grid" width="450"/> |
+|--------------------------------------------------------------------------------|--------------------------------------------------------------------|
+| <img src="images/OffPolicy_GQLambda.png" alt="Grid" width="450"/>              | <img src="images/OffPolicy_HQLambda.png" alt="Grid" width="450"/>  |
+
+In these experiments, HQ($\lambda$) did not perform well. 
+Besides the low scores, several of the experiments failed, as 
+training was unstable for particular seeds. The results shown here are only those
+that succeeded (however the results are questionable). More work is needed here.
+

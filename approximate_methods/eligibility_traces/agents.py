@@ -1,6 +1,5 @@
 from typing import Union, Callable, Any, Optional
 import numpy as np
-from sympy import gamma
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -255,6 +254,10 @@ class TrueOnlineSarsaLambda(SarsaLambda):
 
 
 class OffPolicyExpectedSarsaLambda(LinearQEpsGreedyAgent):
+    """
+        Implementation of the Sarsa in expectation from section 12.9
+        in the book.
+    """
     def __init__(
             self,
             feature_size: int,
@@ -336,10 +339,13 @@ class OffPolicyExpectedSarsaLambda(LinearQEpsGreedyAgent):
             experience.p
         )
 
-        vphat = self.state_value(sp) * (1 - done)
+        vphat = sum([
+            self.get_sa_probability(sp, _a) * self.state_action_value(sp, _a)
+            for _a in range(self.action_space_dims)
+        ]) * (1 - done)  # (12.21)
+
         qhat = self.state_action_value(s=s, a=a)
         grad_w = self.feature_fn(s, a)
-
         tgtp = self.get_sa_probability(s, a)
         assert p > 0
         rho = tgtp / p
@@ -373,10 +379,14 @@ class OffPolicyExpectedSarsaLambda(LinearQEpsGreedyAgent):
 
         # endregion
 
-        delta_a = r + gamma_tt * vphat - qhat  # Expected Sarsa formulation
-        self.z = rho * gamma_t * lam_t * self.z + grad_w
+        delta_a = r + gamma_tt * vphat - qhat  # (12.28) - E[Sarsa]
+        # z[t] update before w[t+1] update
+        # z[t] <-- f(*, z[t-1])
+        self.z = rho * gamma_t * lam_t * self.z + grad_w  # (12.29)
+        # w[t+1] = f(*, z[t], w[t])
         weight_update = alpha * delta_a * self.z
-        self.w = np.clip(self.w + weight_update, -BIG_NUMBER, BIG_NUMBER)
+        self.w = np.clip(self.w + weight_update, -BIG_NUMBER, BIG_NUMBER) # (12.7)
+
 
         # Decay exploration if decayable
         if isinstance(self.eps, NoiseSchedule):
@@ -488,10 +498,13 @@ class TBLambda(LinearQEpsGreedyAgent):
             experience.ap, experience.done
         )
 
-        vphat = self.state_value(sp) * (1 - done)
+        vphat = sum([
+            self.get_sa_probability(sp, _a) * self.state_action_value(sp, _a)
+            for _a in range(self.action_space_dims)
+        ]) * (1 - done)  # (12.21)
+
         qhat = self.state_action_value(s=s, a=a)
         grad_w = self.feature_fn(s, a)
-        p = self.get_sa_probability(s, a)
 
         # region constants
         if isinstance(self.discount, Callable):
@@ -522,10 +535,14 @@ class TBLambda(LinearQEpsGreedyAgent):
 
         # endregion
 
-        delta_a = r + gamma_tt * vphat - qhat  # Expected Sarsa formulation
-        self.z = gamma_t * lam_t * p * self.z + grad_w
+        delta_a = r + gamma_tt * vphat - qhat  # (12.28)
+
+        # z[t] <-- f(*, z[t-1])
+        self.z = gamma_t * lam_t * self.get_sa_probability(s, a) * self.z + grad_w  # Section: 12.10
+
+        # w[t+1] <-- f(*, w[t], z[t])
         weight_update = alpha * delta_a * self.z
-        self.w = np.clip(self.w + weight_update, -BIG_NUMBER, BIG_NUMBER)
+        self.w = np.clip(self.w + weight_update, -BIG_NUMBER, BIG_NUMBER) # (12.7)
 
         # Decay exploration if decayable
         if isinstance(self.eps, NoiseSchedule):
@@ -594,7 +611,7 @@ class GQLambda(LinearQEpsGreedyAgent):
         self.t = 0
         self.lam = lam
         self.z: Optional[np.ndarray] = None
-        self.q: Optional[np.ndarray] = None
+        self.v: Optional[np.ndarray] = None
         self.update_coefficient = update_coefficient
         self.second_update_coefficient = second_update_coefficient
         self._writer: Optional[SummaryWriter] = None
@@ -622,7 +639,7 @@ class GQLambda(LinearQEpsGreedyAgent):
 
         self.init_weights()
         self.z = np.zeros_like(self.w)  # z_{-1}
-        self.q = np.zeros_like(self.w)
+        self.v = np.zeros_like(self.w)
 
     def reset(self):
         # The agent here is prepared for a new episode
@@ -639,7 +656,7 @@ class GQLambda(LinearQEpsGreedyAgent):
 
         # Eligibility traces pertain to one episode
         self.z = np.zeros_like(self.w)  # z_{-1}
-        self.q = np.zeros_like(self.w)
+        self.v = np.zeros_like(self.w)  # v_{0}
 
     def step(self,  experience: Experience, **kwargs):
         self._step(experience, **kwargs)
@@ -659,8 +676,14 @@ class GQLambda(LinearQEpsGreedyAgent):
             for _a in range(self.action_space_dims)
         ], axis=0, keepdims=False) * (1 - done)
 
-        x = self.feature_fn(s, a) # also the gradient wrt w
+        # xbar = np.sum([
+        #     self.get_sa_probability(s, _a) * self.feature_fn(s, _a)
+        #     for _a in range(self.action_space_dims)
+        # ], axis=0, keepdims=False)
 
+        x = self.feature_fn(s, a) # also the gradient wrt w
+        v = self.state_value(s)
+        vp = self.state_value(sp) * (1 - done)
         tgtp = self.get_sa_probability(s, a)
         assert p > 0
         rho = tgtp / p
@@ -703,12 +726,19 @@ class GQLambda(LinearQEpsGreedyAgent):
 
         # endregion
 
-        delta_a = r + gamma_tt * np.dot(self.w.T, xpbar) - np.dot(self.w.T, x)
-        self.z = (lam_t * gamma_t * rho * self.z) + x
-        self.q = self.q + beta * delta_a * self.z - beta * np.dot(self.q.T, x) * x
+        # Refer to: Section 12.11
+        delta_a = r + gamma_tt * np.dot(self.w.T, xpbar) - np.dot(self.w.T, x) # Section 12.11
+        delta_s = r + gamma_tt * vp - v # (12.23)
 
-        weight_update = alpha * delta_a * self.z - alpha * gamma_tt * (1 - lam_tt) * np.dot(self.z.T, self.q) * xpbar
-        self.w = np.clip(self.w + weight_update, -BIG_NUMBER, BIG_NUMBER)
+        # z[t] <-- f(*, z[t-1])
+        self.z = (lam_t * gamma_t * rho * self.z) + x  # (12.29)
+
+        # w[t + 1] <-- f(*, w[t], z[t], v[t])
+        weight_update = alpha * delta_a * self.z - alpha * gamma_tt * (1 - lam_tt) * np.dot(self.z.T, self.v) * xpbar  # Section 12.11
+        self.w = np.clip(self.w + weight_update, -BIG_NUMBER, BIG_NUMBER) # Section 12.11
+
+        # v[t+1] <-- f(*, v[t], z[t])
+        self.v = self.v + beta * delta_s * self.z - beta * np.dot(self.v.T, x) * x # (12.30)
 
         # Decay exploration if decayable
         if isinstance(self.eps, NoiseSchedule):
@@ -740,7 +770,7 @@ class GQLambda(LinearQEpsGreedyAgent):
             self._writer.add_histogram(root_name + 'x', x, log_step)
             self._writer.add_histogram(root_name + 'weight_update', weight_update, log_step)
             self._writer.add_histogram(root_name + 'weights', self.w, log_step)
-            self._writer.add_histogram(root_name + 'q', self.q, log_step)
+            self._writer.add_histogram(root_name + 'v', self.v, log_step)
 
 
 class HQLambda(LinearQEpsGreedyAgent):
@@ -783,7 +813,7 @@ class HQLambda(LinearQEpsGreedyAgent):
         self.lam = lam
         self.z: Optional[np.ndarray] = None
         self.zb: Optional[np.ndarray] = None
-        self.q: Optional[np.ndarray] = None
+        self.v: Optional[np.ndarray] = None
         self.update_coefficient = update_coefficient
         self.second_update_coefficient = second_update_coefficient
         self._writer: Optional[SummaryWriter] = None
@@ -812,7 +842,7 @@ class HQLambda(LinearQEpsGreedyAgent):
         self.init_weights()
         self.z = np.zeros_like(self.w)  # z_{-1}
         self.zb = np.zeros_like(self.w)  # z_{-1}
-        self.q = np.zeros_like(self.w)
+        self.v = np.zeros_like(self.w)
 
     def reset(self):
         # The agent here is prepared for a new episode
@@ -829,8 +859,8 @@ class HQLambda(LinearQEpsGreedyAgent):
 
         # Eligibility traces pertain to one episode
         self.z = np.zeros_like(self.w)  # z_{-1}
-        self.zb = np.zeros_like(self.w)  # z_{-1}
-        self.q = np.zeros_like(self.w)
+        self.zb = np.zeros_like(self.w)  # zb_{-1}
+        self.v = np.zeros_like(self.w)   # v_{0}
 
     def step(self, experience: Experience, **kwargs):
         self._step(experience, **kwargs)
@@ -846,13 +876,19 @@ class HQLambda(LinearQEpsGreedyAgent):
         )
 
         x = self.feature_fn(s, a)  # also the gradient wrt w (∇q(s, a, w))
-        xp = self.feature_fn(sp, ap)
+        xp = self.feature_fn(sp, ap) * (1 - done)
+        v = self.state_value(s)
+        vp = self.state_value(sp) * (1 - done)
 
         xpbar = np.sum([
             self.get_sa_probability(sp, _a) * self.feature_fn(sp, _a)
             for _a in range(self.action_space_dims)
         ], axis=0, keepdims=False) * (1 - done)
 
+        xbar = np.sum([
+            self.get_sa_probability(s, _a) * self.feature_fn(s, _a)
+            for _a in range(self.action_space_dims)
+        ], axis=0, keepdims=False)
 
         tgtp = self.get_sa_probability(s, a)
         assert p > 0
@@ -892,19 +928,20 @@ class HQLambda(LinearQEpsGreedyAgent):
             raise Exception("Invalid type for second_update_coefficient")
         # endregion
 
-        # The expectation form of TD-error. Same as in Expected-Sarsa
-        # Not spcified in the book particularly, but re-using the same
-        # form as in GQ(lambda)
+        # Not spcified in the book particularly, but following the same
+        # pattern as in GQ(lambda)
+        delta_s = r + gamma_tt * vp - v
         delta_a = r + gamma_tt * np.dot(self.w.T, xpbar) - np.dot(self.w.T, x)
 
-        weight_update = alpha * delta_a * self.z + alpha * np.dot((self.z - self.zb).T, self.q) * (x - gamma_tt * xp)
-        self.w = np.clip(self.w + weight_update, -BIG_NUMBER, BIG_NUMBER)
-
-        q_update = beta * delta_a * self.z - beta * np.dot(self.zb.T, self.q) * (x - gamma_tt * xp)
-        self.q = self.q + q_update
-
+        # z[t] <-- f(*, z[t - 1])
         self.z = rho * gamma_t * lam_t * self.z + x
         self.zb = gamma_t * lam_t * self.zb + x
+
+        weight_update = alpha * delta_a * self.z + alpha * np.dot((self.z - self.zb).T, self.v) * (xbar - gamma_tt * xpbar)
+        self.w = np.clip(self.w + weight_update, -BIG_NUMBER, BIG_NUMBER)
+
+        v_update = beta * delta_s * self.z - beta * np.dot(self.zb.T, self.v) * (x - gamma_tt * xp)
+        self.v = self.v + v_update
 
         # Decay exploration if decayable
         if isinstance(self.eps, NoiseSchedule):
@@ -919,7 +956,7 @@ class HQLambda(LinearQEpsGreedyAgent):
             root_name = f'off_policy/semi_gradient/hq_lambda/'
             self._writer.add_scalar(root_name + 'weights_norm', np.linalg.norm(self.w), log_step)
             self._writer.add_scalar(root_name + 'weight_update_norm', np.linalg.norm(weight_update), log_step)
-            self._writer.add_scalar(root_name + 'q_update_norm', np.linalg.norm(q_update), log_step)
+            self._writer.add_scalar(root_name + 'v_update_norm', np.linalg.norm(v_update), log_step)
             self._writer.add_scalar(root_name + 'delta_a', delta_a, log_step)
 
             self._writer.add_scalar(root_name + 'alpha', alpha, log_step)
@@ -940,6 +977,6 @@ class HQLambda(LinearQEpsGreedyAgent):
             self._writer.add_histogram(root_name + 'xp', xp, log_step)
             self._writer.add_histogram(root_name + 'weight_update', weight_update, log_step)
             self._writer.add_histogram(root_name + 'weights', self.w, log_step)
-            self._writer.add_histogram(root_name + 'q', self.q, log_step)
-            self._writer.add_histogram(root_name + 'q_update', q_update, log_step)
+            self._writer.add_histogram(root_name + 'v', self.v, log_step)
+            self._writer.add_histogram(root_name + 'v_update', v_update, log_step)
 

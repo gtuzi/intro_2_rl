@@ -1,3 +1,4 @@
+import os
 import random
 import copy
 from typing import List, Callable
@@ -45,7 +46,9 @@ def plot_multi_curves(
         xlabel='α',
         ylabel='Steps per Episode',
         ymin: int = 150,
-        ymax: int = 300
+        ymax: int = 300,
+        save: bool = False,
+        save_name: str = 'img.png'
 ):
     """
         Plot multiple curves on the same axes and label each near their minimum y-point,
@@ -71,7 +74,7 @@ def plot_multi_curves(
         M = len(curve_values[0])
         x = np.linspace(0, 1, M)
 
-    plt.figure(figsize=(8, 6))
+    fig = plt.figure(figsize=(8, 6))
     colors = plt.cm.tab10(np.linspace(0, 1, n_curves))
 
     for idx, (y, lab) in enumerate(zip(curve_values, labels)):
@@ -93,7 +96,40 @@ def plot_multi_curves(
     plt.tight_layout()
     plt.show()
 
+    dr = './run_images'
+    if save:
+        if not os.path.exists(dr):
+            os.makedirs(dr)
+        fig.savefig(os.path.join(dr, save_name))
+
 #endregion plots
+
+
+def build_env() -> Env:
+    global ENV_NAME
+    global RENDER
+    global MAX_EPISODE_STEPS
+
+    if ENV_NAME.lower() == 'MountainCar'.lower():
+        env = gym.make(
+            'MountainCar-v0',
+            render_mode="human" if RENDER else None)
+        env._max_episode_steps = MAX_EPISODE_STEPS
+    elif ENV_NAME.lower() == 'AirRaid'.lower():
+        env = gym.make(
+            "ALE/AirRaid-v5",
+            obs_type="rgb",
+            render_mode="human" if RENDER else None
+        )
+    elif ENV_NAME.lower() == 'LunarLander'.lower():
+        env = gym.make(
+            "LunarLander-v2",
+            render_mode="human" if RENDER else None
+        )
+    else:
+        raise NotImplementedError
+
+    return copy.deepcopy(env)
 
 
 def eval_env_episodic(
@@ -107,10 +143,7 @@ def eval_env_episodic(
     steps_per_episode = []
     sum_of_rewards_per_episode = []
 
-    for ei, episode in enumerate(tqdm(
-            range(num_episodes),
-            desc=f'Evaluation Episode'
-    )):
+    for ei, episode in enumerate(range(num_episodes)):
         # For seeds:
         # 1 -   None
         # 2 -   Single value
@@ -180,158 +213,139 @@ def run_env_episodic(
     eval_steps_per_episode = []
     eval_sum_of_rewards_per_episode = []
 
-    # ----- Unlearn ----- #
-    behavioral_agent.initialize()
-    if target_agent is not None:
-        target_agent.initialize()
-
-    for ei, episode in enumerate(tqdm(
-            range(num_episodes),
-            desc=f'Episode'
-    )):
-        # For seeds:
-        # 1 -   None
-        # 2 -   Single value
-        # 3 -   Same as number of episodes
-        seed = None
-        if seeds is not None:
-            if hasattr(seeds, '__getitem__'):
-                assert len(seeds) == num_episodes
-                seed = seeds[ei]
-            elif isinstance(seeds, (float, int)):
-                seed = seeds
-            else:
-                raise Exception("Seed format not recognized", str(seeds))
-
-        # Set the seed for this episode
-        random.seed(seed)
-        np.random.seed(seed)
-
-        # Noise state reset (not exploration level).
-        # Clear any trajectories.
-        # Clear any eligibility traces
-        behavioral_agent.reset()
+    try:
+        # ----- Unlearn ----- #
+        behavioral_agent.initialize()
         if target_agent is not None:
-            target_agent.reset()
+            target_agent.initialize()
 
-        # gymnasium v26 requires users to set seed
-        # when resetting the environment
-        s, info = env.reset(seed=seed) # s[0]
-        a, p = behavioral_agent.act(s) # a[0]
+        for ei, episode in enumerate(tqdm(
+                range(num_episodes),
+                desc=f'Training Episode',
+                leave=False
+        )):
+            # For seeds:
+            # 1 -   None
+            # 2 -   Single value
+            # 3 -   Same as number of episodes
+            seed = None
+            if seeds is not None:
+                if hasattr(seeds, '__getitem__'):
+                    assert len(seeds) == num_episodes
+                    seed = seeds[ei]
+                elif isinstance(seeds, (float, int)):
+                    seed = seeds
+                else:
+                    raise Exception("Seed format not recognized", str(seeds))
 
-        rho = None
-        if (target_agent is not None) and (
-                isinstance(target_agent, SoftPolicy)
-        ):
-            target_p = target_agent.get_sa_probability(s, a)
-            rho = target_p / p
+            # Set the seed for this episode
+            random.seed(seed)
+            np.random.seed(seed)
 
-        R = 0
-        for t in range(T):
-            sp, r, terminated, truncated, info = env.step(a)
-            done = terminated or truncated or (t + 1 == T)
-            reward = reward_shaper(reward=r, state = sp, done=done, t=t)
-            ap, pp = behavioral_agent.act(sp)
-            R += r
+            # Noise state reset (not exploration level).
+            # Clear any trajectories.
+            # Clear any eligibility traces
+            behavioral_agent.reset()
+            if target_agent is not None:
+                target_agent.reset()
 
-            # If off-policy, capture target probabilities
-            rhop = None
+            # gymnasium v26 requires users to set seed
+            # when resetting the environment
+            s, info = env.reset(seed=seed) # s[0]
+            a, p = behavioral_agent.act(s) # a[0]
+
+            rho = None
             if (target_agent is not None) and (
-            isinstance(target_agent, SoftPolicy)
+                    isinstance(target_agent, SoftPolicy)
             ):
-                target_pp = target_agent.get_sa_probability(sp, ap)
-                rhop = target_pp / pp
+                target_p = target_agent.get_sa_probability(s, a)
+                rho = target_p / p
 
-            e = Experience(
-                s=s,
-                a=a,
-                p=p,
-                r=reward,
-                sp=sp,
-                ap=ap,
-                pp=pp,
-                done=int(done),
-                rho=rho,
-                rhop=rhop,
-                t=t)
+            R = 0
+            for t in range(T):
+                sp, r, terminated, truncated, info = env.step(a)
+                done = terminated or truncated or (t + 1 == T)
+                reward = reward_shaper(reward=r, state = sp, done=done, t=t)
+                ap, pp = behavioral_agent.act(sp)
+                R += r
 
-            behavioral_agent.step(e)
+                # If off-policy, capture target probabilities
+                rhop = None
+                if (target_agent is not None) and (
+                isinstance(target_agent, SoftPolicy)
+                ):
+                    target_pp = target_agent.get_sa_probability(sp, ap)
+                    rhop = target_pp / pp
 
-            if target_agent is not None:
-                target_agent.step(e)
+                e = Experience(
+                    s=s,
+                    a=a,
+                    p=p,
+                    r=reward,
+                    sp=sp,
+                    ap=ap,
+                    pp=pp,
+                    done=int(done),
+                    rho=rho,
+                    rhop=rhop,
+                    t=t)
 
-            if done:
-                steps_per_episode.append(t)
-                sum_of_rewards_per_episode.append(R)
-                break
-            else:
-                s = sp
-                a = ap
-                p = pp
-                rho=rhop
+                behavioral_agent.step(e)
+
+                if target_agent is not None:
+                    target_agent.step(e)
+
+                if done:
+                    steps_per_episode.append(t)
+                    sum_of_rewards_per_episode.append(R)
+                    break
+                else:
+                    s = sp
+                    a = ap
+                    p = pp
+                    rho=rhop
 
 
-        if (
-                do_eval and
-                (
-                        (
-                                (episode % evaluate_frequency == 0) and
-                                (eval_num_episodes > 0)
-                        ) or
-                        (episode + 1 == num_episodes)  # evaluate last episode
+            if (
+                    do_eval and
+                    (
+                            (
+                                    (episode % evaluate_frequency == 0) and
+                                    (eval_num_episodes > 0)
+                            ) or
+                            (episode + 1 == num_episodes)  # evaluate last episode
+                    )
+            ):
+                eval_agent = behavioral_agent
+
+                if target_agent is not None:
+                    eval_agent = target_agent
+
+                steps, sum_r = eval_env_episodic(
+                    env,
+                    agent=eval_agent,
+                    seeds=seed,
+                    T=T,
+                    num_episodes=eval_num_episodes,
+                    greedy=greedy_eval,
                 )
-        ):
-            eval_agent = behavioral_agent
 
-            if target_agent is not None:
-                eval_agent = target_agent
+                eval_steps_per_episode += steps
+                eval_sum_of_rewards_per_episode += sum_r
 
-            steps, sum_r = eval_env_episodic(
-                env,
-                agent=eval_agent,
-                seeds=seed,
-                T=T,
-                num_episodes=eval_num_episodes,
-                greedy=greedy_eval,
-            )
-
-            eval_steps_per_episode += steps
-            eval_sum_of_rewards_per_episode += sum_r
-
-
-    return dict(
-        steps_per_episode=steps_per_episode,
-        sum_of_rewards_per_episode=sum_of_rewards_per_episode,
-        eval_steps_per_episode=eval_steps_per_episode,
-        eval_sum_of_rewards_per_episode=eval_sum_of_rewards_per_episode
-    )
-
-
-def build_env() -> Env:
-    global ENV_NAME
-    global RENDER
-    global MAX_EPISODE_STEPS
-
-    if ENV_NAME.lower() == 'MountainCar'.lower():
-        env = gym.make(
-            'MountainCar-v0',
-            render_mode="human" if RENDER else None)
-        env._max_episode_steps = MAX_EPISODE_STEPS
-    elif ENV_NAME.lower() == 'AirRaid'.lower():
-        env = gym.make(
-            "ALE/AirRaid-v5",
-            obs_type="rgb",
-            render_mode="human" if RENDER else None
+        return dict(
+            steps_per_episode=steps_per_episode,
+            sum_of_rewards_per_episode=sum_of_rewards_per_episode,
+            eval_steps_per_episode=eval_steps_per_episode,
+            eval_sum_of_rewards_per_episode=eval_sum_of_rewards_per_episode
         )
-    elif ENV_NAME.lower() == 'LunarLander'.lower():
-        env = gym.make(
-            "LunarLander-v2",
-            render_mode="human" if RENDER else None
+    except Exception as ex:
+        return dict(
+            steps_per_episode=[np.inf] * num_episodes,
+            sum_of_rewards_per_episode=[-np.inf] * num_episodes,
+            eval_steps_per_episode=[np.inf] * num_episodes,
+            eval_sum_of_rewards_per_episode=[-np.inf] * num_episodes
         )
-    else:
-        raise NotImplementedError
-
-    return copy.deepcopy(env)
 
 
 def run_one_experiment(
@@ -517,6 +531,8 @@ def experiments_parallel(
     ]
 
     # Loop (λ, α) in serial (this is cheap: just n_states‐grid combinations)
+    completed = 0
+    total = len(alphas) * len(lambdas)
     for ia, alpha in enumerate(alphas):
         for il, lam in enumerate(lambdas):
             #    Launch n_experiments calls of run_one_experiment(...) *in parallel*
@@ -537,6 +553,7 @@ def experiments_parallel(
                 for e in range(num_experiments)
             )
 
+            completed += 1
             steps = [r['steps_per_episode'] for r in res]
             sum_rewards = [r['sum_of_rewards_per_episode'] for r in res]
 
@@ -551,24 +568,33 @@ def experiments_parallel(
             ]
 
             # 4) Average those n_experiments results to fill results_array
-            steps_per_episode[il, ia] = np.mean(steps)
-            sum_of_rewards_per_episode[il, ia] = np.mean(sum_rewards)
+            valid_idx = [i for i, s in enumerate(steps) if
+                         not ((np.inf in s) or (-np.inf) in s)]
+            steps_per_episode[il, ia] = np.mean(
+                [steps[vi] for vi in valid_idx]) if len(
+                valid_idx) > 0 else np.inf
+            sum_of_rewards_per_episode[il, ia] = np.mean(
+                [sum_rewards[vi] for vi in valid_idx]) if len(
+                valid_idx) > 0 else -np.inf
 
             if len(eval_steps) > 0:
-                eval_steps_per_episode[il, ia] = np.mean(eval_steps)
+                eval_steps_per_episode[il, ia] = np.mean(
+                    [eval_steps[vi] for vi in valid_idx]) if len(
+                    valid_idx) > 0 else np.inf
 
             if len(eval_sum_rewards) > 0:
-                eval_sum_of_rewards_per_episode[il, ia] = np.mean(eval_sum_rewards)
+                eval_sum_of_rewards_per_episode[il, ia] = np.mean(
+                    [eval_sum_rewards[vi] for vi in valid_idx]) if len(
+                    valid_idx) > 0 else -np.inf
 
             print(
-                f"\n{model} - Done "
-                f"α={alpha:.3f}, "
-                f"λ={lam:.3f} → "
-                f"steps/episode: {steps_per_episode[il, ia]:.4f}, "
-                f"sum(r)/episode: {sum_of_rewards_per_episode[il, ia]:.4f}"
-                f"eval steps/episode: {eval_steps_per_episode[il, ia]:.4f}, "
-                f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[il, ia]:.4f}"
-                )
+                f"\n{model} - Completed {100 * completed / total:.1f} "
+                f"α={alpha:.3f}, λ={lam:.3f} → "
+                f"steps/episode: {steps_per_episode[il, ia]:.2f}, "
+                f"sum(r)/episode: {sum_of_rewards_per_episode[il, ia]:.2f}, "
+                f"eval steps/episode: {eval_steps_per_episode[il, ia]:.2f}, "
+                f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[il, ia]:.2f}"
+            )
 
     if model == 'SarsaLambda':
         title = 'Sarsa(λ)'
@@ -591,6 +617,8 @@ def experiments_parallel(
         labels=lambdas,
         x=alphas,
         ylabel='Avg. Steps/Episode',
+        save = True,
+        save_name=f'train_steps_{model}.png'
     )
 
     plot_multi_curves(
@@ -600,7 +628,9 @@ def experiments_parallel(
         x=alphas,
         ylabel='Avg. Sum(Rewards)/Episode',
         ymin= -500,
-        ymax= -150
+        ymax= -150,
+        save=True,
+        save_name=f'train_rewards_{model}.png'
     )
 
     plot_multi_curves(
@@ -610,7 +640,9 @@ def experiments_parallel(
         x=alphas,
         ylabel='Avg. Steps/Episode',
         ymin=150,
-        ymax=1000
+        ymax=1000,
+        save=True,
+        save_name=f'eval_steps_{model}.png'
     )
 
     plot_multi_curves(
@@ -620,7 +652,9 @@ def experiments_parallel(
         x=alphas,
         ylabel='Avg. Sum(Rewards)/Episode',
         ymin=-1000,
-        ymax=-150
+        ymax=-150,
+        save=True,
+        save_name=f'eval_rewards_{model}.png'
     )
 
 
@@ -1299,7 +1333,7 @@ if __name__ == '__main__':
         if on_policy:
             num_episodes = 50
         else:
-            num_episodes = 200
+            num_episodes = 100
         T = 999
         MAX_EPISODE_STEPS = T
     else:
@@ -1321,24 +1355,6 @@ if __name__ == '__main__':
 
     def base_reward(reward: float, state: np.ndarray, done: bool, t: int):
         return reward
-
-    # # -- Debug
-    # alphas = np.linspace(0.01, 4, num=5)
-    # lambdas = [0., 0.01, 0.1, 0.2, 0.4, 0.6, 0.9]
-    # # --
-    #
-    # offline_tb_lambda(
-    #     num_episodes=num_episodes,
-    #     T=T,
-    #     reward_shaper=base_reward,
-    #     eps_builder=build_greedy_eps_sched,
-    #     eps=0.0,
-    #     alphas=alphas,
-    #     lambdas=lambdas,
-    #     seeds=[i for i in range(num_episodes)]
-    # )
-    #
-    # exit(0)
 
     if on_policy:
         alphas = np.linspace(0.2, 1.9, num=10)
@@ -1362,11 +1378,18 @@ if __name__ == '__main__':
         alphas = np.linspace(0.01, 4, num=20)
         lambdas = [0., 0.01, 0.1, 0.2, 0.3, 0.4, 0.6, 0.9]
 
-        for model in ["TBLambda", "OffPolicyExpectedSarsaLambda", "GQLambda"]:
+        models = [
+            "OffPolicyExpectedSarsaLambda",
+            "TBLambda",
+            "GQLambda",
+            "HQLambda"
+        ]
+
+        for model in models:
             experiments_parallel(
                 model=model,
                 num_episodes=num_episodes,
-                num_experiments=20,
+                num_experiments=50,
                 T=T,
                 reward_shaper=base_reward,
                 eps=0.0,
