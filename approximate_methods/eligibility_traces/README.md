@@ -17,7 +17,7 @@
 ## Intro
 Eligibility traces (ET)s unify and generalize TD and Monte Carlo methods. When TD
 methods are augmented with ETs, they produce a family of methods spanning
-a spectrum that has Monte Carlo methods at one end ($ \lambda = 1$) and one-step TD methods
+a spectrum that has Monte Carlo methods at one end ($\lambda = 1$) and one-step TD methods
 at the other ($\lambda = 0$). In between are intermediate methods that are often better than
 either extreme method. ETs also provide a way of implementing Monte Carlo
 methods online and on continuing problems without episodes. 
