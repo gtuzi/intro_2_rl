@@ -36,7 +36,7 @@ across environments.
 - [x] Chapter 8: [Planning](tabular_methods/planning/README.md)
 - [x] Chapter 10: [On-Policy Approximation](approximate_methods/on_policy/README.md)
 - [x] Chapter 11: [Off-Policy Approximation](approximate_methods/off_policy/README.md)
-- [x] Chapter 12: [Eligibility Traces](approximate_methods/eligibility_traces/README.md)
+- [x] Chapter 12: [Eligibility Traces](approximate_methods/eligibility_traces/index.md)
 
 
 ## Code Organization

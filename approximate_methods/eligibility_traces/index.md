@@ -4,7 +4,7 @@
 
 # Eligibility Traces
 
-A cleaner rendering of the formulas is located [here](summary.ipynb)
+A cleaner rendering of the formulas is located [here](README.ipynb)
 
 Eligibility traces (ET)s unify and generalize TD and Monte Carlo methods. When TD
 methods are augmented with ETs, they produce a family of methods spanning
