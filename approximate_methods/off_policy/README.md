@@ -2,8 +2,18 @@
 
 # Off-policy Methods with Approximation
 
-The theoretical details, detours, and expansions are
-shown in [summary.ipynb](summary.ipynb).
+
+## Table of Contents
+- [Introduction](#introduction)
+- [Implemented Algorithms](#implemented-algorithms)
+- [Development, Explanations, and Experimental Details](#development-explanations-and-experimental-details)
+- [TD(0) - Sarsa](#td0---sarsa)
+- [Dynamic Programming](#dynamic-programming)
+- [TD(0) - Q-Learning](#td0---q-learning)
+- [The Deadly Triad](#the-deadly-triad)
+- [GTD2 and Expected GTD2](#gtd2-and-expected-gtd2)
+- [TDC](#tdc)
+
 
 ## Introduction
 The extension to function approximation is significantly different and 
@@ -24,29 +34,18 @@ Two challenges present themselves in the off-policy with approximation
 * _Target_ (value) of the update $\rightarrow$ dealt with importance sampling (IS)
 * _Distribution_ of the updates $\rightarrow$ IS for semi-gradient methods, true gradients without IS
 
-### Semi-Gradient Methods
-Details in  [summary.ipynb](summary.ipynb)
 
-### Off-Policy Divergence
-One issue with off-policy with function approximation is the update 
-distribution divergence. An example of such divergence is Baird's example 
-(refer to `bairds_main.py` for the implementation).
+## Implemented Algorithms
+- [x] GTD2: `bairds/GTD2`
+- [x] Expected GTD2: `bairds/ExpectedGTD2`
+- [x] TDC: `bairds/TDC`
+- [x] ExpectedTDC: `bairds/ExpectedTDC`
+- [x] n-step Off-Policy Sarsa: `agents/SemiGradient_nStepsSarsaOffPolicy`
 
-In this example, the _dashed_ line (actions) take the system to one of the upper 
-states which land into any of the with equal probability. The _solid_ line
-(the other action) takes the system to the seventh state. In this example
-the behavioral policy $b$ takes _dashed_ action with $\frac{6}{7}$ probability
-and _solid_ action with $\frac{1}{7}$ so that the next state distribution
-under $b$ is uniform, i.e. $b(\cdot|S_{t+1}) \sim U$. 
+## Development, Explanations, and Experimental Details
+The theoretical details, detours, and expansions are in [this](summary.ipynb) notebook.
 
-The target $\pi$ policy takes only the _solid_ line action with probability 1. 
-The reward is 0 on all transitions.
-
-<img src="images/Bairds_counterexample.png" alt="Grid" width="400"/>
-
-Using the semi-gradient update for offline learning as follows:
-
-##### TD(0) - Sarsa
+## TD(0) - Sarsa
 Here I am using the behavioral policy $b$ to generate the experiences.
 On-Policy for the Sarsa case means that we force $\rho = 1$
 
@@ -58,7 +57,7 @@ On-Policy for the Sarsa case means that we force $\rho = 1$
 | <img src="images/results/Bairds_Sarsa_OffPolicy.png" alt="Grid" width="400"/> | <img src="images/results/Bairds_Sarsa_OnPolicy.png" alt="Grid" width="400"/> |
 
 
-##### DP
+## Dynamic Programming
 For the DP case, we have access to the environment dynamics $P$. 
 On-Policy for the DP case means that we use $\pi = b$ probabilities.
 Also note that $P(r \ne 0, \cdot | \cdot) = 0$.
@@ -76,7 +75,7 @@ Went a little verbose here for clarity.
 As we can see above, for the off policy cases, weights diverge, whereas 
 the on-policy there is a solution found.
 
-##### TD(0) - Q-Learning
+## TD(0) - Q-Learning
 For Q-Learning I'm keeping a separate set of weight vectors for each actions
 as $\mathbf w^{T}_{a}$. The (explicit) update rule is then as follows:
 
@@ -90,7 +89,7 @@ We also note here that the weights diverge, for both actions
 |--------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
 
 
-### The Deadly Triad
+## The Deadly Triad
 Likelihood of divergence rises under these three conditions
 
 * Function approximation: generalizing from a state space
@@ -101,12 +100,10 @@ uniformly, as in dynamic programming, does not respect the target policy and is
 an example of on-policy training.
 
 
-### Gradient-TD Methods
+## GTD2 and Expected GTD2
 In pursuing the off-line stability, "true" SGD methods for minimizing 
 _mean squared Projected Bellman Error_ (PBE), namely $\overline{PBE}$ 
 are considered.
-
-#### GTD2
 
 Implemented in: `` bairds_main.py\ExpectedGTD2``
 
@@ -120,7 +117,7 @@ error $\sqrt{\overline{PBE}} \approx 0$.
 
 <img src="images/results/Bairds_ExpectedGTD2_longrun.png" alt="Grid" width="400"/>
 
-###### TDC
+## TDC
 An improved alternative, called _GTD(0)_ incorportates a gradient 
 correction.  An alternative name for this algorithm is 
 _TD(0) with gradient correction_ (TDC) Implemented in:
