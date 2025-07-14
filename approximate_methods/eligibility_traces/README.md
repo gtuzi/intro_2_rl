@@ -8,10 +8,10 @@
 - [Implemented Algorithms - Estimation](#implemented-algorithms-for-estimation)
 - [Implemented Algorithms - Control](#implemented-algorithms-for-control)
 - [Explanations, Development, and Experimental Details](#explanations-development-and-experimental-details)
-- [Offline $\lambda$-return vs. TD($\lambda$)](#offline-lambda-return-vs-tdlambda-algorithm)
-- [Truncated TD($\lambda$)](#truncated-tdlambda)
-- [True Online TD($\lambda$)](#true-online-tdlambda)
-- [Sarsa($\lambda$)](#sarsalambda)
+- [Offline lambda-return vs. TD(lambda)](#offline-lambda-return-vs-tdlambda-algorithm)
+- [Truncated TD(lambda)](#truncated-tdlambda)
+- [True Online TD(lambda)](#true-online-tdlambda)
+- [Sarsa(lambda)](#sarsalambda)
 - [Generalized Off-Policy TD Algorithms](#generalized-off-policy-td-algorithms)
 
 ## Intro
