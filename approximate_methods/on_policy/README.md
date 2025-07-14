@@ -4,14 +4,18 @@
 # On-policy Control with Approximation
 
 ## Table of Contents
-- [Introduction](#introduction)
-- [Linear Methos](#Linear-Methods)
+- [Theoretical Background](#theoretical-background)
 - [Implemented Algorithms](#Implemented-Algorithms)
-- [Semi-Gradient Sarsa](#Semi-Gradient-Sarsa)
-- [n-Step Semi-Gradient Sarsa](#n-Step-Semi-Gradient-Sarsa)
-- [Continuing Task Semi-Gradient Control: Average Reward, Differential Value Functions](#Continuing-Task-Semi-Gradient-Control)
-- [Differential Semi-Gradient Sarsa](#Differential-Semi-Gradient-Sarsa)
-- [Differential Semi-gradient n-step Sarsa](#Differential-Semi-gradient-n-step-Sarsa)
+- [Semi-Gradient Sarsa Algorithms](#semi-gradient-sarsa-algorithms)
+- [Semi-Gradient Sarsa Algorithm Experiments](#semi-gradient-sarsa-algorithm-experiments)
+- [n-Step Semi-Gradient Sarsa Algorithms](#n-step-semi-gradient-sarsa-algorithms)
+- [n-Step Semi-Gradient Sarsa Experiments](#n-step-semi-gradient-sarsa-experiments)
+- [Continuing Task Semi-Gradient Control: 1-step](#continuing-task-semi-gradient-control-1-step)
+- [Continuing Task Semi-Gradient Experiments: 1-step](#continuing-task-semi-gradient-experiments-1-step)
+- [Continuing Task Semi-Gradient Control: n-step](#continuing-task-semi-gradient-control-n-step)
+- [Continuing Task Semi-Gradient Experiments: n-step](#continuing-task-semi-gradient-control-experiments-n-step)
+- [Environment](#environment)
+
 
 ## Theoretical Background
 See expanded discussion of the algorithms and concepts covered here: [summary.ipynb](summary.ipynb).
@@ -41,29 +45,10 @@ Topics covered in the notebook:
 - [x]  Differential Semi-Gradient QLearning (Section: 10.3): `agents.py/DifferentialSemiGradientQLearning`
 - [x]  Differential Semi-Gradient Expected Sarsa (extension of Sarsa): `agents.py/DifferentialSemiGradientExpectedSarsa`
 - [x]  DifferentialSemiGradient_nStepSarsa (Section: 10.5): `agents.py/DifferentialSemiGradient_nStepSarsa`
-- [x]   DifferentialSemiGradient_nStepExpectedSarsa (extension of Sarsa): `agents.py/DifferentialSemiGradient_nStepExpectedSarsa`
-- [x]   DifferentialSemiGradient_nStepQLearning (extension of Sarsa): `agents.py/DifferentialSemiGradient_nStepQLearning`
+- [x]  DifferentialSemiGradient_nStepExpectedSarsa (extension of Sarsa): `agents.py/DifferentialSemiGradient_nStepExpectedSarsa`
+- [x]  DifferentialSemiGradient_nStepQLearning (extension of Sarsa): `agents.py/DifferentialSemiGradient_nStepQLearning`
 
-
-## Environment
-Here the [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car/) environment from OpenAI's Gymnasium is used.
-This is a discrete control environment where the agent is a car that must reach the flag at the top of the hill.
-
-The discrete action space is defined as:
-* 0 - Accelerate to the left
-* 1 - Don’t accelerate
-* 2 - Accelerate to the right
-
-The continuous state-space is discretized into feature vectors using tile-coding from [`tiles3.py`](http://incompleteideas.net/tiles/tiles3.py-remove) - where, as in footnote (1) in the book - it is used as:
-- `iht=IHT(4096)` 
-- `tiles(iht,8,[8*x/(0.5+1.2),8*xdot/(0.07+0.07)],[A])`
-
-where the number of tiles & tilings are set to 8.
-
-
-## Episodic Semi-Gradient Control
-
-### Semi-Gradient Sarsa
+## Semi-Gradient Sarsa Algorithms
 For the one-step Sarsa, the target value $U_t = R_{t+1} + \hat{q}(S_{t+1}, A_{t+1}, \mathbf{w})$. 
 The one-step algorithm listed in the book is the following:
 <img src="images/Semi_Gradient_Sarsa.png" alt="Grid" width="800"/>
@@ -79,7 +64,8 @@ $U_t = R_{t+1} + \gamma\hat{v}(S_{t+1}, \mathbf{w}) = R_{t+1} + \gamma{\sum_{a}{
 $U_t = R_{t+1} + \gamma\max_a{\hat{q}(S_{t+1}, a, \mathbf{w})}$
 
 
-### Experiments
+### Semi-Gradient Sarsa Algorithm Experiments
+
 ###### Simulation Parameters
 The following simulation parameters are used:
 * 5 seeds
@@ -102,7 +88,7 @@ The following simulation parameters are used:
 | Q-Learning     | $\varepsilon$ = 0.01 | <img src="images/results/BaseReward_SemiGradientQLearning_Train_eps_0.01.png" alt="Grid" width="400"/>     | <img src="images/results/BaseReward_SemiGradientQLearning_Eval_eps_0.01.png" alt="Grid" width="400"/>     |
 
 
-### n-Step Semi-Gradient Sarsa
+## $n$-Step Semi-Gradient Sarsa Algorithms
 An n-step version of episodic semi-gradient Sarsa by using an n-step return as the update target in the semi-gradient Sarsa update equation.
 The n-step return immediately generalizes from its tabular form to a function approximation form.
 
@@ -121,7 +107,8 @@ $G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R
 ### n-Step Sarsa Max/QLearning
 $G_{t:t+n} \overset{\cdot}{=} R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n{\max_{a}\hat{q}(S_{t+n}, a, \mathbf{w}_{t+n-1})}, \ t + n < T$
 
-#### Experiments
+## $n$-Step Semi-Gradient Sarsa Experiments
+
 ###### Simulation Parameters
 The following simulation parameters are used:
 * 5 seeds
@@ -156,16 +143,14 @@ The following simulation parameters are used:
 
 Results for other parameters and reward shaping functions are located under `images/results` folder.
 
-## Continuing Semi-Gradient Control
-Disscusion for Sarsa, Expected Sarsa and Q-Learning variants discussed here: [summary.ipynb](summary.ipynb)
 
-
-### One-Step Differential Semi-Gradient Sarsa
+## Continuing Task Semi-Gradient Control: 1-step
+#### One-Step Differential Semi-Gradient Sarsa
 The differential semi-gradient Sarsa algorithm (for estimating q) is shown below:
 
 <img src="images/DifferentialSemiGradientSarsa.png" alt="Grid" width="800"/>
 
-#### Experiments
+## Continuing Task Semi-Gradient Experiments: 1-step
 The same MountainCar environment is used for these experiments, where the 
 environment is set to be continuous (40k steps). Since the environment 
 "out of the box" simply resets the vehicle to the starting position 
@@ -187,16 +172,13 @@ since a continuing reward of "-1" has the same average reward (of -1).
 
 For other $\varepsilon$ settings, please refer to `images/results` folder.
 
-
-### $n$-Step Differential Semi-gradient Sarsa
-Disscusion for Sarsa, Expected Sarsa and Q-Learning variants discussed here: [summary.ipynb](summary.ipynb)
+## Continuing Task Semi-Gradient Control: n-step
+#### $n$-Step Differential Semi-gradient Sarsa
 
 <img src="images/Differential_nStep_Semi_Gradient_Sarsa.png.png" alt="Grid" width="800"/>
 
-The implementation includes the "Unbiased Constant-Step-Size Trick" from 
-Section 2.7.
 
-#### Experiments
+## Continuing Task Semi-Gradient Control Experiments: n-step
 Just like above, MountainCar environment - modified for the continuing task 
 case is also used.
 
@@ -214,8 +196,22 @@ case is also used.
 
 More experiments with different starting $\varepsilon$ are located in `images/results`
 
-## Environment: [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car/#mountain-car)
-The Mountain Car MDP is a deterministic MDP that consists of a car placed 
+## Environment
+Here the [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car/) environment from OpenAI's Gymnasium is used.
+This is a discrete control environment where the agent is a car that must reach the flag at the top of the hill.
+
+The discrete action space is defined as:
+* 0 - Accelerate to the left
+* 1 - Don’t accelerate
+* 2 - Accelerate to the right
+
+The continuous state-space is discretized into feature vectors using tile-coding from [`tiles3.py`](http://incompleteideas.net/tiles/tiles3.py-remove) - where, as in footnote (1) in the book - it is used as:
+- `iht=IHT(4096)` 
+- `tiles(iht,8,[8*x/(0.5+1.2),8*xdot/(0.07+0.07)],[A])`
+
+where the number of tiles & tilings are set to 8.
+
+The [Mountain Car]([MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car/#mountain-car)) MDP is a deterministic MDP that consists of a car placed 
 stochastically at the bottom of a sinusoidal valley, with the only 
 possible actions being the accelerations that can be applied to the car 
 in either direction. The goal of the MDP is to strategically accelerate 
