@@ -206,7 +206,7 @@ $$
 So the expected state visitation count $\eta(s)$ above can also be expressed as:
 
 $$
-\eta(s) = \sum_{k=0}^{\infty}\text{Pr}\{s' \rightarrow s, k, \pi \} = \mathbb{E}[\text{#} \{t: S_t = s \}]
+\eta(s) = \sum_{k=0}^{\infty}\text{Pr}\{s' \rightarrow s, k, \pi \} = \mathbb{E}[\text{num} \{t: S_t = s \}]
 $$
 
 
