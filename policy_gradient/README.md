@@ -225,7 +225,9 @@ $$
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s)\sum_{a'} \nabla \pi(a' | s') q(s', a') +  \sum_{s'} p(s' | s) \sum_{s''}p(s'' | s') \sum_{a''} \nabla \pi(a'' | s'')q(s'', a'') + \sum_{s'} p(s' | s) \sum_{s''}p(s'' | s') \sum_{s'''}p(s''' | s'')\sum_{a'''}\nabla \pi(a''' | s''')q(s''', a''') + ... \\[0.5em]
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{a'}\sum_{s'}p(s' | s) \nabla \pi(a' | s')q(s', a') + \sum_{a''} \sum_{s', s''}p(s'|s)p(s''| s') \nabla \pi(a'' | s'') q(s'', a'') + \sum_{a'''} \sum_{s', s'', s'''}p(s'|s)p(s'' | s)p(s''' | s'') \nabla \pi(a''' | s''')q(s''', a''') + ... \\[0.5em]
 &= \sum_a \sum_{s}p(s|s) \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{a'}\sum_{s'} p(s'|s) \nabla \pi(a' | s')q(s', a') + \sum_{a''} \sum_{s''}p(s'' | s)\nabla \pi(a'' | s'')q(s'', a'') + \sum_{a'''}\sum_{s'''}p(s''' | s) \nabla \pi(a''' | s''')q(s''', a''') + ... \quad \text{by Chapman-Kolmogorov equation}  \\[0.5em]
-&= \sum_a \sum_{k = 0}^{\infty} p(s^{(k)} | s) \nabla\pi(a | s^{(k)})q_{\pi}(s^{(k)}, a)  \quad \text{since $\sum_{a^{(k)}}\pi(a^{(k)} | s^{(k)})$} = \sum_a \pi(a | s^{(k)})\\[0.5em]
-&= \sum_a \sum_{k = 0}^{\infty} p_{ss^{(k)}} ^ {(k)}\nabla\pi(a | s^{(k)})q_{\pi}(s^{(k)}, a) \quad \text{using the standard n-step notation}
+&= \sum_{a \in \mathcal{A}} \sum_{k = 0}^{\infty} \sum_{s^{(k)} \in \mathcal{S}} p(s^{(k)} | s) \nabla\pi(a | s^{(k)})q_{\pi}(s^{(k)}, a)  \quad \text{since $\sum_{a^{(k)}}\pi(a^{(k)} | s^{(k)})$} = \sum_a \pi(a | s^{(k)})\\[0.5em]
+&= \sum_{a \in \mathcal{A}, s^{*} \in \mathcal{S}} \sum_{k = 0}^{\infty} p_{ss^{*}} ^ {(k)}\nabla\pi(a | s^{*})q_{\pi}(s^{*}, a) \quad \text{using the standard n-step notation}
 \end{align*}
 $$
+
+where $s^{(k)}$ is the state at $k$-th steps from $s$
