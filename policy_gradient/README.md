@@ -221,7 +221,7 @@ $$
 &= \sum_a \Bigl(\nabla \pi(a | s) q_{\pi}(s, a) + \pi(a|s) \bigl(\sum_{s'} p(s' | s, a) \nabla v(s') \bigr) \Bigr) \\[0.5em]
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_a \sum_{s'}\pi(a | s)p(s'|s, a) \nabla v(s') \\[0.5em]
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s) \nabla v(s') \\[0.5em]
-&= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s) \Bigl \{\sum_{a'} \nabla \pi(a' | s') q(s', a') + \sum_{s''} p(s'' | s') \bigl[\sum_{a''}\nabla \pi(a'' | s'') \bigr] q(s'', a'') + \sum_{s'''} p(s''' | s'')[ ...] \Bigr \} \\[0.5em]
+&= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s) \Bigl\{\sum_{a'} \nabla \pi(a' | s') q(s', a') + \sum_{s''} p(s'' | s') \bigl[\sum_{a''}\nabla \pi(a'' | s'') \bigr] q(s'', a'') + \sum_{s'''} p(s''' | s'')[ ...] \Bigr\} \\[0.5em]
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s)\sum_{a'} \nabla \pi(a' | s') q(s', a') +  \sum_{s'} p(s' | s) \sum_{s''}p(s'' | s') \sum_{a''} \nabla \pi(a'' | s'')q(s'', a'') + \sum_{s'} p(s' | s) \sum_{s''}p(s'' | s') \sum_{s'''}p(s''' | s'')\sum_{a'''}\nabla \pi(a''' | s''')q(s''', a''') + ... \\[0.5em]
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{a'}\sum_{s'}p(s' | s) \nabla \pi(a' | s')q(s', a') + \sum_{a''} \sum_{s', s''}p(s'|s)p(s''| s') \nabla \pi(a'' | s'') q(s'', a'') + \sum_{a'''} \sum_{s', s'', s'''}p(s'|s)p(s'' | s)p(s''' | s'') \nabla \pi(a''' | s''')q(s''', a''') + ... \\[0.5em]
 &= \sum_a \sum_{s}p(s|s) \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{a'}\sum_{s'} p(s'|s) \nabla \pi(a' | s')q(s', a') + \sum_{a''} \sum_{s''}p(s'' | s)\nabla \pi(a'' | s'')q(s'', a'') + \sum_{a'''}\sum_{s'''}p(s''' | s) \nabla \pi(a''' | s''')q(s''', a''') + ... \quad \text{by Chapman-Kolmogorov equation}  \\[0.5em]
