@@ -224,13 +224,20 @@ $$
 $$
 
 
-Tester:
+Tester1:
 
 $$
 \begin{align*}
 \nabla v_{\pi}(s) &= \nabla \Bigl(\sum_a \pi(a|s) q_{\pi}(s, a) \Bigr) \\[0.5em]
 &=\sum_a \bigl(\nabla \pi(a | s) q_{\pi}(s, a) + \pi(a | s)\nabla q_{\pi}(s, a)\bigr) \\[0.5em]
 &= \sum_a \Bigl(\nabla \pi(a | s) q_{\pi}(s, a) + \pi(a | s)\nabla \bigl(\sum_{s', r} p(s', r | s, a)(r + v(s')) \bigr)\Bigr) \\[0.5em]
+\end{align*}
+$$
+
+
+Tester 2:
+$$
+\begin{align*}
 &= \sum_a \Bigl(\nabla \pi(a | s) q_{\pi}(s, a) + \pi(a|s) \bigl(\sum_{s'} p(s' | s, a) \nabla v(s') \bigr) \Bigr) \\[0.5em]
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_a \sum_{s'}\pi(a | s)p(s'|s, a) \nabla v(s') \\[0.5em]
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s) \nabla v(s') \\[0.5em]
