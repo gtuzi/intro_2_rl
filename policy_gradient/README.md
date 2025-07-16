@@ -241,7 +241,7 @@ $$
 
 $$
 \begin{align*}
-&= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s) \Bigl\{\sum_{a'} \nabla \pi(a' | s') q(s', a') + \sum_{s''} p(s'' | s') \bigl[ \sum_{a''}\nabla \pi(a'' | s'') q(s'', a'') + \sum_{s'''} p(s''' | s'') [...] \bigr] \Bigr\} \\[0.5em]
+&= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s) \Bigl \{\sum_{a'} \nabla \pi(a' | s') q(s', a') + \sum_{s''} p(s'' | s') \bigl[ \sum_{a''}\nabla \pi(a'' | s'') q(s'', a'') + \sum_{s'''} p(s''' | s'') [...] \bigr] \Bigr\} \\[0.5em]
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s)\sum_{a'} \nabla \pi(a' | s') q(s', a') +  \sum_{s'} p(s' | s) \sum_{s''}p(s'' | s') \sum_{a''} \nabla \pi(a'' | s'')q(s'', a'') + \sum_{s'} p(s' | s) \sum_{s''}p(s'' | s') \sum_{s'''}p(s''' | s'')\sum_{a'''}\nabla \pi(a''' | s''')q(s''', a''') + ... \\[0.5em]
 \end{align*}
 $$
