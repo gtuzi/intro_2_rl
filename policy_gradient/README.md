@@ -1,6 +1,5 @@
 [Sutton & Barto RL Book]: http://incompleteideas.net/book/RLbook2020.pdf
 
-\\usepackage{bm}
 
 # Policy Gradient Methods
 
@@ -185,11 +184,16 @@ p_{ij}^{(n)} = \text{Pr}\{ X_{n} = j | X_0 = i \}
 $$
 
 which in the book is defined as the probability of going from $i$ to $j$, in 
-$n$ steps in the underlying MDP under policy $\pi$, 
-and is defined as: 
+$n$ steps in the underlying MDP under policy $\pi$, and is defined as: 
 
 $$
-\text{Pr}\{ i \rightarrow j, n, \pi \} = \text{Pr}\{X_{n} = j | X_{0} = i, \pi \}
+\text{Pr}\{ i \rightarrow j, n, \pi \} = \text{Pr}_{\pi}\{X_{n} = j | X_{0} = i \}
+$$
+
+$n$-step distribution satisfy the Chapman-Kolmogorov equation:
+
+$$
+p^{(n)}_{ij} = \sum_r p_{ir}^{(k)}p_{rj}^{n-k} = \sum_{r^{(1)}, r^{(2)}, ... r^{(n-1)}} p_{ir^{(1)}}^{(1)}p_{r^{(1)}r^{(2)}}^{(1)} ... p_{r^{(n-2)}r^{(n-1)}}^{(1)}*p_{r^{(n-1)}j}^{(1)}
 $$
 
 Moreover, using an indicator function $I_{k}^{x} = \mathbf{1}\{S_k = x\}$
@@ -216,5 +220,13 @@ $$
 &=\sum_a \bigl(\nabla \pi(a | s) q_{\pi}(s, a) + \pi(a | s)\nabla q_{\pi}(s, a)\bigr) \\[0.5em]
 &= \sum_a \Bigl(\nabla \pi(a | s) q_{\pi}(s, a) + \pi(a | s)\nabla \bigl(\sum_{s', r} p(s', r | s, a)(r + v(s')) \bigr)\Bigr) \\[0.5em]
 &= \sum_a \Bigl (\nabla \pi(a | s) q_{\pi}(s, a) + \pi(a|s) \bigl(\sum_{s'} p(s' | s, a) \nabla v(s') \bigr) \Bigr) \\[0.5em]
+&= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_a \sum_{s'}\pi(a | s)p(s'|s, a) \nabla v(s') \\[0.5em]
+&=  \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s) \nabla v(s') \\[0.5em]
+&= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s) \Bigl \{\sum_{a'} \nabla \pi(a' | s') q(s', a') + \sum_{s''} p(s'' | s') \bigl[\sum_{a''}\nabla \pi(a'' | s'') \bigr] q(s'', a'') + \sum_{s'''} p(s''' | s'')[ ...] \Bigr \} \\[0.5em]
+&= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{s'} p(s' | s)\sum_{a'} \nabla \pi(a' | s') q(s', a') +  \sum_{s'} p(s' | s) \sum_{s''}p(s'' | s') \sum_{a''} \nabla \pi(a'' | s'')q(s'', a'') + \sum_{s'} p(s' | s) \sum_{s''}p(s'' | s') \sum_{s'''}p(s''' | s'')\sum_{a'''}\nabla \pi(a''' | s''')q(s''', a''') + ... \\[0.5em]
+&= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{a'}\sum_{s'}p(s' | s) \nabla \pi(a' | s')q(s', a') + \sum_{a''} \sum_{s', s''}p(s'|s)p(s''| s') \nabla \pi(a'' | s'') q(s'', a'') + \sum_{a'''} \sum_{s', s'', s'''}p(s'|s)p(s'' | s)p(s''' | s'') \nabla \pi(a''' | s''')q(s''', a''') + ... \\[0.5em]
+&= \sum_a \sum_{s}p(s|s) \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{a'}\sum_{s'} p(s'|s) \nabla \pi(a' | s')q(s', a') + \sum_{a''} \sum_{s''}p(s'' | s)\nabla \pi(a'' | s'')q(s'', a'') + \sum_{a'''}\sum_{s'''}p(s''' | s) \nabla \pi(a''' | s''')q(s''', a''') + ... \quad \text{by Chapman-Kolmogorov equation}  \\[0.5em]
+&= \sum_a \sum_{k = 0}^{\infty} p(s^{(k)} | s) \nabla\pi(a | s^{(k)})q_{\pi}(s^{(k)}, a)  \quad \text{since $\sum_{a^{(k)}}\pi(a^{(k)} | s^{(k)})$} = \sum_a \pi(a | s^{(k)})\\[0.5em]
+&= \sum_a \sum_{k = 0}^{\infty} p_{ss^{(k)}} ^ {(k)}\nabla\pi(a | s^{(k)})q_{\pi}(s^{(k)}, a) \quad \text{using the standard n-step notation}
 \end{align*}
 $$
