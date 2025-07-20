@@ -346,7 +346,7 @@ rewards, even though a discount of 0.99 was used in the run.
 |                       | Train                                                                      | Eval                                                                      |
 |-----------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------|
 | Normalized Gradient   | <img src="images/Reinforce_G0_train_normgrad.png" alt="Grid" width="450"/> | <img src="images/Reinforce_G0_eval_normgrad.png" alt="Grid" width="450"/> |
-| Unnormalized Gradient | <img src="images/Reinforce_G0_train.png" alt="Grid" width="450"/>          | <img src="images/Reinforce_G0_eval.png" alt="Grid" width="450"/>          |                                                                           |                                                                           |
+| Unnormalized Gradient | <img src="images/Reinforce_G0_train.png" alt="Grid" width="450"/>          | <img src="images/Reinforce_G0_eval.png" alt="Grid" width="450"/>          |
 
 Note that _eval_ experiments denote the episodes where the action 
 was strictly greedy. Normalizing the gradients speeds up learning.
