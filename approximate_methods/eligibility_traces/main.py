@@ -162,11 +162,6 @@ def eval_env_episodic(
         random.seed(seed)
         np.random.seed(seed)
 
-        # Noise state reset (not exploration level).
-        # Clear any trajectories.
-        # Clear any eligibility traces
-        agent.reset()
-
         # gymnasium v26 requires users to set seed
         # when resetting the environment
         s, info = env.reset(seed=seed)  # s[0]

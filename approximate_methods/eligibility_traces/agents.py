@@ -73,11 +73,12 @@ class SarsaLambda(LinearQEpsGreedyAgent):
         # The agent here is prepared for a new episode
         self.t = 0
 
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
+        #### These parameters decay over episodes * horizon steps ####
+        # if isinstance(self.eps, NoiseSchedule):
+        #     self.eps.reset()
 
-        if isinstance(self.update_coefficient, LinearSchedule):
-            self.update_coefficient.reset()
+        # if isinstance(self.update_coefficient, LinearSchedule):
+        #     self.update_coefficient.reset()
 
         # Eligibility traces pertain to one episode
         self.z = np.zeros_like(self.w)  # z_{-1}
@@ -317,11 +318,12 @@ class OffPolicyExpectedSarsaLambda(LinearQEpsGreedyAgent):
         # The agent here is prepared for a new episode
         self.t = 0
 
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
-
-        if isinstance(self.update_coefficient, LinearSchedule):
-            self.update_coefficient.reset()
+        # These parameters decay over episode * horizon
+        # if isinstance(self.eps, NoiseSchedule):
+        #     self.eps.reset()
+        #
+        # if isinstance(self.update_coefficient, LinearSchedule):
+        #     self.update_coefficient.reset()
 
         # Eligibility traces pertain to one episode
         self.z = np.zeros_like(self.w)  # z_{-1}
@@ -477,11 +479,12 @@ class TBLambda(LinearQEpsGreedyAgent):
         # The agent here is prepared for a new episode
         self.t = 0
 
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
-
-        if isinstance(self.update_coefficient, LinearSchedule):
-            self.update_coefficient.reset()
+        # These parameters decay over episodes * horizon steps
+        # if isinstance(self.eps, NoiseSchedule):
+        #     self.eps.reset()
+        #
+        # if isinstance(self.update_coefficient, LinearSchedule):
+        #     self.update_coefficient.reset()
 
         # Eligibility traces pertain to one episode
         self.z = np.zeros_like(self.w)  # z_{-1}
@@ -645,14 +648,16 @@ class GQLambda(LinearQEpsGreedyAgent):
         # The agent here is prepared for a new episode
         self.t = 0
 
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
+        # These parameters decay over episodes * horizon steps
 
-        if isinstance(self.update_coefficient, LinearSchedule):
-            self.update_coefficient.reset()
-
-        if isinstance(self.second_update_coefficient, LinearSchedule):
-            self.second_update_coefficient.reset()
+        # if isinstance(self.eps, NoiseSchedule):
+        #     self.eps.reset()
+        #
+        # if isinstance(self.update_coefficient, LinearSchedule):
+        #     self.update_coefficient.reset()
+        #
+        # if isinstance(self.second_update_coefficient, LinearSchedule):
+        #     self.second_update_coefficient.reset()
 
         # Eligibility traces pertain to one episode
         self.z = np.zeros_like(self.w)  # z_{-1}
@@ -848,14 +853,15 @@ class HQLambda(LinearQEpsGreedyAgent):
         # The agent here is prepared for a new episode
         self.t = 0
 
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
-
-        if isinstance(self.update_coefficient, LinearSchedule):
-            self.update_coefficient.reset()
-
-        if isinstance(self.second_update_coefficient, LinearSchedule):
-            self.second_update_coefficient.reset()
+        # These parameters decay over episodes * horizon steps
+        # if isinstance(self.eps, NoiseSchedule):
+        #     self.eps.reset()
+        #
+        # if isinstance(self.update_coefficient, LinearSchedule):
+        #     self.update_coefficient.reset()
+        #
+        # if isinstance(self.second_update_coefficient, LinearSchedule):
+        #     self.second_update_coefficient.reset()
 
         # Eligibility traces pertain to one episode
         self.z = np.zeros_like(self.w)  # z_{-1}

@@ -206,9 +206,14 @@ $$
 So the expected state visitation count $\eta(s)$ above can also be expressed as:
 
 $$
-\eta(s) = \sum_{k=0}^{\infty}\text{Pr}\{s' \rightarrow s, k, \pi \} = \mathbb{E}[\text{num} \{t: S_t = s \}]
+\begin{align*}
+\eta(s) &= \sum_{k=0}^{\infty}\text{Pr}\{s' \rightarrow s, k, \pi \} \\[0.5em]
+&= \sum_{k}p_{s's}^{(k)} \\
+&= \mathbb{E}[\text{count} \{t: S_t = s \}]
+\end{align*}
 $$
 
+###### Gradient of the value function
 
 So now we derive the gradient of the value function 
 ($\nabla \overset \cdot{=} \nabla_{\mathbf{\theta}}$ below):
@@ -226,8 +231,119 @@ $$
 &= \sum_a \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{a'}\sum_{s'}p(s' | s) \nabla \pi(a' | s')q(s', a') + \sum_{a''} \sum_{s', s''}p(s'|s)p(s''| s') \nabla \pi(a'' | s'') q(s'', a'') + \sum_{a'''} \sum_{s', s'', s'''}p(s'|s)p(s'' | s)p(s''' | s'') \nabla \pi(a''' | s''')q(s''', a''') + ... \\[0.5em]
 &= \sum_a \sum_{s}p(s|s) \nabla \pi(a | s) q_{\pi}(s, a) + \sum_{a'}\sum_{s'} p(s'|s) \nabla \pi(a' | s')q(s', a') + \sum_{a''} \sum_{s''}p(s'' | s)\nabla \pi(a'' | s'')q(s'', a'') + \sum_{a'''}\sum_{s'''}p(s''' | s) \nabla \pi(a''' | s''')q(s''', a''') + ... \quad \text{by Chapman-Kolmogorov equation}  \\[0.5em]
 &= \sum_{a \in \mathcal{A}} \sum_{k = 0}^{\infty} \sum_{s^{(k)} \in \mathcal{S}} p(s^{(k)} | s) \nabla\pi(a | s^{(k)})q_{\pi}(s^{(k)}, a)  \quad \text{since $\sum_{a^{(k)}}\pi(a^{(k)} | s^{(k)})$} = \sum_a \pi(a | s^{(k)})\\[0.5em]
-&= \sum_{a \in \mathcal{A}, s^{*} \in \mathcal{S}} \sum_{k = 0}^{\infty} p_{ss^{*}} ^ {(k)}\nabla\pi(a | s^{*})q_{\pi}(s^{*}, a) \quad \text{using the standard n-step notation}
+&= \sum_{a \in \mathcal{A}, s^{*} \in \mathcal{S}} \sum_{k = 0}^{\infty} p_{ss^{*}} ^ {(k)}\nabla\pi(a | s^{*})q_{\pi}(s^{*}, a) \quad \text{using the standard n-step notation}\\[0.5em]
+&= \sum_{a \in \mathcal{A}, s^{*} \in \mathcal{S}} \eta(s^{*})\nabla\pi(a | s^{*})q_{\pi}(s^{*}, a) \\[0.5em]
+&= \sum_{s^{*} \in \mathcal{S}} \eta(s^{*})\sum_{a \in \mathcal{A}} \nabla\pi(a | s^{*})q_{\pi}(s^{*}, a)
 \end{align*}
 $$
 
 where $s^{(k)}$ is the state at $k$-th steps from $s$
+
+###### The theorem, finally
+$$
+\begin{align*}
+\nabla J(\mathbf{\theta}) &= \nabla v_{\pi}(s_0) \\[0.5em]
+&= \sum_{s \in \mathcal{S}} \eta(s)\sum_{a \in \mathcal{A}} \nabla\pi(a | s)q_{\pi}(s, a)\\[0.5em]
+&= \sum_{s'}\eta(s')\sum_{s \in \mathcal{S}} \frac{\eta(s)}{\eta(s')} \sum_{a \in \mathcal{A}} \nabla\pi(a | s)q_{\pi}(s, a)\\[0.5em]
+&= \sum_{s'}\eta(s')\sum_{s \in \mathcal{S}} \mu(s) \sum_{a \in \mathcal{A}} \nabla\pi(a | s)q_{\pi}(s, a)\\[0.5em]
+&\propto \sum_{s \in \mathcal{S}} \mu(s) \sum_{a \in \mathcal{A}} \nabla\pi(a | s)q_{\pi}(s, a)
+\end{align*}
+$$
+
+
+So, in conclusion, the PG theorem states that the gradient of the 
+objective/performance function is proportional to the expectation wrt the 
+state distribution (note that $\pi(\cdot | \cdot) = \pi(\cdot | \cdot, \mathbf{\theta})$:
+
+$$
+\fbox{$J(\mathbf{\theta}) \propto \sum_{s \in \mathcal{S}} \mu(s) \sum_{a \in \mathcal{A}} \nabla\pi(a | s, \mathbf{\theta})q_{\pi}(s, a)$}
+$$
+
+which allows us to use the samples induced from the policy to obtain 
+the excpectation of the sample gradient, proportional to the actual gradient.
+In the episodic case, the constant of proportionality is the
+average length of an episode, and in the continuing case it is 1, so that the relationship is
+actually an equality.
+
+
+## REINFORCE: The Monte Carlo Policy Gradient 
+The policy gradient theorem gives an exact expression proportional to 
+the gradient; all that is needed is some way of sampling 
+whose expectation equals or approximates this expression.
+The right-hand side of the policy gradient theorem is a sum over states 
+weighted by how often the states occur under the target policy $\pi$. If 
+$\pi$ is followed, then states will be encountered in these proportions.
+
+$$
+\begin{align*}
+J(\mathbf{\theta}) &\propto \sum_{s \in \mathcal{S}} \mu(s) \sum_{a \in \mathcal{A}} \nabla\pi(a | s)q_{\pi}(s, a) \\[0.5em]
+&= \mathbb{E}_{S_t \sim \mu, \; \pi}\Bigl[\sum_{a \in \mathcal{A}} \nabla\pi(a|S_t) q_{\pi}(S_t, a) \Bigr]
+\end{align*}
+$$
+
+###### All-Actions algorithm
+
+Using this result, we can perform _stochastic_ gradient ascent on the objective function 
+$J$ using the following update:
+
+$$
+\mathbf{\theta}_{t+1} = \mathbf{\theta}_t + \alpha \sum_a \nabla \pi(S_t, a, \mathbf{\theta}) \hat{q}(S_t, a, \mathbf{w})
+$$
+
+###### REINFORCE
+For reinforce we want to introduce the sampled action $A_t$, same as we did 
+above for $S_t$, to derive the expectation under $\pi$.
+
+$$
+\begin{align*}
+\nabla J(\mathbf{\theta}) & \propto \mathbb{E}_{S_t \sim \mu, \; \pi}\Bigl[\sum_{a \in \mathcal{A}} \nabla\pi(a|S_t) q_{\pi}(S_t, a) \Bigr] \\[0.5em]
+& = \mathbb{E}_{S_t \sim \mu, \; \pi}\Bigl[\sum_{a \in \mathcal{A}} \pi(a, S_t) \frac{\nabla\pi(a, S_t)}{\pi(a, S_t)}  q_{\pi}(S_t, a) \Bigr] \\[0.5em]
+&= \mathbb{E}_{S_t \sim \mu, \; \pi} \Bigl[\sum_{a \in \mathcal{A}} \pi(a | S_t) \nabla \log \pi(a | S_t) q_{\pi}(S_t, a) \Bigr] \\[0.5em]
+&= \mathbb{E}_{S_t \sim \mu, \; A_t \sim \pi} \Bigl[\nabla \log \pi(A_t | S_t) q_{\pi}(S_t, A_t) \Bigr] \quad \text{using the sampled actions} \\[0.5em]
+&= \mathbb{E}_{S_t \sim \mu, \; A_t \sim \pi} \Bigl[\nabla \log \pi(A_t | S_t) \mathbb{E}_{\pi}[G_t | S_t, A_t] \Bigr] \\[0.5em]
+&= \mathbb{E}_{S_t \sim \mu, \; A_t \sim \pi} \Bigl[G_t \nabla \log \pi(A_t | S_t) \Bigr]
+\end{align*}
+$$
+
+where $G_t$ is the usual trace sum of (discounted if $0 < \gamma < 1$) returns
+from the trace. All the components of the final form can be fully generated by 
+samples. As it is shown, the result is proportional to the gradient of the 
+objective function $J$. The stochastic gradient ascent is thus defined as follows:
+
+$$
+\begin{align*}
+\mathbf{\theta}_{t+1} &= \mathbf{\theta}_t + \alpha G_t \nabla \log \pi(A_t, S_t) \\[0.5em]
+&= \mathbf{\theta}_t + \alpha G_t \frac{\nabla \pi(A_t, S_t)}{\pi(A_t, S_t)}
+\end{align*}
+$$
+
+The gradient (vector) of the probability of taking the actually taken action
+is divided by the probability of taking that action. The vector is the 
+direction in parameter space that most increases the probability of 
+repeating the action $A_t$ on future visits to state $S_t$. The update 
+increases the parameter vector in this direction:
+* proportional to the return, favoring highest returns - if positive increase $J$, otherwise decrease.  
+* inversely proportional to the action probability, favor exploration - prefer less frequent actions
+
+Note that REINFORCE uses the complete return from time $t$, which includes all
+future rewards up until the end of the episode. In this sense REINFORCE is a Monte
+Carlo algorithm and is well defined only for the episodic case with all updates made in
+retrospect after the episode is completed.
+
+<img src="images/reinforce.png" alt="Grid" width="450"/>
+
+###### Experiments
+The algorithm above didn't perform well on `MountainCar`. Had success 
+with `CartPole`, the results of which are shown below. The model is located
+in `agents/Reinforce` and it is an PyTorch MLP implementation of the policy 
+model. Both normalized and unnormalized gradients were tried. In this experiment
+100 trials were tried over a few learning steps (learning rates), all of which
+were decayed over the steps. The metric displayed is the undiscounted sum or 
+rewards, even though a discount of 0.99 was used in the run.
+
+|                       | Train                                                                      | Eval                                                                      |
+|-----------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| Normalized Gradient   | <img src="images/Reinforce_G0_train_normgrad.png" alt="Grid" width="450"/> | <img src="images/Reinforce_G0_eval_normgrad.png" alt="Grid" width="450"/> |
+| Unnormalized Gradient | <img src="images/Reinforce_G0_train.png" alt="Grid" width="450"/>          | <img src="images/Reinforce_G0_eval.png" alt="Grid" width="450"/>          |                                                                           |                                                                           |
+
+Normalizing the gradients speeds up learning.
