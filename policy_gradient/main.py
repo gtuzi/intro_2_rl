@@ -4,8 +4,6 @@ import copy
 from typing import List, Callable
 from joblib import Parallel, delayed
 
-import pandas as pd
-
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,7 +27,8 @@ from approximate_methods.utils import (
 
 from policy_gradient.agents import (
     Reinforce_LA,
-    Reinforce
+    Reinforce,
+    ReinforceBaseline
 )
 
 
@@ -238,151 +237,162 @@ def run_env_episodic(
     eval_sum_of_rewards_per_episode = []
     eval_R0_over_episodes = []
 
-    # ----- Unlearn ----- #
-    behavioral_agent.initialize()
-    if target_agent is not None:
-        target_agent.initialize()
-
-    pbar = tqdm(range(num_episodes), desc="Training Episode", leave=False)
-
-    for ei in pbar:
-        # For seeds:
-        # 1 -   None
-        # 2 -   Single value
-        # 3 -   Same as number of episodes
-        seed = None
-        if seeds is not None:
-            if hasattr(seeds, '__getitem__'):
-                assert len(seeds) == num_episodes
-                seed = seeds[ei]
-            elif isinstance(seeds, (float, int)):
-                seed = seeds
-            else:
-                raise Exception("Seed format not recognized", str(seeds))
-
-        # Set the seed for this episode
-        random.seed(seed)
-        np.random.seed(seed)
-
-        # Noise state reset (not exploration level).
-        # Clear any trajectories.
-        # Clear any eligibility traces
-        behavioral_agent.reset()
+    try:
+        # ----- Unlearn ----- #
+        behavioral_agent.initialize()
         if target_agent is not None:
-            target_agent.reset()
+            target_agent.initialize()
 
-        # gymnasium v26 requires users to set seed
-        # when resetting the environment
-        s, info = env.reset(seed=seed)  # s[0]
-        a, p = behavioral_agent.act(s)  # a[0]
+        pbar = tqdm(range(num_episodes), desc="Training Episode", leave=False)
 
-        rho = None
-        if (target_agent is not None) and (
-                isinstance(target_agent, SoftPolicy)
-        ):
-            target_p = target_agent.get_sa_probability(s, a)
-            rho = target_p / p
+        for ei in pbar:
+            # For seeds:
+            # 1 -   None
+            # 2 -   Single value
+            # 3 -   Same as number of episodes
+            seed = None
+            if seeds is not None:
+                if hasattr(seeds, '__getitem__'):
+                    assert len(seeds) == num_episodes
+                    seed = seeds[ei]
+                elif isinstance(seeds, (float, int)):
+                    seed = seeds
+                else:
+                    raise Exception("Seed format not recognized", str(seeds))
 
-        R = 0
-        entropies = []
-        actions = [a]
+            # Set the seed for this episode
+            random.seed(seed)
+            np.random.seed(seed)
 
-        for t in range(T):
-            sp, r, terminated, truncated, info = env.step(a)
-            done = terminated or truncated or (t + 1 == T)
-            reward = reward_shaper(reward=r, state=sp, done=done, t=t)
-            ap, pp = behavioral_agent.act(sp)
-            entropy = behavioral_agent.entropy(sp)
+            # Noise state reset (not exploration level).
+            # Clear any trajectories.
+            # Clear any eligibility traces
+            behavioral_agent.reset()
+            if target_agent is not None:
+                target_agent.reset()
 
-            R += r
-            entropies.append(entropy)
-            actions.append(ap)
+            # gymnasium v26 requires users to set seed
+            # when resetting the environment
+            s, info = env.reset(seed=seed)  # s[0]
+            a, p = behavioral_agent.act(s)  # a[0]
 
-            # If off-policy, capture target probabilities
-            rhop = None
+            rho = None
             if (target_agent is not None) and (
                     isinstance(target_agent, SoftPolicy)
             ):
-                target_pp = target_agent.get_sa_probability(sp, ap)
-                rhop = target_pp / pp
+                target_p = target_agent.get_sa_probability(s, a)
+                rho = target_p / p
 
-            e = Experience(
-                s=s,
-                a=a,
-                p=p,
-                r=reward,
-                sp=sp,
-                ap=ap,
-                pp=pp,
-                done=int(done),
-                rho=rho,
-                rhop=rhop,
-                t=t)
+            R = 0
+            entropies = []
+            actions = [a]
 
-            behavioral_agent.step(e)
+            for t in range(T):
+                sp, r, terminated, truncated, info = env.step(a)
+                done = terminated or truncated or (t + 1 == T)
+                reward = reward_shaper(reward=r, state=sp, done=done, t=t)
+                ap, pp = behavioral_agent.act(sp)
+                entropy = behavioral_agent.entropy(sp)
 
-            if target_agent is not None:
-                target_agent.step(e)
+                R += r
+                entropies.append(entropy)
+                actions.append(ap)
 
-            if done:
-                steps_per_episode.append(t)
-                sum_of_rewards_per_episode.append(R)
-                break
-            else:
-                s = sp
-                a = ap
-                p = pp
-                rho = rhop
+                # If off-policy, capture target probabilities
+                rhop = None
+                if (target_agent is not None) and (
+                        isinstance(target_agent, SoftPolicy)
+                ):
+                    target_pp = target_agent.get_sa_probability(sp, ap)
+                    rhop = target_pp / pp
 
-        R0_over_episodes.append(R)
+                e = Experience(
+                    s=s,
+                    a=a,
+                    p=p,
+                    r=reward,
+                    sp=sp,
+                    ap=ap,
+                    pp=pp,
+                    done=int(done),
+                    rho=rho,
+                    rhop=rhop,
+                    t=t)
 
-        eval_stat = ''
+                behavioral_agent.step(e)
 
-        if (
-                do_eval and
-                (
-                        (
-                                (ei % evaluate_frequency == 0) and
-                                (eval_num_episodes > 0)
-                        ) or
-                        (ei + 1 == num_episodes)  # evaluate last episode
+                if target_agent is not None:
+                    target_agent.step(e)
+
+                if done:
+                    steps_per_episode.append(t)
+                    sum_of_rewards_per_episode.append(R)
+                    break
+                else:
+                    s = sp
+                    a = ap
+                    p = pp
+                    rho = rhop
+
+            R0_over_episodes.append(R)
+
+            eval_stat = ''
+
+            if (
+                    do_eval and
+                    (
+                            (
+                                    (ei % evaluate_frequency == 0) and
+                                    (eval_num_episodes > 0)
+                            ) or
+                            (ei + 1 == num_episodes)  # evaluate last episode
+                    )
+            ):
+                eval_agent = behavioral_agent
+
+                if target_agent is not None:
+                    eval_agent = target_agent
+
+                steps, sum_r, r0 = eval_env_episodic(
+                    env,
+                    agent=eval_agent,
+                    seeds=seed,
+                    T=T,
+                    num_episodes=eval_num_episodes,
+                    greedy=greedy_eval,
                 )
-        ):
-            eval_agent = behavioral_agent
 
-            if target_agent is not None:
-                eval_agent = target_agent
+                eval_steps_per_episode += steps
+                eval_sum_of_rewards_per_episode += sum_r
+                eval_R0_over_episodes.append(np.mean(r0))
+                eval_stat = f'eval score={np.mean(r0):.2e}'
 
-            steps, sum_r, r0 = eval_env_episodic(
-                env,
-                agent=eval_agent,
-                seeds=seed,
-                T=T,
-                num_episodes=eval_num_episodes,
-                greedy=greedy_eval,
+
+            pbar.set_postfix_str(
+                f"train score={R:.2e}, " +
+                eval_stat +
+                f", Policy entropy: {np.mean(entropies): .2e}, " +
+                f"Actions entropy: {entropy_from_list(actions): .2e}"
             )
 
-            eval_steps_per_episode += steps
-            eval_sum_of_rewards_per_episode += sum_r
-            eval_R0_over_episodes.append(np.mean(r0))
-            eval_stat = f'eval score={np.mean(r0):.2e}'
-
-
-        pbar.set_postfix_str(
-            f"train score={R:.2e}, " +
-            eval_stat +
-            f", Policy entropy: {np.mean(entropies): .2e}, " +
-            f"Actions entropy: {entropy_from_list(actions): .2e}"
+        return dict(
+            steps_per_episode=steps_per_episode,
+            sum_of_rewards_per_episode=sum_of_rewards_per_episode,
+            R0_over_episodes=R0_over_episodes,
+            eval_steps_per_episode=eval_steps_per_episode,
+            eval_sum_of_rewards_per_episode=eval_sum_of_rewards_per_episode,
+            eval_R0_over_episodes=eval_R0_over_episodes
         )
 
-    return dict(
-        steps_per_episode=steps_per_episode,
-        sum_of_rewards_per_episode=sum_of_rewards_per_episode,
-        R0_over_episodes=R0_over_episodes,
-        eval_steps_per_episode=eval_steps_per_episode,
-        eval_sum_of_rewards_per_episode=eval_sum_of_rewards_per_episode,
-        eval_R0_over_episodes=eval_R0_over_episodes
-    )
+    except Exception as ex:
+        return dict(
+            steps_per_episode=[np.inf] * num_episodes,
+            sum_of_rewards_per_episode=[-np.inf] * num_episodes,
+            R0_over_episodes=[-np.inf] * num_episodes,
+            eval_steps_per_episode=[np.inf] * num_episodes,
+            eval_sum_of_rewards_per_episode=[-np.inf] * num_episodes,
+            eval_R0_over_episodes=[-np.inf] * num_episodes
+        )
 
 
 def run_one_experiment(
@@ -435,7 +445,25 @@ def run_one_experiment(
             action_space_dims=action_size,
             update_coefficient=alpha_builder(alpha),
             hidden_dims=(h,),
-            discount=0.99
+            discount=0.99,
+            norm_grad=False
+        )
+    if model == 'ReinforceBaseline':
+        do_eval = True
+        target_agent = None
+
+        state_size = env.unwrapped.observation_space.shape[0]
+        action_size = int(env.unwrapped.action_space.n)
+
+        h = 4096 // (state_size + action_size)
+        agent = ReinforceBaseline(
+            state_size=state_size,
+            action_space_dims=action_size,
+            update_coefficient_policy=alpha_builder(alpha),
+            update_coefficient_baseline=alpha_builder(1.2 * alpha),
+            hidden_dims=(h, ),
+            discount=0.99,
+            norm_grad=False
         )
     else:
         raise NotImplemented(f'{model} model not recognized')
@@ -451,6 +479,8 @@ def run_one_experiment(
         eval_num_episodes=1,
         evaluate_frequency=1,
         seeds=seeds)
+
+    del agent
 
     return dict(
         steps_per_episode=res['steps_per_episode'],
@@ -536,6 +566,12 @@ def experiments_parallel(
             [sum_rewards[vi] for vi in valid_idx]) if len(
             valid_idx) > 0 else -np.inf
 
+        r0 = [R0_over_episodes[vi] for vi in valid_idx] if len(
+            valid_idx) > 0 else -np.inf
+
+        if r0 != -np.inf:
+            R0_over_alphas.append(np.mean(r0, axis=0))
+
         if len(eval_steps) > 0:
             eval_steps_per_episode[ ia] = np.mean(
                 [eval_steps[vi] for vi in valid_idx]) if len(
@@ -546,8 +582,12 @@ def experiments_parallel(
                 [eval_sum_rewards[vi] for vi in valid_idx]) if len(
                 valid_idx) > 0 else -np.inf
 
-        R0_over_alphas.append(np.mean(R0_over_episodes, axis=0))
-        eval_R0_over_alphas.append(np.mean(eval_R0_over_episodes, axis=0))
+        if len(eval_R0_over_episodes) > 0:
+            eval_r0 = [eval_R0_over_episodes[vi] for vi in valid_idx] if len(
+                valid_idx) > 0 else -np.inf
+
+            if eval_r0 != -np.inf:
+                eval_R0_over_alphas.append(np.mean(eval_r0, axis=0))
 
         print(
             f"\n{model} - Completed {100 * completed / total:.1f} %, "
@@ -560,8 +600,10 @@ def experiments_parallel(
 
     if model == 'Reinforce_LA':
         title = 'Reinforce_LA: $\sum_t R_t$'
-    if model == 'Reinforce':
+    elif model == 'Reinforce':
         title = 'Reinforce: $\mathbb{E}[\sum_t R_t]$'
+    elif model == 'ReinforceBaseline':
+        title = 'Reinforce-w-Baseline: $\mathbb{E}[\sum_t R_t]$'
     else:
         raise NotImplemented
 
@@ -714,7 +756,91 @@ def reinforce(
         eval_sum_of_rewards_per_episode[ia] = np.mean(eval_sum_rewards)
 
         print(
-            f"\nReinforce_LA: Done α={alpha:.3e}, "
+            f"\nReinforce: Done α={alpha:.3e}, "
+            f" steps/episode: {steps_per_episode[ia]:.4f}, "
+            f"sum(r)/episode: {sum_of_rewards_per_episode[ia]:.4f}"
+            f" eval steps/episode: {eval_steps_per_episode[ia]:.4f}, "
+            f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[ia]:.4f}"
+        )
+
+
+def reinforce_baseline(
+        num_episodes,
+        T,
+        reward_shaper: Callable,
+        alphas = np.linspace(0, 1, num=50),
+        alpha_builder = lambda _a : _a,
+        seeds=(1, 2),
+        num_experiments=1
+):
+    env = build_env()
+    steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
+    sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
+    eval_steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
+    eval_sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
+
+    state_size = env.unwrapped.observation_space.shape[0]
+    action_size = int(env.unwrapped.action_space.n)
+
+    # Using 4096 as the reference of total parameters used for the
+    # linear approximation method.
+    # total = state_size * h + h * action_size
+    # => h = total / (state_size + action_size)
+    h = 4096 // (state_size + action_size)
+
+    seeds_per_experiment = [
+        [s + e * len(seeds) for s in seeds]
+        for e in range(num_experiments)
+    ]
+
+    total = len(alphas) * num_experiments
+    count = 0
+    for ia, alpha in enumerate(alphas):
+        steps = []
+        sum_rewards = []
+        eval_steps = []
+        eval_sum_rewards = []
+
+        for exp in range(num_experiments):
+            count += 1
+            agent = ReinforceBaseline(
+                state_size=state_size,
+                action_space_dims=action_size,
+                update_coefficient_policy=alpha_builder(alpha),
+                update_coefficient_baseline=alpha_builder(1.2 * alpha),
+                hidden_dims=(h, ),
+                discount=0.99
+            )
+
+            res = run_env_episodic(
+                env=env,
+                behavioral_agent=agent,
+                reward_shaper=reward_shaper,
+                T=T,
+                num_episodes=num_episodes,
+                seeds=seeds_per_experiment[exp],
+                eval_num_episodes=1,
+                do_eval=True,
+                evaluate_frequency=1,
+                greedy_eval=True
+            )
+
+            del agent
+
+            steps += res['steps_per_episode']
+            sum_rewards += res['sum_of_rewards_per_episode']
+            eval_steps += res['eval_steps_per_episode']
+            eval_sum_rewards += res['eval_sum_of_rewards_per_episode']
+
+        # Average those n_experiments results to fill results_array
+        steps_per_episode[ia] = np.mean(steps)
+        sum_of_rewards_per_episode[ia] = np.mean(sum_rewards)
+        eval_steps_per_episode[ia] = np.mean(eval_steps)
+        eval_sum_of_rewards_per_episode[ia] = np.mean(eval_sum_rewards)
+
+        print(
+            f"\nReinforce_Baseline: Completed = {100 * count / total:.0f}%"
+            f" α={alpha:.3e}, "
             f" steps/episode: {steps_per_episode[ia]:.4f}, "
             f"sum(r)/episode: {sum_of_rewards_per_episode[ia]:.4f}"
             f" eval steps/episode: {eval_steps_per_episode[ia]:.4f}, "
@@ -759,19 +885,20 @@ if __name__ == '__main__':
 
     alphas = np.linspace(1e-6, 1e-3, num=4)
 
-    # reinforce(
+    # reinforce_baseline(
     #     num_episodes=num_episodes,
     #     T=T,
     #     reward_shaper=base_reward,
     #     alphas=alphas,
     #     alpha_builder=build_alpha_sched,
+    #     num_experiments=num_experiments,
     #     seeds=[i for i in range(num_episodes)]
     # )
     #
     # exit(0)
 
     experiments_parallel(
-        model='Reinforce',
+        model='ReinforceBaseline',
         num_episodes=num_episodes,
         T=T,
         reward_shaper=base_reward,

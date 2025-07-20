@@ -89,21 +89,21 @@ def sample_softmax(
     return y, p_of_sample
 
 
-class DiscreteActionPolicyMLP(nn.Module):
+class Backbone(nn.Module):
     def __init__(
             self,
             in_size: int,
-            n_actions: int,
+            out_size: int,
             hidden_dims: Optional[Union[int, List, Tuple]] = None,
             normalize_input: bool = False
     ):
-        super(DiscreteActionPolicyMLP, self).__init__()
+        super(Backbone, self).__init__()
 
         if isinstance(hidden_dims, int):
             hidden_dims = [hidden_dims]
 
         self.in_size = in_size
-        self.n_actions = n_actions
+        self.out_size = out_size
         self.hidden_dims = hidden_dims
         self.normalize_input = normalize_input
         self.net = None
@@ -111,7 +111,6 @@ class DiscreteActionPolicyMLP(nn.Module):
 
     def _build_net(self):
         if self.hidden_dims is not None:
-
             layers = []
 
             if self.normalize_input:
@@ -134,16 +133,52 @@ class DiscreteActionPolicyMLP(nn.Module):
             # Add output layer
             layers.append(nn.Linear(
                 in_features=self.hidden_dims[-1],
-                out_features=self.n_actions)
+                out_features=self.out_size)
             )
 
         else:
             layers = [
-                nn.Linear(self.in_size, self.n_actions),
+                nn.Linear(self.in_size, self.out_size),
             ]
 
         self.net = nn.Sequential(*layers)
         self.net.apply(init_weights)
+
+    def forward(self, x: Tensor):
+        return self.net(x)
+
+
+class DiscreteActionPolicyMLP(nn.Module):
+    def __init__(
+            self,
+            in_size: int,
+            n_actions: int,
+            hidden_dims: Optional[Union[int, List, Tuple]] = None,
+            normalize_input: bool = False
+    ):
+        super(DiscreteActionPolicyMLP, self).__init__()
+
+        if isinstance(hidden_dims, int):
+            hidden_dims = [hidden_dims]
+
+        self.in_size = in_size
+        self.n_actions = n_actions
+        self.hidden_dims = hidden_dims
+        self.normalize_input = normalize_input
+        self.net = None
+        self._build_net()
+
+    def _build_net(self, backbone = None):
+        if backbone is None:
+            self.net = Backbone(
+                in_size=self.in_size,
+                hidden_dims=self.hidden_dims,
+                out_size=self.n_actions,
+                normalize_input=self.normalize_input
+            )
+        else:
+            assert backbone.out_size == self.n_actions
+            self.net = backbone
 
     def logprob_s(self, x: Tensor, temperature: float = 1.):
         return F.log_softmax(self.forward(x)/temperature, dim=-1)
@@ -185,3 +220,32 @@ class DiscreteActionPolicyMLP(nn.Module):
 
     def forward(self, x: Tensor):
         return self.net(x)
+
+
+class ValueFunction(nn.Module):
+    def __init__(
+            self,
+            in_size: int,
+            hidden_dims: Optional[Union[int, List, Tuple]] = None,
+    ):
+        super(ValueFunction, self).__init__()
+
+        if isinstance(hidden_dims, int):
+            hidden_dims = [hidden_dims]
+
+        self.in_size = in_size
+        self.hidden_dims = hidden_dims
+        self.net = None
+        self._build_net()
+
+    def _build_net(self):
+        self.net = Backbone(
+            in_size=self.in_size,
+            hidden_dims=self.hidden_dims,
+            out_size=1,
+            normalize_input=False
+        )
+
+    def forward(self, x: Tensor):
+        return self.net(x)
+
