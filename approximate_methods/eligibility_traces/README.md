@@ -65,7 +65,7 @@ Full development and discussion visit the notebook [here](summary.ipynb)
 
 | <img src="images/ttd_lambda_n_1.png" alt="Grid" width="250"/>  | <img src="images/ttd_lambda_n_5.png" alt="Grid" width="250"/>  | <img src="images/ttd_lambda_n_10.png" alt="Grid" width="250"/> |
 |----------------------------------------------------------------|----------------------------------------------------------------|----------------------------------------------------------------|
-| <img src="images/ttd_lambda_n_20.png" alt="Grid" width="250"/> | <img src="images/ttd_lambda_n_40.png" alt="Grid" width="250"/> |
+| <img src="images/ttd_lambda_n_20.png" alt="Grid" width="250"/> | <img src="images/ttd_lambda_n_40.png" alt="Grid" width="250"/> |                                                                |
 
 ## True Online TD($\lambda$)
 
