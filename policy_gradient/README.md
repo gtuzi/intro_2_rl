@@ -422,10 +422,10 @@ the baseline.
 
 $$
 \begin{align*}
-\mathbf{\theta}_{t+1} &= \mathbf{\theta}_{t} + \alpha \Bigl(G_t - \hat{v}(S_t, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\
-&= \mathbf{\theta}_{t} + \alpha \Bigl(R_{t + 1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}) -  \hat{v}(S_{t}, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\
-&= \mathbf{\theta}_{t} + \alpha \delta_t \nabla_{\mathbf{\theta}_t} \log \pi(A_t| S_t, \mathbf{\theta}_t) \\
-&= \mathbf{\theta}_{t} + \alpha \delta_t \frac{\nabla_{\mathbf{\theta}_t} \pi(A_t | S_t, \mathbf{\theta}_t)}{\pi(A_t | S_t, \mathbf{\theta}_t)}
+\mathbf{\theta}_{t+1} &= \mathbf{\theta}_{t} + \alpha \Bigl(G_t - \hat{v}(S_t, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\\\[0.5em]
+&= \mathbf{\theta}_{t} + \alpha \Bigl(R_{t + 1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}) -  \hat{v}(S_{t}, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\\\[0.5em]
+&= \mathbf{\theta}_{t} + \alpha \delta_t \nabla_{\mathbf{\theta}_t} \log \pi(A_t| S_t, \mathbf{\theta}_t) \\\\[0.5em]
+&= \mathbf{\theta}_{t} + \alpha \delta_t \frac{\nabla_{\mathbf{\theta}_t} \pi(A_t | S_t, \mathbf{\theta}_t)}{\pi(A_t | S_t, \mathbf{\theta}_t)}\\[0.5em]
 \end{align*}
 $$
 
