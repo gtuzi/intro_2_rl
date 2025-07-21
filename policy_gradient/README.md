@@ -397,5 +397,60 @@ REINFORCE with baseline is implemented in `agents/ReinforceBaseline`
 | Unnormalized Gradient | <img src="images/ReinforceBaseline_G0_train.png" alt="Grid" width="450"/>          | <img src="images/ReinforceBaseline_G0_eval.png" alt="Grid" width="450"/>          |
 
 
+## Actor - Critic Methods
+In REINFORCE with baseline, we use a state value function (estimate) of the 
+state _before_ the action is taken, i.e. $S_t$. This estimate sets a baseline 
+for the ensuing return $R_{t+1}$, but it cannot be used to evaluate 
+the action $A_t$. In Actor-Critic (AC) methods we evaluate the following 
+state ($S_{t+1}$) as well. The estimated value of the second state, when
+discounted and added to the reward, constitutes the one-step return $G_{t:t+1}$ 
+which is a useful estimate of the actual return and thus is a way of 
+assessing the action. With this formulation, we can modulate the bias furthermore
+by using $n$-step returns and eligibility traces. When the
+state-value function is used to assess actions in this way it is called a 
+_critic_, and the overall policy-gradient method is termed an _actor–critic_
+method.
+
+###### One-Step Actor–Critic Methods
+They are the analog of the TD methods, such as TD(0), Sarsa(0), and Q-learning.
+They are fully online and incremental, yet avoid the complexities of  
+eligibility traces.
+
+One-step actor–critic methods replace the full return of REINFORCE with the 
+one-step estimate of the return, and use a learned state value function as
+the baseline.
+
+$$
+\begin{align*}
+\mathbf{\theta}_{t+1} &= \mathbf{\theta}_{t} + \alpha \Bigl(G_t - \hat{v}(S_t, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\
+&= \mathbf{\theta}_{t} + \alpha \Bigl(R_{t + 1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}) -  \hat{v}(S_{t}, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\
+&= \mathbf{\theta}_{t} + \alpha \delta_t \nabla_{\mathbf{\theta}_t} \log \pi(A_t| S_t, \mathbf{\theta}_t) \\
+&= \mathbf{\theta}_{t} + \alpha \delta_t \frac{\nabla_{\mathbf{\theta}_t} \pi(A_t | S_t, \mathbf{\theta}_t)}{\pi(A_t | S_t, \mathbf{\theta}_t)}
+\end{align*}
+$$
+
+
+The pseudo-code for the episododict algorithm is shown below. 
+It is fully online, incremental algorithm, with states, 
+actions, and rewards processed as they occur and then never 
+revisited.
+
+<img src="images/OneStep_AC.png" alt="Grid" width="450"/>
+
+The implementation is in `agents/OneStepAC`
+
+###### Experiment Results
+
+The following are the results
+for one-step AC agent on `CartPole` environment. The update value
+used for the critic $\alpha^{\mathbf{w}} = 25 \alpha^{\mathbf{\theta}}$.
+
+
+| Train                                                             | Eval                                                             |
+|-------------------------------------------------------------------|------------------------------------------------------------------|
+| <img src="images/OneStepAC_G0_train.png" alt="Grid" width="450"/> | <img src="images/OneStepAC_G0_eval.png" alt="Grid" width="450"/> |
+
+
+
 
 

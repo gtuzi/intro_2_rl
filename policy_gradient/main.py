@@ -28,7 +28,8 @@ from approximate_methods.utils import (
 from policy_gradient.agents import (
     Reinforce_LA,
     Reinforce,
-    ReinforceBaseline
+    ReinforceBaseline,
+    OneStepAC
 )
 
 
@@ -432,7 +433,7 @@ def run_one_experiment(
             update_coefficient=alpha_builder(alpha),
             policy_feature_fn=feature_fn,
             discount=0.99)
-    if model == 'Reinforce':
+    elif model == 'Reinforce':
         do_eval = True
         target_agent = None
 
@@ -448,7 +449,7 @@ def run_one_experiment(
             discount=0.99,
             norm_grad=False
         )
-    if model == 'ReinforceBaseline':
+    elif model == 'ReinforceBaseline':
         do_eval = True
         target_agent = None
 
@@ -465,6 +466,24 @@ def run_one_experiment(
             discount=0.99,
             norm_grad=False
         )
+    elif model == 'OneStepAC':
+        do_eval = True
+        target_agent = None
+
+        state_size = env.unwrapped.observation_space.shape[0]
+        action_size = int(env.unwrapped.action_space.n)
+
+        h = 4096 // (state_size + action_size)
+
+        agent = OneStepAC(
+            state_size=state_size,
+            action_space_dims=action_size,
+            update_coefficient_policy=alpha_builder(alpha),
+            update_coefficient_critic=alpha_builder(25 * alpha),
+            hidden_dims=(h,),
+            discount=0.99,
+            norm_grad=False)
+
     else:
         raise NotImplemented(f'{model} model not recognized')
 
@@ -604,6 +623,8 @@ def experiments_parallel(
         title = 'Reinforce: $\mathbb{E}[\sum_t R_t]$'
     elif model == 'ReinforceBaseline':
         title = 'Reinforce-w-Baseline: $\mathbb{E}[\sum_t R_t]$'
+    elif model == 'OneStepAC':
+        title = 'One-Step Actor-Critic: $\mathbb{E}[\sum_t R_t]$'
     else:
         raise NotImplemented
 
@@ -847,6 +868,91 @@ def reinforce_baseline(
             f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[ia]:.4f}"
         )
 
+
+def one_step_ac(
+        num_episodes,
+        T,
+        reward_shaper: Callable,
+        alphas = np.linspace(0, 1, num=50),
+        alpha_builder = lambda _a : _a,
+        seeds=(1, 2),
+        num_experiments=1
+):
+    env = build_env()
+    steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
+    sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
+    eval_steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
+    eval_sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
+
+    state_size = env.unwrapped.observation_space.shape[0]
+    action_size = int(env.unwrapped.action_space.n)
+
+    # Using 4096 as the reference of total parameters used for the
+    # linear approximation method.
+    # total = state_size * h + h * action_size
+    # => h = total / (state_size + action_size)
+    h = 4096 // (state_size + action_size)
+
+    seeds_per_experiment = [
+        [s + e * len(seeds) for s in seeds]
+        for e in range(num_experiments)
+    ]
+
+    total = len(alphas) * num_experiments
+    count = 0
+    for ia, alpha in enumerate(alphas):
+        steps = []
+        sum_rewards = []
+        eval_steps = []
+        eval_sum_rewards = []
+
+        for exp in range(num_experiments):
+            count += 1
+            agent = OneStepAC(
+                state_size=state_size,
+                action_space_dims=action_size,
+                update_coefficient_policy=alpha_builder(alpha),
+                update_coefficient_critic=alpha_builder(1.2 * alpha),
+                hidden_dims=(h, ),
+                discount=0.99,
+                norm_grad=False
+            )
+
+            res = run_env_episodic(
+                env=env,
+                behavioral_agent=agent,
+                reward_shaper=reward_shaper,
+                T=T,
+                num_episodes=num_episodes,
+                seeds=seeds_per_experiment[exp],
+                eval_num_episodes=1,
+                do_eval=True,
+                evaluate_frequency=1,
+                greedy_eval=True
+            )
+
+            del agent
+
+            steps += res['steps_per_episode']
+            sum_rewards += res['sum_of_rewards_per_episode']
+            eval_steps += res['eval_steps_per_episode']
+            eval_sum_rewards += res['eval_sum_of_rewards_per_episode']
+
+        # Average those n_experiments results to fill results_array
+        steps_per_episode[ia] = np.mean(steps)
+        sum_of_rewards_per_episode[ia] = np.mean(sum_rewards)
+        eval_steps_per_episode[ia] = np.mean(eval_steps)
+        eval_sum_of_rewards_per_episode[ia] = np.mean(eval_sum_rewards)
+
+        print(
+            f"\nOne-Step AC: Completed = {100 * count / total:.0f}%"
+            f" α={alpha:.3e}, "
+            f" steps/episode: {steps_per_episode[ia]:.4f}, "
+            f"sum(r)/episode: {sum_of_rewards_per_episode[ia]:.4f}"
+            f" eval steps/episode: {eval_steps_per_episode[ia]:.4f}, "
+            f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[ia]:.4f}"
+        )
+
 if __name__ == '__main__':
     do_log = False
     on_policy = True
@@ -866,7 +972,7 @@ if __name__ == '__main__':
         MAX_EPISODE_STEPS = T
     if ENV_NAME == 'CartPole':
         if on_policy:
-            num_episodes = 100
+            num_episodes = 150
         else:
             raise NotImplemented
         T = 500
@@ -885,7 +991,7 @@ if __name__ == '__main__':
 
     alphas = np.linspace(1e-6, 1e-3, num=4)
 
-    # reinforce_baseline(
+    # one_step_ac(
     #     num_episodes=num_episodes,
     #     T=T,
     #     reward_shaper=base_reward,
@@ -898,7 +1004,7 @@ if __name__ == '__main__':
     # exit(0)
 
     experiments_parallel(
-        model='ReinforceBaseline',
+        model='OneStepAC',
         num_episodes=num_episodes,
         T=T,
         reward_shaper=base_reward,
