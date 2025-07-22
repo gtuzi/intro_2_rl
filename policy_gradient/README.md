@@ -451,6 +451,22 @@ used for the critic $\alpha^{\mathbf{w}} = 25 \alpha^{\mathbf{\theta}}$.
 | <img src="images/OneStepAC_G0_train.png" alt="Grid" width="450"/> | <img src="images/OneStepAC_G0_eval.png" alt="Grid" width="450"/> |
 
 
+###### n-Step with Eligibility Traces Actor–Critic
+We can replace the one-step target $G_t$ with $G_{t:t+n}$ or the lambda return
+$G_t^{\lambda}$. Then using the eligibility traces we can incorportate these 
+methods into the algorithm below. 
+
+<img src="images/AC_with_eligibility_traces.png" alt="Grid" width="450"/>
+
+###### Experiment Results
+Like above, these results pertain to the `CartPole` environment, with 
+the same learning rates $\alpha$. The $\lambda$'s used here for both actor 
+and critic were set to 0.5.
 
 
+| Train                                                                           | Eval                                                             |
+|---------------------------------------------------------------------------------|------------------------------------------------------------------|
+| <img src="images/ACWithEligibilityTraces_G0_train.png" alt="Grid" width="450"/> | <img src="images/ACWithEligibilityTraces_G0_eval.png" alt="Grid" width="450"/> |
 
+We can see that the $\lambda$-return with eligibility traces approach yields 
+better results than the one-step AC method.
