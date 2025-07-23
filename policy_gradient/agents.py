@@ -1155,4 +1155,257 @@ class ACWithEligibilityTraces(DiscreteActionAgent, SoftPolicy):
         self.t += 1
 
 
+class ACWithEligibilityTracesContinuing(DiscreteActionAgent, SoftPolicy):
+    def __init__(
+            self,
+            state_size: int,
+            action_space_dims: int,
+            update_coefficient_policy: Union[float, NoiseSchedule],
+            lam_policy: float,
+            update_coefficient_critic: Union[float, NoiseSchedule],
+            lam_critic: float,
+            update_coefficient_avg_reward: Union[float, NoiseSchedule],
+            hidden_dims=(32,),
+            temp: Union[float, LinearSchedule] = 1.,
+            norm_grad: bool = False,
+    ):
+        assert 0 < action_space_dims
+        assert isinstance(action_space_dims, int)
+
+        if isinstance(update_coefficient_policy, float):
+            assert 0. < update_coefficient_policy < 1.
+        else:
+            assert isinstance(update_coefficient_policy, LinearSchedule)
+
+        if isinstance(update_coefficient_critic, float):
+            assert 0. < update_coefficient_critic < 1.
+        else:
+            assert isinstance(update_coefficient_critic, LinearSchedule)
+
+        if isinstance(update_coefficient_avg_reward, float):
+            assert 0. < update_coefficient_avg_reward < 1.
+        else:
+            assert isinstance(update_coefficient_avg_reward, LinearSchedule)
+
+        assert 0 <= lam_policy <= 1
+        assert 0 <= lam_critic <= 1
+
+        super().__init__(
+            feature_size=state_size,
+            action_space_dims=action_space_dims)
+
+        self.t = 0
+        self.hidden_dims = hidden_dims
+        self.update_coefficient_policy = update_coefficient_policy
+        self.update_coefficient_critic = update_coefficient_critic
+        self.update_coefficient_avg_reward = update_coefficient_avg_reward
+        self.lam_actor = lam_policy
+        self.lam_critic = lam_critic
+        self._writer: Optional[SummaryWriter] = None
+        self.temp = temp
+        self.policy = None
+        self.value = None
+        self.norm_grad = norm_grad
+        self.z_critic = None
+        self.z_actor = None
+        self.R_bar = 0
+
+    @property
+    def writer(self) -> SummaryWriter:
+        return self._writer
+
+    @writer.setter
+    def writer(self, w: SummaryWriter):
+        if w is not None:
+            assert isinstance(w, SummaryWriter)
+        self._writer = w
+
+    @property
+    def temperature(self) -> float:
+        t = self.temp
+        if isinstance(t, LinearSchedule):
+            t = t.value
+        return t
+
+    def init_model(self, *args, **kwargs):
+        self.actor = DiscreteActionPolicyMLP(
+            in_size=self.feature_size,
+            n_actions=self.action_space_dims,
+            hidden_dims=self.hidden_dims
+        )
+
+        # Using policy as feature extractor. One feature per action
+        self.critic = ValueFunction(
+            in_size=self.feature_size,
+            hidden_dims=self.hidden_dims
+        )
+
+    def initialize(self, **kwargs):
+        if isinstance(self.temp, NoiseSchedule):
+            # Reset noise to starting exploration
+            self.temp.initialize()
+
+        if isinstance(self.update_coefficient_policy, LinearSchedule):
+            self.update_coefficient_policy.initialize()
+
+        if isinstance(self.update_coefficient_critic, LinearSchedule):
+            self.update_coefficient_critic.initialize()
+
+        if isinstance(self.update_coefficient_avg_reward, LinearSchedule):
+            self.update_coefficient_avg_reward.initialize()
+
+        self.init_model()
+        self.t = 0
+        self.R_bar = 0
+
+        self.z_actor = [
+            torch.zeros_like(p).to(p.device)
+            for p in self.actor.parameters()
+        ]
+        self.z_critic = [
+            torch.zeros_like(p).to(p.device)
+            for p in self.critic.parameters()
+        ]
+
+    def reset(self):
+        # The agent here is prepared for a new episode, that forthe
+        # continuing case should be done after a long long time.
+        self.t = 0
+        self.R_bar = 0
+
+        self.z_actor = [
+            torch.zeros_like(p).to(p.device)
+            for p in self.actor.parameters()
+        ]
+        self.z_critic = [
+            torch.zeros_like(p).to(p.device)
+            for p in self.critic.parameters()
+        ]
+
+    def logp_sa(self, s, a, native=True):
+        res = self.actor.logprob_sa(
+            x=to_tensor(s, dtype=torch.float32),
+            a=to_tensor(a, dtype=torch.long),
+            temperature=self.temperature
+        )
+        return to_native(res) if native else res
+
+    def entropy(self, s, native=True):
+        e = self.actor.entropy(
+            to_tensor(s, torch.float32),
+            temperature=self.temperature
+        )
+
+        return to_native(e) if native else e
+
+    def act(self, state, native=True) -> Tuple[int, float]:
+        with torch.no_grad():
+            actions, probs = self.actor.sample(
+                to_tensor(state, dtype=torch.float32),
+                temperature=self.temperature,
+                differentiable=False)
+
+        if native:
+            actions, probs = to_native(actions), to_native(probs)
+
+        return actions, probs
+
+    def get_greedy_action(self, s, native=True):
+        with torch.no_grad():
+            probs = self.actor.prob_s(
+                to_tensor(s, dtype=torch.float32),
+                temperature=self.temperature
+            )
+
+        actions = probs.argmax(dim=-1)
+        probs = probs[actions, ...]
+
+        if native:
+            actions = to_native(actions)
+            probs = to_native(probs)
+
+        return actions, probs
+
+    def step(self, experience: Experience, **kwargs):
+
+        if isinstance(self.update_coefficient_policy, LinearSchedule):
+            alpha_actor = self.update_coefficient_policy.value
+            self.update_coefficient_policy.step()
+        else:
+            alpha_actor = self.update_coefficient_policy
+
+        if isinstance(self.update_coefficient_critic, LinearSchedule):
+            alpha_critic = self.update_coefficient_critic.value
+            self.update_coefficient_critic.step()
+        else:
+            alpha_critic = self.update_coefficient_critic
+
+        if isinstance(self.update_coefficient_avg_reward, LinearSchedule):
+            alpha_reward = self.update_coefficient_avg_reward.value
+            self.update_coefficient_avg_reward.step()
+        else:
+            alpha_reward = self.update_coefficient_avg_reward
+
+        s, a, r, sp, ap = (
+            experience.s, experience.a,
+            experience.r, experience.sp,
+            experience.ap
+        )
+
+        v = self.critic(to_tensor(s))
+
+        with torch.no_grad():
+            vp = self.critic(to_tensor(sp))
+            delta = (r - self.R_bar + vp) - v
+
+        self.R_bar += alpha_reward * delta
+
+        # --- Update critic ETs --- #
+        grads_v = torch.autograd.grad(
+            v,
+            list(self.critic.parameters()),
+            retain_graph=False
+        )
+
+        with torch.no_grad():
+            for i in range(len(self.z_critic)):
+                self.z_critic[i] = (
+                        self.lam_critic * self.z_critic[i] + grads_v[i]
+                )
+
+        # --- Update Actor ETs --- #
+        logp = self.logp_sa(s, [a], native=False)
+        assert not torch.any(torch.isnan(logp))
+        grads_pi = torch.autograd.grad(
+            logp,
+            list(self.actor.parameters()),
+            retain_graph=False
+        )
+
+        # print(f'Pi grad: {float(torch.concat([g.reshape(-1) for g in grads_pi]).norm()) :.2e} \n')
+        # print(f'V grad: {float(torch.concat([g.reshape(-1) for g in grads_v]).norm()) :.2e} \n')
+        # print(f'R_bar: {float(self.R_bar): .2e}\n')
+
+        with torch.no_grad():
+            for i in range(len(self.z_actor)):
+                self.z_actor[i] = (
+                        self.lam_actor * self.z_actor[i] + grads_pi[i]
+                )
+
+        # ---- Update Critic --- #
+        with torch.no_grad():
+            for z, w in zip(self.z_critic, self.critic.parameters()):
+                w += alpha_critic * delta * z
+
+        # ---- Update Actor ---- #
+        with torch.no_grad():
+            for z, th in zip(self.z_actor, self.actor.parameters()):
+                th += alpha_actor * delta * z
+
+
+        if isinstance(self.temp, LinearSchedule):
+            self.temp.step()
+
+        self.t += 1
+
 

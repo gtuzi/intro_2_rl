@@ -422,9 +422,9 @@ the baseline.
 
 $$
 \begin{align*}
-\mathbf{\theta}_{t+1} &= \mathbf{\theta}_{t} + \alpha \Bigl(G_t - \hat{v}(S_t, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\\\[0.5em]
-&= \mathbf{\theta}_{t} + \alpha \Bigl(R_{t + 1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}) -  \hat{v}(S_{t}, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\\\[0.5em]
-&= \mathbf{\theta}_{t} + \alpha \delta_t \nabla_{\mathbf{\theta}_t} \log \pi(A_t| S_t, \mathbf{\theta}_t) \\\\[0.5em]
+\mathbf{\theta}_{t+1} &= \mathbf{\theta}_{t} + \alpha \Bigl(G_t - \hat{v}(S_t, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\[0.5em]
+&= \mathbf{\theta}_{t} + \alpha \Bigl(R_{t + 1} + \gamma \hat{v}(S_{t+1}, \mathbf{w}) -  \hat{v}(S_{t}, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\[0.5em]
+&= \mathbf{\theta}_{t} + \alpha \delta_t \nabla_{\mathbf{\theta}_t} \log \pi(A_t| S_t, \mathbf{\theta}_t) \\[0.5em]
 &= \mathbf{\theta}_{t} + \alpha \delta_t \frac{\nabla_{\mathbf{\theta}_t} \pi(A_t | S_t, \mathbf{\theta}_t)}{\pi(A_t | S_t, \mathbf{\theta}_t)}\\[0.5em]
 \end{align*}
 $$
@@ -464,9 +464,36 @@ the same learning rates $\alpha$. The $\lambda$'s used here for both actor
 and critic were set to 0.5.
 
 
-| Train                                                                           | Eval                                                             |
-|---------------------------------------------------------------------------------|------------------------------------------------------------------|
+| Train                                                                           | Eval                                                                           |
+|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
 | <img src="images/ACWithEligibilityTraces_G0_train.png" alt="Grid" width="450"/> | <img src="images/ACWithEligibilityTraces_G0_eval.png" alt="Grid" width="450"/> |
 
 We can see that the $\lambda$-return with eligibility traces approach yields 
 better results than the one-step AC method.
+
+
+## Policy Gradient for Continuing Problems
+For the continuing setting we need to redefine the objective function (
+performance function) in terms of the average rate of reward per step:
+
+$$
+\begin{align*}
+J(\mathbf{\theta}) \overset \cdot{=} r(\pi) &\overset \cdot{=} \lim_{h \rightarrow \infty} \frac{1}{h} \sum_{t=1}^{h} \mathbb{E}[R_t | S_0, A_{0:t-1} \sim \pi] \\[0.5em]
+&= \lim_{t \rightarrow \infty} \mathbb{E}[R_t | S_0, A_{0:t-1} \sim \pi] \\[0.5em]
+&= \sum_s \mu(s) \sum_a \pi(a | s) \sum_{s', r} p(s', r | s, a) r
+\end{align*}
+$$
+
+where $\mu(s)$ is the stationary / steady-state distribution under $\pi$:
+
+$$
+\begin{align*}
+\mu(s') &\overset \cdot{=} \lim_{t \rightarrow \infty}[S_t = s' | A_{0:t} \sim \pi] \quad \text{independent of $S_0$, ergodic assumption} \\[0.5em]
+&= \sum_{s \in \mathcal{S}} \mu(s)\sum_a \pi(a | s)p(s' | s, a) \quad \text{if you follow $\pi$ you remain in the same distribution}
+\end{align*}
+$$
+
+the pseudo-code of which is shown below:
+
+<img src="images/AC_with_eligibility_traces_continuing.png" alt="Grid" width="450"/>
+
