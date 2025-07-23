@@ -9,6 +9,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import warnings
+
+from tabular_methods.td.main import ENV_NAME
+
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
@@ -433,6 +436,8 @@ def run_one_experiment(
         alpha_builder = lambda _a : _a,
         reward_shaper: Callable = lambda reward, state, done, t: reward,
 ):
+    global NORM_GRAD
+
     env = build_env()
 
     if model == 'Reinforce_LA':
@@ -475,7 +480,7 @@ def run_one_experiment(
             update_coefficient=alpha_builder(alpha),
             hidden_dims=(h,),
             discount=0.99,
-            norm_grad=False
+            norm_grad=NORM_GRAD
         )
     elif model == 'ReinforceBaseline':
         do_eval = True
@@ -492,7 +497,7 @@ def run_one_experiment(
             update_coefficient_baseline=alpha_builder(1.2 * alpha),
             hidden_dims=(h, ),
             discount=0.99,
-            norm_grad=False
+            norm_grad=NORM_GRAD
         )
     elif model == 'OneStepAC':
         do_eval = True
@@ -510,7 +515,7 @@ def run_one_experiment(
             update_coefficient_critic=alpha_builder(25 * alpha),
             hidden_dims=(h,),
             discount=0.99,
-            norm_grad=False)
+            norm_grad=NORM_GRAD)
     elif model == 'ACWithEligibilityTraces':
         do_eval = True
         target_agent = None
@@ -529,7 +534,7 @@ def run_one_experiment(
             lam_critic=0.5,
             hidden_dims=(h,),
             discount=0.99,
-            norm_grad=False)
+            norm_grad=NORM_GRAD)
     elif model == 'ACWithEligibilityTracesContinuing':
         do_eval = False
         target_agent = None
@@ -548,7 +553,7 @@ def run_one_experiment(
             lam_critic=0.8,
             update_coefficient_avg_reward=alpha_builder(alpha),
             hidden_dims=(h,),
-            norm_grad=False)
+            norm_grad=NORM_GRAD)
 
     else:
         raise NotImplemented(f'{model} model not recognized')
@@ -589,6 +594,7 @@ def experiments_parallel(
         seeds=(1, 2)
 ):
     global EPISODIC
+    global NORM_GRAD
 
     # Prepare a 2D array to store final means
     steps_per_episode = np.zeros((len(alphas), 1), dtype=np.float64)
@@ -670,15 +676,16 @@ def experiments_parallel(
             if avg_r != -np.inf:
                 avg_rewards_over_alphas.append(np.mean(avg_r, axis=0)[1:])
 
-        if len(eval_steps) > 0:
-            eval_steps_per_episode[ ia] = np.mean(
-                [eval_steps[vi] for vi in valid_idx]) if len(
-                valid_idx) > 0 else np.inf
+        if EPISODIC:
+            if len(eval_steps) > 0:
+                eval_steps_per_episode[ ia] = np.mean(
+                    [eval_steps[vi] for vi in valid_idx]) if len(
+                    valid_idx) > 0 else np.inf
 
-        if len(eval_sum_rewards) > 0:
-            eval_sum_of_rewards_per_episode[ia] = np.mean(
-                [eval_sum_rewards[vi] for vi in valid_idx]) if len(
-                valid_idx) > 0 else -np.inf
+            if len(eval_sum_rewards) > 0:
+                eval_sum_of_rewards_per_episode[ia] = np.mean(
+                    [eval_sum_rewards[vi] for vi in valid_idx]) if len(
+                    valid_idx) > 0 else -np.inf
 
         if len(eval_R0_over_episodes) > 0:
             eval_r0 = [eval_R0_over_episodes[vi] for vi in valid_idx] if len(
@@ -713,6 +720,8 @@ def experiments_parallel(
         raise NotImplemented
 
     if not EPISODIC:
+        ng_str = '_normgrad' if NORM_GRAD else ''
+
         plot_experiments(
             avg_rewards_over_alphas,
             exp_alphas=alphas.tolist(),
@@ -720,16 +729,19 @@ def experiments_parallel(
             xlabel='Step',
             ylabel='Avg. Reward / Step',
             save_fig=True,
-            filename=f'{model}_avg_R_train.png'
+            filename=f'{model}_avg_R_train{ng_str}.png'
         )
     else:
+
+        ng_str = '_normgrad' if NORM_GRAD else ''
+
         plot_experiments(
             R0_over_alphas,
             exp_alphas=alphas.tolist(),
             title=title + " - Train",
             xlabel='Episode',
             save_fig=True,
-            filename=f'{model}_G0_train.png',
+            filename=f'{model}_G0_train{ng_str}.png',
         )
 
         if len(eval_R0_over_alphas):
@@ -739,7 +751,7 @@ def experiments_parallel(
                 title=title + " - Eval",
                 xlabel='Episode',
                 save_fig=True,
-                filename=f'{model}_G0_eval.png'
+                filename=f'{model}_G0_eval{ng_str}.png'
             )
 
 def reinforce_la(
@@ -1228,9 +1240,15 @@ def ac_continuing_with_eligibility_traces(
 
 if __name__ == '__main__':
     do_log = False
-    EPISODIC = True
     RENDER = False
-    ENV_NAME = 'CartPole'
+
+    EPISODIC = False
+    NORM_GRAD = False
+
+    if EPISODIC:
+        ENV_NAME = 'CartPole'
+    else:
+        ENV_NAME = 'MountainCar'
 
     if EPISODIC:
         num_experiments = 100
@@ -1239,7 +1257,6 @@ if __name__ == '__main__':
 
     num_episodes = None
     T = None
-
     if ENV_NAME == 'MountainCar':
         if EPISODIC:
             num_episodes = 150
@@ -1286,7 +1303,7 @@ if __name__ == '__main__':
             bonus *= 10
         return reward + bonus
 
-    alphas = np.linspace(1e-6, 1e-3, num=4)
+    alphas = np.linspace(1e-6, 1e-2, num=5)
 
     # ac_continuing_with_eligibility_traces(
     #     num_episodes=num_episodes,
@@ -1300,15 +1317,29 @@ if __name__ == '__main__':
     #
     # exit(0)
 
-    experiments_parallel(
-        model='ACWithEligibilityTraces',
-        num_episodes=num_episodes,
-        T=T,
-        reward_shaper=base_reward,
-        alphas=alphas,
-        alpha_builder=build_alpha_sched,
-        num_experiments=num_experiments,
-        seeds=[i for i in range(num_episodes)]
-    )
+    if EPISODIC:
+        for model in ['Reinforce', 'ReinforceBaseline', 'OneStepAC', 'ACWithEligibilityTraces']:
+            experiments_parallel(
+                model=model,
+                num_episodes=num_episodes,
+                T=T,
+                reward_shaper=base_reward,
+                alphas=alphas,
+                alpha_builder=build_alpha_sched,
+                num_experiments=num_experiments,
+                seeds=[i for i in range(num_episodes)]
+            )
+    else:
+        for model in ['ACWithEligibilityTracesContinuing']:
+            experiments_parallel(
+                model=model,
+                num_episodes=num_episodes,
+                T=T,
+                reward_shaper=mountaincar_continuous_reward,
+                alphas=alphas,
+                alpha_builder=build_alpha_sched,
+                num_experiments=num_experiments,
+                seeds=[i for i in range(num_episodes)]
+            )
 
     exit(0)

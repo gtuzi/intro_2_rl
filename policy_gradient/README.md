@@ -446,9 +446,10 @@ for one-step AC agent on `CartPole` environment. The update value
 used for the critic $\alpha^{\mathbf{w}} = 25 \alpha^{\mathbf{\theta}}$.
 
 
-| Train                                                             | Eval                                                             |
-|-------------------------------------------------------------------|------------------------------------------------------------------|
-| <img src="images/OneStepAC_G0_train.png" alt="Grid" width="450"/> | <img src="images/OneStepAC_G0_eval.png" alt="Grid" width="450"/> |
+| Gradient t            | Train                                                                      | Eval                                                                      |
+|-----------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| Normalized Gradient   | <img src="images/OneStepAC_G0_train_normgrad.png" alt="Grid" width="450"/> | <img src="images/OneStepAC_G0_eval_normgrad.png" alt="Grid" width="450"/> |
+| Unnormalized Gradient | <img src="images/OneStepAC_G0_train.png" alt="Grid" width="450"/>          | <img src="images/OneStepAC_G0_eval.png" alt="Grid" width="450"/>          |
 
 
 ###### n-Step with Eligibility Traces Actor–Critic
@@ -464,9 +465,10 @@ the same learning rates $\alpha$. The $\lambda$'s used here for both actor
 and critic were set to 0.5.
 
 
-| Train                                                                           | Eval                                                                           |
-|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
-| <img src="images/ACWithEligibilityTraces_G0_train.png" alt="Grid" width="450"/> | <img src="images/ACWithEligibilityTraces_G0_eval.png" alt="Grid" width="450"/> |
+|                       | Train                                                                                    | Eval                                                                                    |
+|-----------------------|------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
+| Normalized Gradient   | <img src="images/ACWithEligibilityTraces_G0_train_normgrad.png" alt="Grid" width="450"/> | <img src="images/ACWithEligibilityTraces_G0_eval_normgrad.png" alt="Grid" width="450"/> |
+| Unnormalized Gradient | <img src="images/ACWithEligibilityTraces_G0_train.png" alt="Grid" width="450"/>          | <img src="images/ACWithEligibilityTraces_G0_eval.png" alt="Grid" width="450"/>          |
 
 We can see that the $\lambda$-return with eligibility traces approach yields 
 better results than the one-step AC method.
@@ -496,4 +498,29 @@ $$
 the pseudo-code of which is shown below:
 
 <img src="images/AC_with_eligibility_traces_continuing.png" alt="Grid" width="450"/>
+
+
+###### Experiments
+For this experiment I repurposed the MountainCar environment
+such that a distance from the flag bonus was added to the time negative 
+step (-1). 
+
+The modified reward used is as follows:
+
+``` python
+bonus = (1 - abs(pos - 0.5) / 1.8)
+if bonus > 0.9:
+    bonus *= 10
+return reward + bonus
+```
+
+where `pos` is the position of the vehicle along the x-axis.
+12 experiments for each alpha were run. The plot is the expected average reward
+per step (i.e. reward per step averaged over 12 experiments).
+
+|                       | Train                                                                                                 | 
+|-----------------------|-------------------------------------------------------------------------------------------------------|
+| Normalized Gradient   | <img src="images/ACWithEligibilityTracesContinuing_avg_R_train_normgrad.png" alt="Grid" width="450"/> |
+| Unnormalized Gradient | <img src="images/ACWithEligibilityTracesContinuing_avg_R_train.png" alt="Grid" width="450"/>          |
+
 
