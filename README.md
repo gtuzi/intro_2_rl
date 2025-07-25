@@ -29,14 +29,15 @@ across environments.
 * Environments come primarily from [Gymnasium], unless noted
 
 ## Implemented Chapters:
-- [ ] Chapter 2: Bandits (_TBD: merge from "Bandit" project_)
-- [x] Chapter 5: [Monte Carlo (MC)](tabular_methods/monte_carlo/README.md) methods
-- [x] Chapter 6: [Temporal Difference (TD)](tabular_methods/td/README.md) methods
-- [x] Chapter 7: [n-Step Bootstrapping](tabular_methods/td/README.md)
-- [x] Chapter 8: [Planning](tabular_methods/planning/README.md)
+- [ ] Chapter 2:  Bandits (_TBD: merge from "Bandit" project_)
+- [x] Chapter 5:  [Monte Carlo Methods](tabular_methods/monte_carlo/README.md) 
+- [x] Chapter 6:  [Temporal Difference Methods](tabular_methods/td/README.md) 
+- [x] Chapter 7:  [n-Step Bootstrapping](tabular_methods/td/README.md)
+- [x] Chapter 8:  [Planning](tabular_methods/planning/README.md)
 - [x] Chapter 10: [On-Policy Approximation](approximate_methods/on_policy/README.md)
 - [x] Chapter 11: [Off-Policy Approximation](approximate_methods/off_policy/README.md)
 - [x] Chapter 12: [Eligibility Traces](approximate_methods/eligibility_traces/README.md)
+- [x] Chapter 13: [Policy Gradient Methods](policy_gradient/README.md)
 
 
 ## Code Organization
@@ -45,9 +46,7 @@ intro_2_rl/
 │
 ├── README.md                       # Project documentation
 │
-│
 ├── LICENSE.md                      # Project license (MIT)
-│
 │
 ├── tabular_methods/                # Tabular methods directory
 │   ├── monte_carlo/                # Source code for Monte Carlo (MC) methods
@@ -67,7 +66,7 @@ intro_2_rl/
 │   │   ├── main.py                 # Main execution script
 │   │   ├── envMaze.py              # DynaMaze environment
 │   │   ├── rl_glue.py              # Imported library for DynaMaze environment
-│   │   └── README.md               # Detailed information
+│   │   └── README.md               # Main landing page. Overview
 │   │
 │   └── utils.py                    # Base agents, utilities
 │
@@ -81,7 +80,7 @@ intro_2_rl/
 │   │   ├── agents.py               # Algorithms from: Ch. 10
 │   │   ├── main.py                 # Main execution script.
 │   │   ├── summary.ipynb           # Theoretical development (better rendering).
-│   │   └── README.md               # Detailed information
+│   │   └── README.md               # Main landing page. Overview
 │   │
 │   ├── eligibility_traces/         # Source code for on_policy methods
 │   │   ├── algorithms.py           # Algorithms shown in the random walk examples
@@ -90,10 +89,19 @@ intro_2_rl/
 │   │   ├── agents.py               # Implementation of agents (eg. Sarsa).
 │   │   ├── main.py                 # Main running script of agents.
 │   │   ├── summary.ipynb           # Theoretical development (better rendering).
-│   │   └── README.md               # Detailed information
+│   │   └── README.md               # Main landing page. Overview
 │   │
 │   ├── tiles3.py                   # Source code for tile-coding
 │   └── utils.py                    # Utilities
+│
+│
+├── policy_gradient/                # Policy gradient theory, methods, algo implementations
+│   ├── agents                      # Implementation of algorithms in agentic form
+│   ├── nets.py                     # Function approximators (PyTorch)
+│   ├── main_continuous_action.py   # Main running script for continuous action agents
+│   ├── main_discrete_action.py     # Main running script for discrete action agents
+│   ├── summary.ipynb               # Theoretical development
+│   └── README.md                   # Main landing page. Overview
 │
 │
 ├── shared/                         # Shared code directory
@@ -108,3 +116,4 @@ intro_2_rl/
 * Scikit-Learn
 * [Gymnasium]
 * Pandas
+* PyTorch
