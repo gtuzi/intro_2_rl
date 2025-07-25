@@ -3,39 +3,64 @@ import random
 import copy
 from typing import List, Callable
 from joblib import Parallel, delayed
-
 from tqdm import tqdm
+
 import numpy as np
 import matplotlib.pyplot as plt
 
 import warnings
-
-from tabular_methods.td.main import ENV_NAME
 
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
     message=r".*env\.shape to get variables from other wrappers is deprecated.*"
 )
+
 import gymnasium as gym
 from gymnasium import Env
 
 from shared.utils import LinearSchedule
 from approximate_methods.utils import (
-    DiscreteActionAgent,
+    ContinuousActionAgent,
     SoftPolicy,
-    Experience,
-    TileCodingFeature
+    Experience
+)
+from policy_gradient.agents import (
+    ReinforceContinuousAction,
+    ReinforceBaselineContinuousAction,
+    ACWithEligibilityTracesContinuousAction,
+    ACWithEligibilityTracesContinuousActionContinuingTask
 )
 
-from policy_gradient.agents import (
-    Reinforce_LA,
-    Reinforce,
-    ReinforceBaseline,
-    OneStepAC,
-    ACWithEligibilityTraces,
-    ACWithEligibilityTracesContinuing
-)
+
+
+global ENV_NAME
+global RENDER
+global MAX_EPISODE_STEPS
+global DEVICE
+
+
+def build_env() -> Env:
+    global ENV_NAME
+    global RENDER
+    global MAX_EPISODE_STEPS
+
+    if ENV_NAME.lower() == 'MountainCar'.lower():
+        env = gym.make(
+            'MountainCarContinuous-v0',
+            render_mode="human" if RENDER else None)
+        env._max_episode_steps = MAX_EPISODE_STEPS
+    elif ENV_NAME.lower() == 'Pendulum'.lower():
+        env = gym.make(
+            "Pendulum-v1",
+            render_mode="human" if RENDER else None
+        )
+
+        env._max_episode_steps = MAX_EPISODE_STEPS
+    else:
+        raise NotImplementedError
+
+    return copy.deepcopy(env)
 
 
 #region plots
@@ -111,62 +136,10 @@ def plot_experiments(
 
 #endregion plots
 
-def entropy_from_list(lst, base=np.e):
-    """
-    Compute the entropy of a list of integers using NumPy,
-    based on the frequency distribution of the integers.
-    """
-    # Count occurrences
-    values, counts = np.unique(lst, return_counts=True)
-    probs = counts / counts.sum()
-    # Compute entropy
-    entropy = -np.sum(probs * np.log(probs))
-    # Change base if needed
-    if base != np.e:
-        entropy /= np.log(base)
-
-    return entropy
-
-
-def build_env() -> Env:
-    global ENV_NAME
-    global RENDER
-    global MAX_EPISODE_STEPS
-
-    if ENV_NAME.lower() == 'MountainCar'.lower():
-        env = gym.make(
-            'MountainCar-v0',
-            render_mode="human" if RENDER else None)
-        env._max_episode_steps = MAX_EPISODE_STEPS
-    elif ENV_NAME.lower() == 'AirRaid'.lower():
-        env = gym.make(
-            "ALE/AirRaid-v5",
-            obs_type="rgb",
-            render_mode="human" if RENDER else None
-        )
-        env._max_episode_steps = MAX_EPISODE_STEPS
-    elif ENV_NAME.lower() == 'LunarLander'.lower():
-        env = gym.make(
-            "LunarLander-v2",
-            render_mode="human" if RENDER else None
-        )
-        env._max_episode_steps = MAX_EPISODE_STEPS
-    elif ENV_NAME.lower() == 'CartPole'.lower():
-        env = gym.make(
-            "CartPole-v1",
-            render_mode="human" if RENDER else None
-        )
-
-        env._max_episode_steps = MAX_EPISODE_STEPS
-    else:
-        raise NotImplementedError
-
-    return copy.deepcopy(env)
-
 
 def eval_env_episodic(
         env: Env,
-        agent: DiscreteActionAgent,
+        agent: ContinuousActionAgent,
         T: int = 30,
         num_episodes: int = 1,
         greedy: bool = True,
@@ -228,8 +201,8 @@ def eval_env_episodic(
 
 def run_env_episodic(
         env: Env,
-        behavioral_agent: DiscreteActionAgent,
-        target_agent: DiscreteActionAgent = None,
+        behavioral_agent: ContinuousActionAgent,
+        target_agent: ContinuousActionAgent = None,
         reward_shaper: Callable = lambda reward, state, done, t: reward,
         T: int = 30,
         num_episodes: int = 10,
@@ -300,7 +273,7 @@ def run_env_episodic(
             entropies = []
             actions = [a]
 
-            # For the pseudo- continuing case
+            # For the pseudo-continuing case
             pbar_time = None
             if T > 1e4:
                 pbar_time = tqdm(range(T), desc="Training", leave=False)
@@ -308,9 +281,9 @@ def run_env_episodic(
             for t in pbar_time if pbar_time is not None else range(T):
                 sp, r, terminated, truncated, info = env.step(a)
                 done = terminated or truncated or (t + 1 == T)
-
                 reward = reward_shaper(reward=r, state=sp, done=done, t=t)
                 ap, pp = behavioral_agent.act(sp)
+
                 entropy = behavioral_agent.entropy(sp)
 
                 # R += r
@@ -330,11 +303,11 @@ def run_env_episodic(
 
                 e = Experience(
                     s=s,
-                    a=a,
+                    a=np.array(a),
                     p=p,
                     r=reward,
                     sp=sp,
-                    ap=ap,
+                    ap=np.array(ap),
                     pp=pp,
                     done=int(done),
                     rho=rho,
@@ -360,7 +333,11 @@ def run_env_episodic(
                     rho = rhop
 
                 if pbar_time is not None:
-                    pbar_time.set_postfix_str(f"Train Sum(r)={R:.2e}, Avg(r)={avg_rewards[-1]:.2e}, Entropy={entropy: .2f}")
+                    pbar_time.set_postfix_str(
+                        f"Train Sum(r)={R:.2e}, "
+                        f"Avg(r)={avg_rewards[-1]:.2e}, "
+                        f"Entropy={entropy: .2f}"
+                    )
 
 
             R0_over_episodes.append(R)
@@ -401,8 +378,7 @@ def run_env_episodic(
             pbar.set_postfix_str(
                 f"train score={R:.2e}, " +
                 eval_stat +
-                f", Policy entropy: {np.mean(entropies): .2e}, " +
-                f"Actions entropy: {entropy_from_list(actions): .2e}"
+                f", Policy entropy: {np.mean(entropies): .2e}, "
             )
 
         return dict(
@@ -416,6 +392,7 @@ def run_env_episodic(
         )
 
     except Exception as ex:
+        # raise ex
         return dict(
             steps_per_episode=[-np.inf] * num_episodes,
             sum_of_rewards_per_episode=[-np.inf] * num_episodes,
@@ -437,124 +414,84 @@ def run_one_experiment(
         reward_shaper: Callable = lambda reward, state, done, t: reward,
 ):
     global NORM_GRAD
+    global EPISODIC
 
     env = build_env()
 
-    if model == 'Reinforce_LA':
-        do_eval = True
-        target_agent = None
-
-        num_tilings = 8
-        num_tiles = 8
-        max_size = 4096
-
-        x0_low, x1_low = env.observation_space.low
-        x0_high, x1_high = env.observation_space.high
-
-        '''
-            From Section 10.1:
-                We used 8 tilings, with each tile covering 1/8th of 
-                the bounded distance in each dimension
-        '''
-        _feature_fn = TileCodingFeature(
-            max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
-
-        feature_fn = lambda _s: _feature_fn(_s, -1)
-        agent = Reinforce_LA(
-            feature_size=max_size,
-            action_space_dims=int(env.action_space.n),
-            update_coefficient=alpha_builder(alpha),
-            policy_feature_fn=feature_fn,
-            discount=0.99)
-    elif model == 'Reinforce':
+    if model == 'ReinforceContinuousAction':
         do_eval = True
         target_agent = None
 
         state_size = env.unwrapped.observation_space.shape[0]
-        action_size = int(env.unwrapped.action_space.n)
+        action_size = env.unwrapped.action_space.shape
 
-        h = 4096 // (state_size + action_size)
-        agent = Reinforce(
+        h = 4096 // (state_size + int( np.prod(action_size)))
+
+        agent = ReinforceContinuousAction(
             state_size=state_size,
-            action_space_dims=action_size,
+            action_size=action_size[0],
             update_coefficient=alpha_builder(alpha),
             hidden_dims=(h,),
-            discount=0.99,
-            norm_grad=NORM_GRAD
+            discount=0.99
         )
-    elif model == 'ReinforceBaseline':
+    elif model == 'ReinforceBaselineContinuousAction':
         do_eval = True
         target_agent = None
 
         state_size = env.unwrapped.observation_space.shape[0]
-        action_size = int(env.unwrapped.action_space.n)
+        action_size = env.unwrapped.action_space.shape
 
-        h = 4096 // (state_size + action_size)
-        agent = ReinforceBaseline(
+        h = 4096 // (state_size + int(np.prod(action_size)))
+
+        agent = ReinforceBaselineContinuousAction(
             state_size=state_size,
-            action_space_dims=action_size,
+            action_size=action_size[0],
+            update_coefficient_baseline=alpha_builder(2 * alpha), # offset the loss division by 2
             update_coefficient_policy=alpha_builder(alpha),
-            update_coefficient_baseline=alpha_builder(1.2 * alpha),
-            hidden_dims=(h, ),
-            discount=0.99,
-            norm_grad=NORM_GRAD
-        )
-    elif model == 'OneStepAC':
-        do_eval = True
-        target_agent = None
-
-        state_size = env.unwrapped.observation_space.shape[0]
-        action_size = int(env.unwrapped.action_space.n)
-
-        h = 4096 // (state_size + action_size)
-
-        agent = OneStepAC(
-            state_size=state_size,
-            action_space_dims=action_size,
-            update_coefficient_policy=alpha_builder(alpha),
-            update_coefficient_critic=alpha_builder(25 * alpha),
             hidden_dims=(h,),
-            discount=0.99,
-            norm_grad=NORM_GRAD)
-    elif model == 'ACWithEligibilityTraces':
+            discount=0.99
+        )
+    elif model == 'ACWithEligibilityTracesContinuousAction':
         do_eval = True
         target_agent = None
 
         state_size = env.unwrapped.observation_space.shape[0]
-        action_size = int(env.unwrapped.action_space.n)
+        action_size = env.unwrapped.action_space.shape
 
-        h = 4096 // (state_size + action_size)
+        h = 4096 // (state_size + int(np.prod(action_size)))
 
-        agent = ACWithEligibilityTraces(
+        agent = ACWithEligibilityTracesContinuousAction(
             state_size=state_size,
-            action_space_dims=action_size,
-            update_coefficient_policy=alpha_builder(alpha),
-            lam_policy= 0.5,
-            update_coefficient_critic=alpha_builder(25 * alpha),
+            action_size=action_size[0],
+            update_coefficient_actor=alpha_builder(alpha),
+            lam_actor=0.5,
+            update_coefficient_critic=alpha_builder(alpha),
             lam_critic=0.5,
             hidden_dims=(h,),
             discount=0.99,
-            norm_grad=NORM_GRAD)
-    elif model == 'ACWithEligibilityTracesContinuing':
-        do_eval = False
+            device=DEVICE
+        )
+    elif model == 'ACWithEligibilityTracesContinuousActionContinuingTask':
+        assert not EPISODIC
+        do_eval = True
         target_agent = None
 
         state_size = env.unwrapped.observation_space.shape[0]
-        action_size = int(env.unwrapped.action_space.n)
+        action_size = env.unwrapped.action_space.shape
 
-        h = 4096 // (state_size + action_size)
+        h = 4096 // (state_size + int(np.prod(action_size)))
 
-        agent = ACWithEligibilityTracesContinuing(
+        agent = ACWithEligibilityTracesContinuousActionContinuingTask(
             state_size=state_size,
-            action_space_dims=action_size,
-            update_coefficient_policy=alpha_builder(alpha),
-            lam_policy= 0.8,
+            action_size=action_size[0],
+            update_coefficient_actor=alpha_builder(alpha),
+            lam_actor=0.8,
             update_coefficient_critic=alpha_builder(alpha),
             lam_critic=0.8,
             update_coefficient_avg_reward=alpha_builder(alpha),
             hidden_dims=(h,),
-            norm_grad=NORM_GRAD)
-
+            device=DEVICE
+        )
     else:
         raise NotImplemented(f'{model} model not recognized')
 
@@ -703,19 +640,14 @@ def experiments_parallel(
             f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[ia][0]:.2f}"
         )
 
-    # ACWithEligibilityTracesContinuing
-    if model == 'Reinforce_LA':
-        title = 'Reinforce_LA: $\sum_t R_t$'
-    elif model == 'Reinforce':
+    if model == 'ReinforceContinuousAction':
         title = 'Reinforce: $\mathbb{E}[\sum_t R_t]$'
-    elif model == 'ReinforceBaseline':
-        title = 'Reinforce-w-Baseline: $\mathbb{E}[\sum_t R_t]$'
-    elif model == 'OneStepAC':
-        title = 'One-Step Actor-Critic: $\mathbb{E}[\sum_t R_t]$'
-    elif model == 'ACWithEligibilityTraces':
-        title = 'Actor-Critic with Eligibility Traces: $\mathbb{E}[\sum_t R_t]$'
-    elif model == 'ACWithEligibilityTracesContinuing':
-        title = 'Continuing: AC with Eligibility Traces: $\mathbb{E}[\\frac{R_t}{step}]$'
+    elif model == 'ReinforceBaselineContinuousAction':
+        title = 'Reinforce with Baseline: $\mathbb{E}[\\frac{R_t}{step}]$'
+    elif model == 'ACWithEligibilityTracesContinuousAction':
+        title = 'AC with Eligibility Traces: $\mathbb{E}[\\frac{R_t}{step}]$'
+    elif model == 'ACWithEligibilityTracesContinuousActionContinuingTask':
+        title = 'Continuing Task: AC with Eligibility Traces: $\mathbb{E}[\\frac{R_t}{step}]$'
     else:
         raise NotImplemented
 
@@ -732,7 +664,6 @@ def experiments_parallel(
             filename=f'{model}_avg_R_train{ng_str}.png'
         )
     else:
-
         ng_str = '_normgrad' if NORM_GRAD else ''
 
         plot_experiments(
@@ -754,79 +685,6 @@ def experiments_parallel(
                 filename=f'{model}_G0_eval{ng_str}.png'
             )
 
-def reinforce_la(
-        num_episodes,
-        T,
-        reward_shaper: Callable,
-        alphas = np.linspace(0, 1, num=50),
-        alpha_builder = lambda _a : _a,
-        seeds=(1, 2)
-):
-    env = build_env()
-    steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
-    sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
-    eval_steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
-    eval_sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
-
-    num_tilings = 8
-    num_tiles = 8
-    max_size = 4096
-
-    x0_low, x1_low = env.unwrapped.observation_space.low
-    x0_high, x1_high = env.unwrapped.observation_space.high
-
-    '''
-        From Section 10.1:
-            We used 8 tilings, with each tile covering 1/8th of 
-            the bounded distance in each dimension
-    '''
-    _feature_fn = TileCodingFeature(
-        max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
-
-    feature_fn = lambda _s: _feature_fn(_s, -1)
-
-    for ia, alpha in enumerate(alphas):
-
-        agent = Reinforce_LA(
-            feature_size=max_size,
-            action_space_dims=int(env.unwrapped.action_space.n),
-            update_coefficient=alpha_builder(alpha),
-            policy_feature_fn=feature_fn,
-            discount=0.99
-        )
-
-        res = run_env_episodic(
-            env=env,
-            behavioral_agent=agent,
-            reward_shaper=reward_shaper,
-            T=T,
-            num_episodes=num_episodes,
-            seeds=seeds,
-            eval_num_episodes=1,
-            do_eval=True,
-            evaluate_frequency=1,
-            greedy_eval=True
-        )
-
-        steps = res['steps_per_episode']
-        sum_rewards = res['sum_of_rewards_per_episode']
-        eval_steps = res['eval_steps_per_episode']
-        eval_sum_rewards = res['eval_sum_of_rewards_per_episode']
-
-        # Average those n_experiments results to fill results_array
-        steps_per_episode[ia] = np.mean(steps)
-        sum_of_rewards_per_episode[ia] = np.mean(sum_rewards)
-        eval_steps_per_episode[ia] = np.mean(eval_steps)
-        eval_sum_of_rewards_per_episode[ia] = np.mean(eval_sum_rewards)
-
-        print(
-            f"\nReinforce_LA: Done α={alpha:.3e}, "
-            f" steps/episode: {steps_per_episode[ia]:.4f}, "
-            f"sum(r)/episode: {sum_of_rewards_per_episode[ia]:.4f}"
-            f" eval steps/episode: {eval_steps_per_episode[ia]:.4f}, "
-            f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[ia]:.4f}"
-        )
-
 
 def reinforce(
         num_episodes,
@@ -843,18 +701,18 @@ def reinforce(
     eval_sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
 
     state_size = env.unwrapped.observation_space.shape[0]
-    action_size = int(env.unwrapped.action_space.n)
+    action_size = env.unwrapped.action_space.shape
 
     # Using 4096 as the reference of total parameters used for the
     # linear approximation method.
     # total = state_size * h + h * action_size
     # => h = total / (state_size + action_size)
-    h = 4096 // (state_size + action_size)
+    h = 4096 // (state_size + int( np.prod(action_size)))
 
     for ia, alpha in enumerate(alphas):
-        agent = Reinforce(
+        agent = ReinforceContinuousAction(
             state_size=state_size,
-            action_space_dims=action_size,
+            action_size=action_size[0],
             update_coefficient=alpha_builder(alpha),
             hidden_dims=(h, ),
             discount=0.99
@@ -869,7 +727,7 @@ def reinforce(
             seeds=seeds,
             eval_num_episodes=1,
             do_eval=True,
-            evaluate_frequency=1,
+            evaluate_frequency=5,
             greedy_eval=True
         )
 
@@ -901,8 +759,7 @@ def reinforce_baseline(
         reward_shaper: Callable,
         alphas = np.linspace(0, 1, num=50),
         alpha_builder = lambda _a : _a,
-        seeds=(1, 2),
-        num_experiments=1
+        seeds=(1, 2)
 ):
     env = build_env()
     steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
@@ -911,57 +768,43 @@ def reinforce_baseline(
     eval_sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
 
     state_size = env.unwrapped.observation_space.shape[0]
-    action_size = int(env.unwrapped.action_space.n)
+    action_size = env.unwrapped.action_space.shape
 
     # Using 4096 as the reference of total parameters used for the
     # linear approximation method.
     # total = state_size * h + h * action_size
     # => h = total / (state_size + action_size)
-    h = 4096 // (state_size + action_size)
+    h = 4096 // (state_size + int( np.prod(action_size)))
 
-    seeds_per_experiment = [
-        [s + e * len(seeds) for s in seeds]
-        for e in range(num_experiments)
-    ]
-
-    total = len(alphas) * num_experiments
-    count = 0
     for ia, alpha in enumerate(alphas):
-        steps = []
-        sum_rewards = []
-        eval_steps = []
-        eval_sum_rewards = []
+        agent = ReinforceBaselineContinuousAction(
+            state_size=state_size,
+            action_size=action_size[0],
+            update_coefficient_baseline=alpha_builder(2 * alpha),
+            update_coefficient_policy=alpha_builder(alpha),
+            hidden_dims=(h, ),
+            discount=0.99
+        )
 
-        for exp in range(num_experiments):
-            count += 1
-            agent = ReinforceBaseline(
-                state_size=state_size,
-                action_space_dims=action_size,
-                update_coefficient_policy=alpha_builder(alpha),
-                update_coefficient_baseline=alpha_builder(1.2 * alpha),
-                hidden_dims=(h, ),
-                discount=0.99
-            )
+        res = run_env_episodic(
+            env=env,
+            behavioral_agent=agent,
+            reward_shaper=reward_shaper,
+            T=T,
+            num_episodes=num_episodes,
+            seeds=seeds,
+            eval_num_episodes=1,
+            do_eval=True,
+            evaluate_frequency=5,
+            greedy_eval=True
+        )
 
-            res = run_env_episodic(
-                env=env,
-                behavioral_agent=agent,
-                reward_shaper=reward_shaper,
-                T=T,
-                num_episodes=num_episodes,
-                seeds=seeds_per_experiment[exp],
-                eval_num_episodes=1,
-                do_eval=True,
-                evaluate_frequency=1,
-                greedy_eval=True
-            )
+        del agent
 
-            del agent
-
-            steps += res['steps_per_episode']
-            sum_rewards += res['sum_of_rewards_per_episode']
-            eval_steps += res['eval_steps_per_episode']
-            eval_sum_rewards += res['eval_sum_of_rewards_per_episode']
+        steps = res['steps_per_episode']
+        sum_rewards = res['sum_of_rewards_per_episode']
+        eval_steps = res['eval_steps_per_episode']
+        eval_sum_rewards = res['eval_sum_of_rewards_per_episode']
 
         # Average those n_experiments results to fill results_array
         steps_per_episode[ia] = np.mean(steps)
@@ -970,8 +813,7 @@ def reinforce_baseline(
         eval_sum_of_rewards_per_episode[ia] = np.mean(eval_sum_rewards)
 
         print(
-            f"\nReinforce_Baseline: Completed = {100 * count / total:.0f}%"
-            f" α={alpha:.3e}, "
+            f"\nReinforce: Done α={alpha:.3e}, "
             f" steps/episode: {steps_per_episode[ia]:.4f}, "
             f"sum(r)/episode: {sum_of_rewards_per_episode[ia]:.4f}"
             f" eval steps/episode: {eval_steps_per_episode[ia]:.4f}, "
@@ -979,15 +821,16 @@ def reinforce_baseline(
         )
 
 
-def one_step_ac(
+def ac_with_traces(
         num_episodes,
         T,
         reward_shaper: Callable,
         alphas = np.linspace(0, 1, num=50),
         alpha_builder = lambda _a : _a,
-        seeds=(1, 2),
-        num_experiments=1
+        seeds=(1, 2)
 ):
+    global DEVICE
+
     env = build_env()
     steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
     sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
@@ -995,145 +838,46 @@ def one_step_ac(
     eval_sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
 
     state_size = env.unwrapped.observation_space.shape[0]
-    action_size = int(env.unwrapped.action_space.n)
+    action_size = env.unwrapped.action_space.shape
 
     # Using 4096 as the reference of total parameters used for the
     # linear approximation method.
     # total = state_size * h + h * action_size
     # => h = total / (state_size + action_size)
-    h = 4096 // (state_size + action_size)
+    h = 4096 // (state_size + int( np.prod(action_size)))
 
-    seeds_per_experiment = [
-        [s + e * len(seeds) for s in seeds]
-        for e in range(num_experiments)
-    ]
-
-    total = len(alphas) * num_experiments
-    count = 0
     for ia, alpha in enumerate(alphas):
-        steps = []
-        sum_rewards = []
-        eval_steps = []
-        eval_sum_rewards = []
-
-        for exp in range(num_experiments):
-            count += 1
-            agent = OneStepAC(
-                state_size=state_size,
-                action_space_dims=action_size,
-                update_coefficient_policy=alpha_builder(alpha),
-                update_coefficient_critic=alpha_builder(1.2 * alpha),
-                hidden_dims=(h, ),
-                discount=0.99,
-                norm_grad=False
-            )
-
-            res = run_env_episodic(
-                env=env,
-                behavioral_agent=agent,
-                reward_shaper=reward_shaper,
-                T=T,
-                num_episodes=num_episodes,
-                seeds=seeds_per_experiment[exp],
-                eval_num_episodes=1,
-                do_eval=True,
-                evaluate_frequency=1,
-                greedy_eval=True
-            )
-
-            del agent
-
-            steps += res['steps_per_episode']
-            sum_rewards += res['sum_of_rewards_per_episode']
-            eval_steps += res['eval_steps_per_episode']
-            eval_sum_rewards += res['eval_sum_of_rewards_per_episode']
-
-        # Average those n_experiments results to fill results_array
-        steps_per_episode[ia] = np.mean(steps)
-        sum_of_rewards_per_episode[ia] = np.mean(sum_rewards)
-        eval_steps_per_episode[ia] = np.mean(eval_steps)
-        eval_sum_of_rewards_per_episode[ia] = np.mean(eval_sum_rewards)
-
-        print(
-            f"\nOne-Step AC: Completed = {100 * count / total:.0f}%"
-            f" α={alpha:.3e}, "
-            f" steps/episode: {steps_per_episode[ia]:.4f}, "
-            f"sum(r)/episode: {sum_of_rewards_per_episode[ia]:.4f}"
-            f" eval steps/episode: {eval_steps_per_episode[ia]:.4f}, "
-            f"eval sum(r)/episode: {eval_sum_of_rewards_per_episode[ia]:.4f}"
+        agent = ACWithEligibilityTracesContinuousAction(
+            state_size=state_size,
+            action_size=action_size[0],
+            update_coefficient_critic=alpha_builder(alpha),
+            lam_critic=0.5,
+            update_coefficient_actor=alpha_builder(alpha),
+            lam_actor=0.5,
+            hidden_dims=(h, ),
+            discount=0.99,
+            device=DEVICE
         )
 
+        res = run_env_episodic(
+            env=env,
+            behavioral_agent=agent,
+            reward_shaper=reward_shaper,
+            T=T,
+            num_episodes=num_episodes,
+            seeds=seeds,
+            eval_num_episodes=1,
+            do_eval=True,
+            evaluate_frequency=5,
+            greedy_eval=True
+        )
 
-def ac_with_eligibility_traces(
-        num_episodes,
-        T,
-        reward_shaper: Callable,
-        alphas = np.linspace(0, 1, num=50),
-        alpha_builder = lambda _a : _a,
-        seeds=(1, 2),
-        num_experiments=1
-):
-    env = build_env()
-    steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
-    sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
-    eval_steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
-    eval_sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
+        del agent
 
-    state_size = env.unwrapped.observation_space.shape[0]
-    action_size = int(env.unwrapped.action_space.n)
-
-    # Using 4096 as the reference of total parameters used for the
-    # linear approximation method.
-    # total = state_size * h + h * action_size
-    # => h = total / (state_size + action_size)
-    h = 4096 // (state_size + action_size)
-
-    seeds_per_experiment = [
-        [s + e * len(seeds) for s in seeds]
-        for e in range(num_experiments)
-    ]
-
-    total = len(alphas) * num_experiments
-    count = 0
-    for ia, alpha in enumerate(alphas):
-        steps = []
-        sum_rewards = []
-        eval_steps = []
-        eval_sum_rewards = []
-
-        for exp in range(num_experiments):
-            count += 1
-            agent = ACWithEligibilityTraces(
-                state_size=state_size,
-                action_space_dims=action_size,
-                update_coefficient_policy=alpha_builder(alpha),
-                lam_policy=0.5,
-                update_coefficient_critic=alpha_builder(25 * alpha),
-                lam_critic=0.5,
-                hidden_dims=(h, ),
-                discount=0.99,
-                norm_grad=False
-            )
-
-            res = run_env_episodic(
-                env=env,
-                behavioral_agent=agent,
-                reward_shaper=reward_shaper,
-                T=T,
-                num_episodes=num_episodes,
-                seeds=seeds_per_experiment[exp],
-                eval_num_episodes=1,
-                do_eval=True,
-                evaluate_frequency=1,
-                greedy_eval=True
-            )
-
-            del agent
-
-            steps += res['steps_per_episode']
-            sum_rewards += res['sum_of_rewards_per_episode']
-            eval_steps += res['eval_steps_per_episode']
-            eval_sum_rewards += res['eval_sum_of_rewards_per_episode']
+        steps = res['steps_per_episode']
+        sum_rewards = res['sum_of_rewards_per_episode']
+        eval_steps = res['eval_steps_per_episode']
+        eval_sum_rewards = res['eval_sum_of_rewards_per_episode']
 
         # Average those n_experiments results to fill results_array
         steps_per_episode[ia] = np.mean(steps)
@@ -1142,8 +886,7 @@ def ac_with_eligibility_traces(
         eval_sum_of_rewards_per_episode[ia] = np.mean(eval_sum_rewards)
 
         print(
-            f"\nAC with ET: Completed = {100 * count / total:.0f}%"
-            f" α={alpha:.3e}, "
+            f"\nReinforce: Done α={alpha:.3e}, "
             f" steps/episode: {steps_per_episode[ia]:.4f}, "
             f"sum(r)/episode: {sum_of_rewards_per_episode[ia]:.4f}"
             f" eval steps/episode: {eval_steps_per_episode[ia]:.4f}, "
@@ -1160,6 +903,11 @@ def ac_continuing_with_eligibility_traces(
         seeds=(1, 2),
         num_experiments=1
 ):
+    global DEVICE
+    global EPISODIC
+
+    assert not EPISODIC
+
     env = build_env()
     steps_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
     sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
@@ -1167,13 +915,13 @@ def ac_continuing_with_eligibility_traces(
     eval_sum_of_rewards_per_episode = np.zeros((len(alphas), ), dtype=np.float64)
 
     state_size = env.unwrapped.observation_space.shape[0]
-    action_size = int(env.unwrapped.action_space.n)
+    action_size = env.unwrapped.action_space.shape
 
     # Using 4096 as the reference of total parameters used for the
     # linear approximation method.
     # total = state_size * h + h * action_size
     # => h = total / (state_size + action_size)
-    h = 4096 // (state_size + action_size)
+    h = 4096 // (state_size + int( np.prod(action_size)))
 
     seeds_per_experiment = [
         [s + e * len(seeds) for s in seeds]
@@ -1190,16 +938,17 @@ def ac_continuing_with_eligibility_traces(
 
         for exp in range(num_experiments):
             count += 1
-            agent = ACWithEligibilityTracesContinuing(
+            agent = ACWithEligibilityTracesContinuousActionContinuingTask(
                 state_size=state_size,
-                action_space_dims=action_size,
-                update_coefficient_policy=alpha_builder(alpha),
-                lam_policy=0.8,
+                action_size=action_size[0],
+                update_coefficient_actor=alpha_builder(alpha),
+                lam_actor=0.5,
                 update_coefficient_critic=alpha_builder(alpha),
+                lam_critic=0.5,
                 update_coefficient_avg_reward=alpha_builder(alpha),
-                lam_critic=0.8,
                 hidden_dims=(h, ),
-                norm_grad=False
+                norm_grad=False,
+                device=DEVICE
             )
 
             res = run_env_episodic(
@@ -1239,6 +988,8 @@ def ac_continuing_with_eligibility_traces(
 
 
 if __name__ == '__main__':
+    DEVICE = None
+
     do_log = False
     RENDER = False
 
@@ -1246,7 +997,7 @@ if __name__ == '__main__':
     NORM_GRAD = False
 
     if EPISODIC:
-        ENV_NAME = 'CartPole'
+        ENV_NAME = 'MountainCar'
     else:
         ENV_NAME = 'MountainCar'
 
@@ -1259,38 +1010,16 @@ if __name__ == '__main__':
     T = None
     if ENV_NAME == 'MountainCar':
         if EPISODIC:
-            num_episodes = 150
+            num_episodes = 100
             T = 999
         else:
             T = 5 * int(1e4)
             num_episodes = 1
-
-        MAX_EPISODE_STEPS = T
-    elif ENV_NAME == 'CartPole':
-        if EPISODIC:
-            num_episodes = 150
-            T = 500
-        else:
-            T = 5 * int(1e5)
-            num_episodes = 1
-
-        MAX_EPISODE_STEPS = T
-    elif ENV_NAME == 'LunarLander':
-        if EPISODIC:
-            num_episodes = 100
-            T = 1000
-        else:
-            T = int(1e5) # 40000
-            num_episodes = 1
-
         MAX_EPISODE_STEPS = T
     else:
         raise NotImplementedError(f"{ENV_NAME} not implemented")
 
-    def build_temp_sched(start,  steps=max(1, num_episodes * (T // 3))):
-        return LinearSchedule(start, end=1.0, steps=steps)
-
-    def build_alpha_sched(start, steps=max(1, num_episodes * (T // 3))):
+    def build_alpha_sched(start, steps=max(1, num_episodes * (T // 2))):
         return LinearSchedule(start, end=0.001 * start, steps=steps)
 
     def base_reward(reward: float, state: np.ndarray, done: bool, t: int):
@@ -1303,22 +1032,25 @@ if __name__ == '__main__':
             bonus *= 10
         return reward + bonus
 
-    alphas = np.linspace(1e-6, 1e-2, num=5)
+    alphas = np.linspace(1e-6, 5e-4, num=5)
 
     # ac_continuing_with_eligibility_traces(
     #     num_episodes=num_episodes,
     #     T=T,
-    #     reward_shaper=mountaincar_reward,
+    #     reward_shaper=base_reward,
     #     alphas=alphas,
     #     alpha_builder=build_alpha_sched,
-    #     num_experiments=num_experiments,
     #     seeds=[i for i in range(num_episodes)]
     # )
     #
     # exit(0)
 
     if EPISODIC:
-        for model in ['Reinforce', 'ReinforceBaseline', 'OneStepAC', 'ACWithEligibilityTraces']:
+        for model in [
+            'ReinforceContinuousAction',
+            'ReinforceBaselineContinuousAction',
+            'ACWithEligibilityTracesContinuousAction'
+        ]:
             experiments_parallel(
                 model=model,
                 num_episodes=num_episodes,
@@ -1330,16 +1062,15 @@ if __name__ == '__main__':
                 seeds=[i for i in range(num_episodes)]
             )
     else:
-        for model in ['ACWithEligibilityTracesContinuing']:
-            experiments_parallel(
-                model=model,
-                num_episodes=num_episodes,
-                T=T,
-                reward_shaper=mountaincar_continuous_reward,
-                alphas=alphas,
-                alpha_builder=build_alpha_sched,
-                num_experiments=num_experiments,
-                seeds=[i for i in range(num_episodes)]
-            )
-
+        experiments_parallel(
+            model='ACWithEligibilityTracesContinuousActionContinuingTask',
+            num_episodes=num_episodes,
+            T=T,
+            reward_shaper=base_reward,
+            alphas=alphas,
+            alpha_builder=build_alpha_sched,
+            num_experiments=num_experiments,
+            seeds=[i for i in range(num_episodes)]
+        )
     exit(0)
+

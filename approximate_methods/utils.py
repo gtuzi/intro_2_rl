@@ -33,6 +33,28 @@ class DiscreteActionAgent:
         pass
 
 
+class ContinuousActionAgent:
+    def __init__(
+            self,
+            feature_size: int,
+            action_size: int
+    ):
+        self.feature_size = feature_size
+        self.action_size = action_size
+
+    def act(self, s) -> Tuple[int, float]:
+        """ Return the action and probability """
+        raise NotImplementedError
+
+    def initialize(self):
+        pass
+
+    def reset(self):
+        pass
+
+    def step(self, *args, **kwargs):
+        pass
+
 class LinearQEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
 
     def __init__(

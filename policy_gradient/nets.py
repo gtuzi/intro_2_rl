@@ -1,11 +1,11 @@
 from typing import Union, List, Tuple, Optional
 import torch
-from sympy.physics.mechanics import Torque
 from torch import nn
 
 import torch.nn.init as init
 import torch.nn.functional as F
-from torch.distributions import Categorical
+from torch.distributions import (
+    Categorical, Normal)
 
 
 Tensor = torch.Tensor
@@ -248,4 +248,121 @@ class ValueFunction(nn.Module):
 
     def forward(self, x: Tensor):
         return self.net(x)
+
+
+class ContinuousActionPolicy(nn.Module):
+    def __init__(
+            self,
+            in_size: int,
+            action_size: int,
+            hidden_dims: Optional[Union[int, List, Tuple]] = None,
+            normalize_input: bool = False
+    ):
+        super(ContinuousActionPolicy, self).__init__()
+
+        if isinstance(hidden_dims, int):
+            hidden_dims = [hidden_dims]
+
+        self.in_size = in_size
+        self.action_size = action_size
+        self.hidden_dims = hidden_dims
+        self.normalize_input = normalize_input
+        self.net = None
+        self.loc = None
+        self.scale = None
+        self._build_net()
+
+    # def _build_net(self, backbone=None):
+    #     if backbone is None:
+    #         self.net = Backbone(
+    #             in_size=self.in_size,
+    #             hidden_dims=self.hidden_dims,
+    #             out_size=self.in_size,
+    #             normalize_input=self.normalize_input
+    #         )
+    #     else:
+    #         assert backbone.out_size == self.action_size
+    #         self.net = backbone
+    #
+    #     self.loc = nn.Linear(self.in_size, self.action_size)
+    #     self.scale = nn.Linear(self.in_size, self.action_size)
+
+    def _build_net(self, backbone=None):
+        if backbone is None:
+
+            self.loc = Backbone(
+                in_size=self.in_size,
+                hidden_dims=self.hidden_dims,
+                out_size=self.action_size,
+                normalize_input=self.normalize_input
+            )
+
+            self.scale = Backbone(
+                in_size=self.in_size,
+                hidden_dims=self.hidden_dims,
+                out_size=self.action_size,
+                normalize_input=self.normalize_input
+            )
+        else:
+            raise NotImplementedError
+
+    def pd(self, s: Tensor):
+        raise NotImplementedError
+
+    def greedy_action(self, s: Tensor):
+        raise NotImplementedError
+
+    def mean(self, s: Tensor):
+        raise NotImplementedError
+
+    def sigma(self, s: Tensor):
+        raise NotImplementedError
+
+    def prob_sa(self, s: Tensor, a: Tensor):
+        return torch.exp(self.pd(s).log_prob(a))
+
+    def logprob_sa(self, s: Tensor, a: Tensor):
+        return self.pd(s).log_prob(a)
+
+    def entropy(self, s: Tensor):
+        return self.pd(s).entropy()
+
+    def sample(self, s: Tensor, differentiable=False):
+        pd = self.pd(s)
+        if differentiable:
+            sample = pd.rsample()
+        else:
+            sample = pd.sample()
+
+        return sample, torch.exp(pd.log_prob(sample))
+
+    def forward(self, x: Tensor):
+        raise NotImplementedError
+
+
+class GaussianPolicy(ContinuousActionPolicy):
+    def pd(self, s: Tensor):
+        res = self.forward(s)
+        mu, sig = res[..., :self.action_size], res[..., self.action_size:]
+        pd = Normal(mu, sig)
+        return pd
+
+    def greedy_action(self, s: Tensor):
+        return self.mean(s)
+
+    def mean(self, s: Tensor):
+        res = self.forward(s)
+        mu, sig = res[..., :self.action_size], res[..., self.action_size:]
+        pd = Normal(mu, sig)
+        return mu, torch.exp(pd.log_prob(mu))
+
+    def sigma(self, s: Tensor):
+        res = self.forward(s)
+        sig = res[..., self.action_size:]
+        return sig
+
+    def forward(self, x: Tensor):
+        mu = self.loc(x)
+        sig = torch.exp(self.scale(x))
+        return torch.cat([mu, sig], dim=-1)
 

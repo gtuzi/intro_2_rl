@@ -524,3 +524,46 @@ per step (i.e. reward per step averaged over 12 experiments).
 | Unnormalized Gradient | <img src="images/ACWithEligibilityTracesContinuing_avg_R_train.png" alt="Grid" width="450"/>          |
 
 
+## Policy Parameterization for _Continuous Actions_
+
+For continuous actions (i.e. infinite actions) we learn the statistics of the
+distribution of said action. For example, the action set might be the real numbers, with actions chosen
+from a normal (Gaussian) distribution. To produce a policy parameterization, 
+the policy can be defined as the normal probability density over a 
+real-valued scalar action, with mean and standard deviation given by 
+parametric function approximators that depend on the state.
+
+$$
+\pi(a | s, \mathbf{\theta}) \overset \cdot{=} \frac{1}{\sigma(s, \mathbf{\theta})} \exp \Bigl(- \frac{\bigl(a - \mu(s, \mathbf{\theta}) \bigr)^2}{2\sigma(s, \mathbf{\theta})^2} \Bigr)
+$$
+
+
+where: $\pi: \mathcal{S} \times\mathbb{R} ^{d'} \rightarrow \mathbb{R}$ 
+and $\sigma: \mathcal{S} \times\mathbb{R} ^{d'} \rightarrow \mathbb{R}^{+}$
+are two _parametrized function approximators_. We divide the policy parameters
+into the part to be used for the approximation of mean and the other for that 
+of the standard deviation, 
+$\mathbf{\theta} \overset \cdot{=} [\mathbf{\theta}_{\pi}, \mathbf{\theta}_{\sigma}]$.
+
+Note that the standard deviation must be positive, and it's best approximated
+as the exponential of the function approximator 
+$\sigma(s, \mathbf{\theta}) = \exp \Bigl( f(\mathbf{x}(s), \mathbf{\theta}_{\sigma}) \Bigr)$,
+where $f$ is your logit-function approximator of choice, and $\mathbf{x}$ is the 
+feature representation of state $s$.
+
+With these definitions, all the algorithms in this section can be used to 
+learn continuous action selection.
+
+###### Experiments
+
+The following algorithms were adopted for continuous action policies. The 
+environment used here was the continuous action [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car_continuous/)
+
+
+| Algorithms                             | Train                                                                                           | 
+|----------------------------------------|-------------------------------------------------------------------------------------------------|
+| Episodic: Reinforce                    | <img src="images/ReinforceContinuousAction_G0_train.png" alt="Grid" width="450"/>               |
+| Episodic: Reinforce with Baseline      | <img src="images/ReinforceBaselineContinuousAction_G0_train.png" alt="Grid" width="450"/>       |
+| Episodic: AC with Eligibility Traces   | <img src="images/ACWithEligibilityTracesContinuousAction_G0_train.png" alt="Grid" width="450"/> |
+| Continuing: AC with Eligibility Traces | <img src="images/ACWithEligibilityTracesContinuousActionContinuingTask_avg_R_train.png" alt="Grid" width="450"/> |
+
