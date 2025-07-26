@@ -6,6 +6,7 @@
 ## Table of Contents
 - [Introduction](#Introduction)
 - [Implemented Algorithms](#implemented-algorithms)
+- [Detailed Development](#explanations-development-and-experimental-details)
 - [REINFORCE - MC Policy Gradient](#reinforce-the-monte-carlo-policy-gradient-)
 - [REINFORCE with Baseline](#reinforce-with-baseline)
 - [Actor Critic Methods](#actor---critic-methods---introduction)
@@ -23,28 +24,9 @@ The value function may still be learned, with the aim of learning the policy
 (parameters), but it is not specifically consulted in order to take the 
 action.
 
-$$
-\begin{align*}
-\mathbf{\theta} \in \mathbb{R} ^{d^{'}} &\quad \text{policy parameter vector} \\[0.5em] 
-\pi(a | s, \mathbf{\theta}) = \text{Pr}\{A_t = a | S_t, \mathbf{\theta}_t = \mathbf{\theta} \} &\quad \text{action selection probability at time $t$ given state $s$ and parameter $\mathbf{\theta}$} \\[0.5em] 
-\mathbf{w} \in \mathbb{R}^{d} &\quad \text{value function ($\hat{v}(\cdot, \mathbf{w})$ or $\hat{q}(\cdot, \cdot, \mathbf{w})$) weight vector (or parameters), if the method uses it} \\[0.5em] 
-J(\mathbf{\theta}) \in \mathbb{R} &\quad \text{scalar performance measure w.r.t the policy parameters}
-\end{align*}
-$$
-
-
 In PG methods, learning the policy parameter is based on the  gradient of the 
-scalar performance measure $J(\mathbf{\theta})$, wherein these methods aim to
-_maximize_ its value, via gradient _ascent_ of $J$:
-
-$$
-\mathbf{\theta}_{t+1} = \mathbf{\theta}_{t} + \alpha \widehat{\nabla_{\mathbf{\theta}_t} J(\mathbf{\theta}_t)} 
-$$
-
-where 
-$\widehat{\nabla_{\mathbf{\theta}_t} J(\mathbf{\theta}_t)} \in \mathbb{R}^{d ^{'}}$ 
-is a stochastic _estimate_ whose _expectation_ approximates the _gradient_ 
-of the performance measure $J$ with respect to the policy parameters $\mathbf{\theta}$.
+scalar performance measure wherein these methods aim to
+_maximize_ its value, via gradient _ascent_.
 
 All PG methods follow this general schema - independent of whether they learn 
 a state/action value function or not. Methods which do learn value functions
@@ -62,6 +44,10 @@ critic the state or (most often) action value function.
 - [x] REINFORCE with Baseline for Continuous Action: `agents/ReinforceBaselineContinuousAction`
 - [x] Actor Critic with Eligibility Traces for Continuous Action: `agents/ACWithEligibilityTracesContinuousAction`
 - [x] Actor Critic with Eligibility Traces for Continuous Action, Continuous Task: `agents/ACWithEligibilityTracesContinuousActionContinuingTask`
+
+
+## Explanations, Development, and Experimental Details
+Full development and discussion visit the notebook [here](summary.ipynb)
 
 
 ## REINFORCE: The Monte Carlo Policy Gradient 
@@ -146,15 +132,6 @@ eligibility traces. One-step actor–critic methods replace the full return of R
 one-step estimate of the return, and use a learned state value function as
 the baseline.
 
-
-$$
-\begin{align*}
-\mathbf{\theta}_{t+1} &= \mathbf{\theta}_{t} + \alpha \Bigl(G_t - \hat{v}(S_t, \mathbf{w}) \Bigr) \nabla_{\mathbf{\theta_t}} \log \pi(A_t | S_t, \mathbf{\theta}_t) \\[0.5em]
-&= \mathbf{\theta}_{t} + \alpha \delta_t \frac{\nabla_{\mathbf{\theta}_t} \pi(A_t | S_t, \mathbf{\theta}_t)}{\pi(A_t | S_t, \mathbf{\theta}_t)}\\[0.5em]
-\end{align*}
-$$
-
-
 The pseudo-code for the episododict algorithm is shown below. 
 It is fully online, incremental algorithm, with states, 
 actions, and rewards processed as they occur and then never 
@@ -201,17 +178,7 @@ better results than the one-step AC method.
 
 ## Policy Gradient for Continuing Problems
 For the continuing setting we need to redefine the objective function (
-performance function) in terms of the average rate of reward per step:
-
-$$
-\begin{align*}
-J(\mathbf{\theta}) \overset \cdot{=} r(\pi) &\overset \cdot{=} \lim_{h \rightarrow \infty} \frac{1}{h} \sum_{t=1}^{h} \mathbb{E}[R_t | S_0, A_{0:t-1} \sim \pi] \\[0.5em]
-&= \lim_{t \rightarrow \infty} \mathbb{E}[R_t | S_0, A_{0:t-1} \sim \pi] \\[0.5em]
-&= \sum_s \mu(s) \sum_a \pi(a | s) \sum_{s', r} p(s', r | s, a) r
-\end{align*}
-$$
-
-where $\mu(s)$ is the stationary / steady-state distribution under $\pi$. 
+performance function) in terms of the average rate of reward per step. 
 The pseudo-code of which is shown below:
 
 
