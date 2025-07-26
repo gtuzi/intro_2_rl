@@ -234,11 +234,20 @@ learn continuous action selection.
 The following algorithms were adopted for continuous action policies. The 
 environment used here was the continuous action [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car_continuous/)
 
+Note that the continuous action environment has a different reward from
+the discrete action environment. From the website:
+
+"A negative reward of $-0.1 * action^2$ is received at each timestep to 
+penalise for taking actions of large magnitude. If the mountain car reaches 
+the goal then a positive reward of +100 is added to the negative 
+reward for that timestep."
 
 | Algorithms                             | Train                                                                                                            | 
 |----------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| Episodic: Reinforce                    | <img src="images/ReinforceContinuousAction_G0_train.png" alt="Grid" width="450"/>                                |
-| Episodic: Reinforce with Baseline      | <img src="images/ReinforceBaselineContinuousAction_G0_train.png" alt="Grid" width="450"/>                        |
+| Episodic: REINFORCE                    | <img src="images/ReinforceContinuousAction_G0_train.png" alt="Grid" width="450"/>                                |
+| Episodic: REINFORCE with Baseline      | <img src="images/ReinforceBaselineContinuousAction_G0_train.png" alt="Grid" width="450"/>                        |
 | Episodic: AC with Eligibility Traces   | <img src="images/ACWithEligibilityTracesContinuousAction_G0_train.png" alt="Grid" width="450"/>                  |
 | Continuing: AC with Eligibility Traces | <img src="images/ACWithEligibilityTracesContinuousActionContinuingTask_avg_R_train.png" alt="Grid" width="450"/> |
 
+For the REINFORCE algorithms, the return was mean-centered, as it significantly
+improved learning.

@@ -1025,13 +1025,6 @@ if __name__ == '__main__':
     def base_reward(reward: float, state: np.ndarray, done: bool, t: int):
         return reward
 
-    def mountaincar_continuous_reward(reward: float, state: np.ndarray, done: bool, t: int):
-        pos = state[0]
-        bonus = (1 - abs(pos - 0.5) / 1.8)
-        if bonus > 0.9:
-            bonus *= 10
-        return reward + bonus
-
     alphas = np.linspace(1e-6, 5e-4, num=5)
 
     # ac_continuing_with_eligibility_traces(
@@ -1066,7 +1059,7 @@ if __name__ == '__main__':
             model='ACWithEligibilityTracesContinuousActionContinuingTask',
             num_episodes=num_episodes,
             T=T,
-            reward_shaper=mountaincar_continuous_reward,
+            reward_shaper=base_reward,
             alphas=alphas,
             alpha_builder=build_alpha_sched,
             num_experiments=num_experiments,
