@@ -125,7 +125,7 @@ bandit problems with $k = 10$. For each bandit problem, the action values,
 $q_{*}(a)$, where $a = 1, . . . , 10$, are selected according to a 
 normal (Gaussian) distribution with mean $0$ and variance $1$.
 
-<img src="../bandits_wip/images/10_armed_testbed.png" alt="Grid" width="650"/>
+<img src="images/10_armed_testbed.png" alt="Grid" width="650"/>
 
 When the selection method selects action $A_t$ at time step $t$, the actual 
 reward, $R_t$, is selected from a normal distribution with 
@@ -169,11 +169,17 @@ $$
 
 Note that for these experiments, the optimal action is changing
 for each trial, hence the definition of the optimal action for trial
-$k$ is $a^{*(k)}$.
+$k$ is $a^{*(k)}$. Moreover, we have access to the true reward value for any 
+arbitrary action via the test bed implementation. 
 
 For these experiments I am reporting the _per-step_ or _average regret_, defined
 as $\frac{\mathbb{E}[Z_t]}{t}$. Ideally, this metric should tend towards $0$ 
 in the limit.
+
+
+| Average Rewards                                                     | Average Regret                                                      |
+|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| <img src="images/rewards_experiment_1.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_1.png" alt="Grid" width="450"/> |
 
 
 
