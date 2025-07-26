@@ -1066,7 +1066,7 @@ if __name__ == '__main__':
             model='ACWithEligibilityTracesContinuousActionContinuingTask',
             num_episodes=num_episodes,
             T=T,
-            reward_shaper=base_reward,
+            reward_shaper=mountaincar_continuous_reward,
             alphas=alphas,
             alpha_builder=build_alpha_sched,
             num_experiments=num_experiments,
