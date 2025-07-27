@@ -90,7 +90,7 @@ numbers, $Q_t(a)$ converges to $q_{*}(a)$. This is called the
 _sample-average_ method for estimating action values because each estimate 
 is an average of the sample of relevant rewards. 
 
-#### Action Selection 
+### Action Selection 
 The simplest action selection rule is to select one of the actions with the 
 highest estimated value, that is, one of the _greedy_ actions.
 If there is more than one greedy action, then a selection is made among 
@@ -103,9 +103,9 @@ $$
 
 with ties broken arbitrarily. Greedy action selection always exploits current 
 knowledge to maximize immediate reward; it spends no time at all sampling 
-apparently inferior actions to see if they might really be better. A simple 
-alternative is to behave greedily most of the time, but every once in a while,
-say with small probability $\varepsilon$, instead select randomly from among 
+apparently inferior actions to see if they might really be better. 
+A simple alternative is to behave greedily most of the time, but every once 
+in a while, say with small probability $\varepsilon$, instead select randomly from among 
 all the actions with equal probability, independently of the action-value 
 estimates. These near-greedy action selection rules are called
 _$\varepsilon$-greedy_ methods. In the limit as the number of steps increases,
@@ -114,15 +114,132 @@ thus ensuring that all the $Q_t(a)$ converge to their respective $q_{*}(a)$.
 This implies that the probability of selecting the optimal action 
 converges to greater than $1 - \varepsilon$, that is, to near certainty. 
 These are just asymptotic guarantees, however, and say little about the 
-practical effectiveness of the methods.
+practical effectiveness of the methods. $\varepsilon$-greedy algorithm can be formulated as:
+
+$$
+A_t \leftarrow 
+\begin{cases}
+\text{arg max}_a Q_t(a) &\quad \text{with $p = 1 - \varepsilon$} \\
+a \sim \mathcal{U} (\{a_0, a_1, ...,a_{|\mathcal{A}| - 1}\}) &\quad \text{with $p = \varepsilon$}
+\end{cases}
+$$
+
+### Action Value
+The naiive estimation of the action value $Q(a)$, is to take the sample 
+average of the observed rewards. But instead of keep track of all the samples
+and computing the average for each selection step - in our decision - we can 
+approach it in an incremental fashion.
+
+For a reward $R_i$ observed after taking action $A_{i} = a$, and $Q_n$ be $a$'s
+value estimate after it has been selected $n-1$ times, we have:
+
+$$
+Q_n \overset \cdot{=} \frac{R_1 + R_2 + ... + R_{n-1}}{n - 1}
+$$
+
+This formulation requires that we keep a record of all the times $a$ has been 
+selected, and at each step, we estimate $Q_n$. 
+
+###### Incremental Approach
+The incremental approach for computing $Q_n$ can be done as follows:
+
+$$
+\begin{align*}
+Q_{n + 1} &= \frac{1}{n}\sum_{i = 1}^{n} R_i \\
+&= \frac{1}{n}\Bigl(R_n + (n-1) \frac{1}{n-1} \sum_{i=1}^{n-1} R_i \Bigr) \\
+&=\frac{1}{n}\Bigl(R_n + (n-1)Q_n  \Bigr) \\
+&=\frac{1}{n}\Bigl(R_n + nQ_n - Q_n  \Bigr) \\
+&= Q_n + \frac{1}{n}\Bigl[R_n - Q_n \Bigr]
+\end{align*}
+$$
+
+The update rule:
+
+$$
+Q_{n+1} = Q_n + \frac{1}{n}\Bigl[R_n - Q_n \Bigr]
+$$
+
+is a specific form of a more general update rule:
+
+$$
+Q_{n+1} = Q_n + \alpha \Bigl[R_n - Q_n \Bigr]
+$$
+
+Where $Q$ can be any sample estimate (not just action value). This update 
+form is used extensively in RL. $R_n - Q_n$ is the error in estimate, and it is
+reduced by taking a step towards the target. $\alpha$ is called the _step size_.
+
+In the step size in the incremental implementation above $\alpha = \frac{1}{n}$
+changes with every action selection (even though in the naiive approach above
+it's not action dependent). But we can generalize step size more broadly as 
+$\alpha_t(a)$
+
+### Bandit Algorithm
+Pseudocode for a complete bandit algorithm using incrementally computed sample
+averages and $\varepsilon$-greedy action selection is shown in the box below. 
+
+<img src="images/simple_bandit_algorithm.png" alt="Grid" width="650"/>
 
 
-#### Experiment: 10-armed Testbed
+## Regret
+When measuring the performance of the algorithms, besides the sum of rewards
+we've obtained, we are also interested in measuring how efficient the approach
+is. One way to do this is via the _regret_ metric. This metric measures
+the "true" rewards "left on the table", i.e. if we were to know the true value
+of the action (in practice we can't, but in simulations we can), how much we 
+gave up. Ideally as the selection strategy learns, the rewards we leave on the 
+table approaches zero.
+
+The random variable of regret $Z_t$ is defined  as the difference between the 
+optimal reward $q^{*}(A_i = a^*)$ minus  the true value of the selected 
+action random variable $A_i = a$, defined as 
+$q^*(A_i = a) = \mathbb{E}[R_i | A_i = a]$:
+
+$$
+\begin{align*}
+Z_t &= \sum_{i = 1}^{t}\mathbb{}(q^{*}(A_i = a^{*}) - q^*(A_i = a))
+\end{align*}
+$$
+
+To get an estimate of the regret $\mathbb{E}[Z_t]$ for a given strategy, 
+we compute the sample average $\bar{Z}_t$ induced by this strategy over $N$ trials:
+
+$$
+\begin{align*}
+\bar{Z}_t &= \frac{1}{N}\sum_{k=1}^{N}Z_t^{(k)} \\
+&= \frac{1}{N}\sum_{k=1}^{N} \sum_{i=1}^{t} \Bigr( q^*(a^{*(k)}) - q^*(A_i = a^{(k)})\Bigl)
+\end{align*}
+$$
+
+Under this notation, for these experiments the optimal action is changing
+for each trial, hence the definition of the optimal action for trial
+$k$ is $a^{*(k)}$. 
+
+In (non-stationary) cases, where the optimal action changes over time, 
+we would have:
+
+$$
+\begin{align*}
+\bar{Z}_t &= \frac{1}{N}\sum_{k=1}^{N}Z_t^{(k)} \\
+&= \frac{1}{N}\sum_{k=1}^{N} \sum_{i=1}^{t} \Bigr( q^*(a_{i}^{*(k)}) - q^*(A_i = a^{(k)})\Bigl)
+\end{align*}
+$$
+
+where $a_{i}^{*(k)}$ is the optimal action for trial $k$ at step $i$.
+Of course, we have access to the true reward values for any 
+arbitrary action via the known environment. 
+
+In the experiments, I'm tracking the _per-step_ or _average regret_, defined
+as $\frac{\mathbb{E}[Z_t]}{t}$, as an efficiency metric. 
+Ideally, this metric should tend towards $0$ in the limit.
+
+
+## 10-armed Testbed
 To roughly assess the relative effectiveness of the greedy and 
 $\varepsilon$-greedy action-value methods, we compare them numerically on a 
 suite of test problems. This is a set of $2000$ randomly generated $k$-armed 
 bandit problems with $k = 10$. For each bandit problem, the action values, 
-$q_{*}(a)$, where $a = 1, . . . , 10$, are selected according to a 
+$q_{*}(a)$, where $a = 1, . . ., 10$, are selected according to a 
 normal (Gaussian) distribution with mean $0$ and variance $1$.
 
 <img src="images/10_armed_testbed.png" alt="Grid" width="650"/>
@@ -143,43 +260,86 @@ implemented supports two variants:
 * _Stationary_: each bandit has fixed mean / std dev.
 * _Non-stationary_: each bandit's mean follows a (normal) random walk
 
-###### Experiment 1: Stationary Testbed with $\varepsilon$-greedy selection.
-
-The following implemented experiments relate to Figure 2.2 in the book. Here 
-the regret is being plotted, where random variable of regret $Z_t$ is defined 
-as the difference between the optimal reward $q^{*}(A_i = a^*)$ minus 
-the true value of the selected action random variable $A_i = a$, defined as 
-$q^*(A_i = a) = \mathbb{E}[R_i | A_i = a]$:
+###### Experiment 1: Stationary Testbed, sample average action value,  $\varepsilon$-greedy selection.
+The following implemented experiments relate to Figure 2.2 in the book. Here
+action value is estimated using the following update rule:
 
 $$
-\begin{align*}
-Z_t &= \sum_{i = 1}^{t}\mathbb{}(q^{*}(A_i = a^{*}) - q^*(A_i = a))
-\end{align*}
+Q_{n+1} = Q_n + \frac{1}{n}\Bigl[R_n - Q_n \Bigr]
 $$
 
-To get the estimate of the regret $\mathbb{E}[Z_t]$ for a given strategy, 
-we compute the sample average $\bar{Z}_t$ induced by this strategy over $N$ trials:
+which I have called this the monte-carlo estimate, 
+$Q_{MC}(a)$, since it's an unbiased sample estimate of the action value. 
+Action selection follows $\varepsilon$-greedy algorithm. Initial action value 
+$Q_0 = 0$
 
-$$
-\begin{align*}
-\bar{Z}_t &= \frac{1}{N}\sum_{k=1}^{N}Z_t^{(k)} \\
-&= \frac{1}{N}\sum_{k=1}^{N} \sum_{i=1}^{t} \Bigr( q^*(a^{*(k)}) - q^*(A_i = a^{(k)})\Bigl)
-\end{align*}
-$$
-
-Note that for these experiments, the optimal action is changing
-for each trial, hence the definition of the optimal action for trial
-$k$ is $a^{*(k)}$. Moreover, we have access to the true reward value for any 
-arbitrary action via the test bed implementation. 
-
-For these experiments I am reporting the _per-step_ or _average regret_, defined
-as $\frac{\mathbb{E}[Z_t]}{t}$. Ideally, this metric should tend towards $0$ 
-in the limit.
+Value function is implemented in `nonassociative_value_functions.py/QMonteCarlo`, 
+while the incremental averaging method is implemented in 
+`tools/moving_averages.py/CummulativeMovingAverage`.
 
 
 | Average Rewards                                                     | Average Regret                                                      |
 |---------------------------------------------------------------------|---------------------------------------------------------------------|
 | <img src="images/rewards_experiment_1.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_1.png" alt="Grid" width="450"/> |
 
+###### Experiment 2: Stationary Testbed, constant step size for action value, $\varepsilon$-greedy selection.
+This experiment is set up the same as Experiment 1, with the exception that the 
+update of the action value $Q$ is done using a fixed step $\alpha = 0.1$, with 
+the following update value:
 
+$$
+Q_{n+1} = Q_n + \alpha\Bigl[R_n - Q_n \Bigr]
+$$
+
+Action selection follows $\varepsilon$-greedy algorithm. Initial action value 
+$Q_0 = 0$
+
+
+| Average Rewards                                                     | Average Regret                                                      |
+|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| <img src="images/rewards_experiment_2.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_2.png" alt="Grid" width="450"/> |
+
+Value function is implemented in `nonassociative_value_functions.py/QCoefficientMovingAverage`, 
+while the incremental averaging method is implemented in 
+`tools/moving_averages.py/ExponentialMovingAverage`, which uses
+a fixed coefficient in this experiment.
+
+### Non-Stationary Tasks
+We often encounter reinforcement learning problems that are effectively
+nonstationary. In such cases it makes sense to give more weight to recent rewards than
+to long-past rewards. One of the most popular ways of doing this is to use a constant
+step-size parameter.
+
+I introduced the constant step size above, but let's dive into a bit more 
+detail here. 
+
+The update rule presented earlier is:
+
+$$
+Q_{n+1} \overset \cdot{=} Q_n + \alpha[R_n - Q_n] 
+$$
+
+for $\alpha \in (0, 1]$
+
+
+$$
+\begin{align*}
+Q_{n+1} &\overset \cdot{=} Q_n + \alpha[R_n - Q_n] \\
+&= \alpha R_n + (1 - \alpha)Q_n \\
+&= \alpha R_n + (1 - \alpha)[\alpha R_{n-1} + (1 - \alpha)Q_{n - 1}] \\
+&= \alpha R_n + (1 - \alpha)\alpha R_{n-1} + (1 - \alpha)^{2}Q_{n-1} \\
+&= \alpha R_n + (1 - \alpha)\alpha R_{n-1} +  (1 - \alpha)^2\alpha R_{n-2} + ... + (1 - \alpha)^{n-1}\alpha R_{1} + (1 - \alpha)^{n}Q_{1} \\
+&= (1 - \alpha)^n Q_1 + \sum_{i = 1}^{n}\alpha(1 - \alpha)^{n-i}R_{i}
+\end{align*}
+$$
+
+This is called the _weighted average_ because the sum of the weights
+$(1 - a)^n + \sum_{i = 1}^{n}\alpha (1 - \alpha)^{n - 1} = 1$. 
+
+The weight $\alpha(1 - \alpha)^{n-i}$ given to $R_i$ depends on how many steps 
+ago this reward was observed. Since $(1 - \alpha) < 1$, the weight given to 
+the past rewards decreases - decays exponentially - over the steps. That is why
+this average is also called _exponential recency-weighted average_. As we can
+see, using a fixed step size recent rewards are weighted more, allowing for 
+quicker adaptation to the non-stationary environment parameters.
 

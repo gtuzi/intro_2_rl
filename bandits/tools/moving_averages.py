@@ -2,7 +2,11 @@ import numpy as np
 from abc import ABC, abstractmethod
 from matplotlib import pyplot as plt
 
-from tools.coefficients import Coefficient, ConstantCoefficient, EarlyWeightedCoefficient
+from bandits.tools.coefficients import (
+    Coefficient,
+    ConstantCoefficient,
+    EarlyWeightedCoefficient
+)
 
 
 class MovingAverage(ABC):
