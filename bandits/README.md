@@ -15,6 +15,13 @@ entirely on the action taken, whereas instructive feedback is independent of
 the action taken.
 
 
+## Experiments:
+* [Ex 1 - stationary environment, sample average action value estimation, $\varepsilon$-greedy](#experiment-1-stationary-testbed-sample-average-action-value-varepsilon-greedy-selection)
+* [Ex 2 - stationary environment, exponential average (const step size) action value estimation, $\varepsilon$-greedy](#experiment-2-stationary-testbed-constant-step-size-for-action-value-varepsilon-greedy-selection)
+* [Ex 3 - stationary environment, exponential average (const step size) action value estimation, $\varepsilon$-greedy](#experiment-3-non-stationary-testbed-constant-step-size-for-action-value-varepsilon-greedy-selection)
+* [Ex 4 - stationary environment, sample average action value estimation, $\varepsilon$-greedy](#experiment-4-non-stationary-testbed-sample-average-action-value-estimation-varepsilon-greedy-selection)
+
+
 ## Non-Associative Bandits
 The non-associative setting, which does not involve learning to act in 
 more than one situation, is the one in which most prior work involving 
@@ -240,7 +247,14 @@ $\varepsilon$-greedy action-value methods, we compare them numerically on a
 suite of test problems. This is a set of $2000$ randomly generated $k$-armed 
 bandit problems with $k = 10$. For each bandit problem, the action values, 
 $q_{*}(a)$, where $a = 1, . . ., 10$, are selected according to a 
-normal (Gaussian) distribution with mean $0$ and variance $1$.
+normal (Gaussian) distribution with mean $0$ and variance $1$. 
+
+This means that for a bandit $j$ we have set its mean $\mu_j$ as 
+$\mu_j = \mathbb{E}[R_t | A_t = a_j] \sim \mathcal{N}(0, 1)$. 
+
+Then, during the simulation, when $a_j$ is selected, the observed reward is 
+sampled as: $R_t \sim\mathcal{N}(\mu_j, 1)$.
+ 
 
 <img src="images/10_armed_testbed.png" alt="Grid" width="650"/>
 
@@ -260,7 +274,7 @@ implemented supports two variants:
 * _Stationary_: each bandit has fixed mean / std dev.
 * _Non-stationary_: each bandit's mean follows a (normal) random walk
 
-###### Experiment 1: Stationary Testbed, sample average action value,  $\varepsilon$-greedy selection.
+#### Experiment 1: Stationary Testbed, sample average action value,  $\varepsilon$-greedy selection.
 The following implemented experiments relate to Figure 2.2 in the book. Here
 action value is estimated using the following update rule:
 
@@ -282,7 +296,13 @@ while the incremental averaging method is implemented in
 |---------------------------------------------------------------------|---------------------------------------------------------------------|
 | <img src="images/rewards_experiment_1.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_1.png" alt="Grid" width="450"/> |
 
-###### Experiment 2: Stationary Testbed, constant step size for action value, $\varepsilon$-greedy selection.
+In this experiment, the sampled rewards from each bandit had a variance of 1. 
+When we compare these graphs with those presented in the book we notice that 
+the variance of the rewards is higher than those presented in the book. However, 
+if we were to set the variance of the bandit to $0$, we obtain exactly the 
+graphs of the book.
+
+#### Experiment 2: Stationary Testbed, constant step size for action value, $\varepsilon$-greedy selection.
 This experiment is set up the same as Experiment 1, with the exception that the 
 update of the action value $Q$ is done using a fixed step $\alpha = 0.1$, with 
 the following update value:
@@ -299,10 +319,15 @@ $Q_0 = 0$
 |---------------------------------------------------------------------|---------------------------------------------------------------------|
 | <img src="images/rewards_experiment_2.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_2.png" alt="Grid" width="450"/> |
 
+
 Value function is implemented in `nonassociative_value_functions.py/QCoefficientMovingAverage`, 
 while the incremental averaging method is implemented in 
 `tools/moving_averages.py/ExponentialMovingAverage`, which uses
 a fixed coefficient in this experiment.
+
+Here we notice that purely greedy and slightly greedy perform almost equally, 
+and all perform better than the more agressive exploratory strategy 
+$\varepsilon = 0.3$
 
 ### Non-Stationary Tasks
 We often encounter reinforcement learning problems that are effectively
@@ -343,3 +368,51 @@ this average is also called _exponential recency-weighted average_. As we can
 see, using a fixed step size recent rewards are weighted more, allowing for 
 quicker adaptation to the non-stationary environment parameters.
 
+Sometimes it is convenient to vary the step-size parameter from step to step. 
+Let $\alpha_n(a)$ denote the step-size parameter used to process the reward 
+received after the $n$th selection of action $a$. 
+Convergence is not guaranteed for all choices of the sequence 
+$\{\alpha_n(a)\}$. Stochastic approximation theory gives us the conditions required to
+assure convergence with probability 1:
+
+$$
+\begin{align*}
+\sum_{n = 1}^{\infty} \alpha_n(a) = \infty \quad \text{and} \quad \sum_{n = 1}^{\infty} \alpha_n^2(a) < \infty
+\end{align*}
+$$
+
+The first condition is required to guarantee that the steps are large enough 
+to eventually overcome any initial conditions or random fluctuations. 
+The second condition guarantees that eventually the steps become small enough 
+to assure convergence.
+
+
+#### Experiment 3: Non-stationary Testbed, constant step size for action value, $\varepsilon$-greedy selection.
+In this experiment the test bed is non-stationary. For each trial and each 
+bandit, they are instantiated as normal random walk objects 
+(`tools/random_walks.py/NormalRandomWalk`), each initialized with a random 
+reward (mean) and randomness variance (random walk variance) of $0.1$, more
+agressive than that mentioned in the book - refer 
+to Exercise 2.5 - to make the non-stationarity and the results more obvious. 
+Initial action values $Q_0(a) = 0$ for all actions,  and step size $\alpha = 0.1$
+
+
+| Average Rewards                                                     | Average Regret                                                      |
+|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| <img src="images/rewards_experiment_3.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_3.png" alt="Grid" width="450"/> |
+
+
+#### Experiment 4: Non-stationary Testbed, sample-average action value estimation, $\varepsilon$-greedy selection.
+Here I'm showing the difficulties of using sample-averages for estimating 
+action values. As was shown below, under this approach, remote samples have as
+much weight as more recent ones. Using the same test bed paramters as Excercise 
+3, here are the plots.
+
+
+| Average Rewards                                                     | Average Regret                                                      |
+|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| <img src="images/rewards_experiment_4.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_4.png" alt="Grid" width="450"/> |
+
+
+We can see that recency-weighted exponential averaging for action value 
+estimation (exercise 3) is more efficient than sample-averaging (exercise 4).

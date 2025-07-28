@@ -16,7 +16,11 @@ from environments.continuous_reward_testbed import \
 from utils import mk_clear_dir
 
 
-def get_cont_reward_test_bed(reward_means, reward_randomness_scale, stationary=False):
+def get_cont_reward_test_bed(
+        reward_means,
+        reward_randomness_scale,
+        stationary=False
+):
     return ContinuousValueRewardTestBed(
         reward_means=reward_means,
         reward_randomness_scales=reward_randomness_scale,
@@ -114,12 +118,12 @@ def experiment_1(n_steps, n_trials):
 
         Q uses sample averaging (unbiased estimator)
     """
-
+    exp = 1
     n_bandits = 10  # Each bandit is triggered by one action
     Q0 = 0.0
     epsilons = [0.0, 0.01, 0.1, 0.3]
-    reward_randomness_scale = 0.00
-    plot_root_name = 'experiment_1'
+    reward_randomness_scale = 1.00
+    plot_root_name = f'experiment_{exp}'
 
     test_bed_constructor = lambda: get_cont_reward_test_bed(
         reward_means=np.random.normal(
@@ -147,7 +151,7 @@ def experiment_1(n_steps, n_trials):
         epsilons=epsilons,
         n_trials=n_trials,
         n_steps=n_steps,
-        desc='Experiment 1')
+        desc=f'Experiment {exp}')
 
     reward_averages = dict()
     regret_averages = dict()
@@ -176,7 +180,7 @@ def experiment_1(n_steps, n_trials):
     plt.legend([f'eps: {eps:.1e}' for eps in epsilons])
     plt.ylabel('Average Reward')
     plt.xlabel('Simulation Step')
-    plt.title('Experiment 1: Eps-Greedy\nAvg. Rewards')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAvg. Rewards')
     plt.grid()
     try:
         plt.savefig(os.path.join(d, f'rewards_{plot_root_name}.png'))
@@ -191,7 +195,7 @@ def experiment_1(n_steps, n_trials):
     plt.legend([f'eps: {eps:.1e}' for eps in epsilons])
     plt.ylabel('Regret/step')
     plt.xlabel('Simulation Step')
-    plt.title('Experiment 1: Eps-Greedy\nAverage Regret')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAverage Regret')
     plt.grid()
     try:
         plt.savefig(os.path.join(d, f'regrets_{plot_root_name}.png'))
@@ -203,11 +207,12 @@ def experiment_1(n_steps, n_trials):
 
 def experiment_2(n_steps, n_trials):
     """
+        Q updates with fixed step size (biased estimator)
+        Values are recency-weighted exponential averaged.
+
         For a fixed action-value (E[R | a]) for each bandit,
         compare the performance of epsilon greedy
         policies accross different values of exploration.
-
-        Q fixed step size (biased estimator)
     """
 
     exp = 2
@@ -215,7 +220,7 @@ def experiment_2(n_steps, n_trials):
     Q0 = 0.0
     epsilons = [0.0, 0.01, 0.1, 0.3]
     alpha = 0.1
-    reward_randomness_scale = 0.00
+    reward_randomness_scale = 1.00
     plot_root_name = f'experiment_{exp}'
 
     test_bed_constructor = lambda: get_cont_reward_test_bed(
@@ -299,7 +304,199 @@ def experiment_2(n_steps, n_trials):
         plt.show()
 
 
+def experiment_3(n_steps, n_trials, reward_randomness_scale):
+    """
+        Non-stationary environment.
+        Each bandit starts with a random mean/std and each step these parameters
+        take a random walk.
+
+        Selection strategy (policy) is recency-weighted exponential averaged.
+    """
+
+    exp = 3
+    n_bandits = 10  # Each bandit is triggered by one action
+    Q0 = 0.0
+    epsilons = [0.0, 0.01, 0.1, 0.3]
+    alpha = 0.1
+    plot_root_name = f'experiment_{exp}'
+
+    test_bed_constructor = lambda: get_cont_reward_test_bed(
+        reward_means=np.random.normal(
+            0.,
+            1.,
+            size=n_bandits
+        ).tolist(),
+        reward_randomness_scale=[reward_randomness_scale] * n_bandits,
+        stationary=False
+    )
+
+    q_constructor = lambda: QCoefficientMovingAverage(
+        n_actions=n_bandits,
+        initial_action_value=Q0,
+        coefficient=ConstantCoefficient(alpha)
+    )
+
+    policy_constructor = lambda _e: EpsGreedyPolicy(
+        q=q_constructor(),
+        eps=_e
+    )
+
+    results = parallel_simulate_eps_greedy(
+        test_bed_constructor=test_bed_constructor,
+        policy_constructor=policy_constructor,
+        epsilons=epsilons,
+        n_trials=n_trials,
+        n_steps=n_steps,
+        desc=f'Experiment {exp}')
+
+    reward_averages = dict()
+    regret_averages = dict()
+
+    rewards = results['rewards']
+    regrets = results['regrets']
+
+    for eps in epsilons:
+        reward_averages[eps] = []
+        regret_averages[eps] = []
+
+        for step in range(n_steps):
+            # Average across trials at each step
+            res = [rewards[eps][trial][step] for trial in range(n_trials)]
+            reward_averages[eps].append(np.mean(res))
+
+            res = [regrets[eps][trial][step] for trial in range(n_trials)]
+            regret_averages[eps].append(np.mean(res) / (step + 1))
+
+    d = os.path.join(os.getcwd(), 'images')
+    _ = mk_clear_dir(d, False)
+
+    _ = plt.figure()
+    for eps in epsilons:
+        plt.plot(reward_averages[eps])
+    plt.legend([f'eps: {eps:.1e}' for eps in epsilons])
+    plt.ylabel('Average Reward')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAvg. Rewards')
+    plt.grid()
+    try:
+        plt.savefig(os.path.join(d, f'rewards_{plot_root_name}.png'))
+    except:
+        print(f'Could not save rewards_{plot_root_name} plot')
+    finally:
+        plt.show()
+
+    _ = plt.figure()
+    for eps in epsilons:
+        plt.plot(regret_averages[eps])
+    plt.legend([f'eps: {eps:.1e}' for eps in epsilons])
+    plt.ylabel('Regret/step')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAverage Regret')
+    plt.grid()
+    try:
+        plt.savefig(os.path.join(d, f'regrets_{plot_root_name}.png'))
+    except:
+        print(f'Could not save regrets_{plot_root_name} plot')
+    finally:
+        plt.show()
+
+
+def experiment_4(n_steps, n_trials, reward_randomness_scale):
+    """
+        Non-stationary environment.
+        Each bandit starts with a random mean/std and each step these parameters
+        take a random walk.
+
+        Selection strategy (policy) is recency-weighted exponential averaged.
+    """
+
+    exp = 4
+    n_bandits = 10  # Each bandit is triggered by one action
+    Q0 = 0.0
+    epsilons = [0.0, 0.01, 0.1, 0.3]
+    plot_root_name = f'experiment_{exp}'
+
+    test_bed_constructor = lambda: get_cont_reward_test_bed(
+        reward_means=np.random.normal(
+            0.,
+            1.,
+            size=n_bandits
+        ).tolist(),
+        reward_randomness_scale=[reward_randomness_scale] * n_bandits,
+        stationary=False
+    )
+
+    q_constructor = lambda: QMonteCarlo(
+        n_actions=n_bandits,
+        initial_action_value=Q0
+    )
+
+    policy_constructor = lambda _e: EpsGreedyPolicy(
+        q=q_constructor(),
+        eps=_e
+    )
+
+    results = parallel_simulate_eps_greedy(
+        test_bed_constructor=test_bed_constructor,
+        policy_constructor=policy_constructor,
+        epsilons=epsilons,
+        n_trials=n_trials,
+        n_steps=n_steps,
+        desc=f'Experiment {exp}')
+
+    reward_averages = dict()
+    regret_averages = dict()
+
+    rewards = results['rewards']
+    regrets = results['regrets']
+
+    for eps in epsilons:
+        reward_averages[eps] = []
+        regret_averages[eps] = []
+
+        for step in range(n_steps):
+            # Average across trials at each step
+            res = [rewards[eps][trial][step] for trial in range(n_trials)]
+            reward_averages[eps].append(np.mean(res))
+
+            res = [regrets[eps][trial][step] for trial in range(n_trials)]
+            regret_averages[eps].append(np.mean(res) / (step + 1))
+
+    d = os.path.join(os.getcwd(), 'images')
+    _ = mk_clear_dir(d, False)
+
+    _ = plt.figure()
+    for eps in epsilons:
+        plt.plot(reward_averages[eps])
+    plt.legend([f'eps: {eps:.1e}' for eps in epsilons])
+    plt.ylabel('Average Reward')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAvg. Rewards')
+    plt.grid()
+    try:
+        plt.savefig(os.path.join(d, f'rewards_{plot_root_name}.png'))
+    except:
+        print(f'Could not save rewards_{plot_root_name} plot')
+    finally:
+        plt.show()
+
+    _ = plt.figure()
+    for eps in epsilons:
+        plt.plot(regret_averages[eps])
+    plt.legend([f'eps: {eps:.1e}' for eps in epsilons])
+    plt.ylabel('Regret/step')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAverage Regret')
+    plt.grid()
+    try:
+        plt.savefig(os.path.join(d, f'regrets_{plot_root_name}.png'))
+    except:
+        print(f'Could not save regrets_{plot_root_name} plot')
+    finally:
+        plt.show()
+
 if __name__ == '__main__':
-    experiment_2(n_steps=1000, n_trials=2000)
+    experiment_3(n_steps=1000, n_trials=2000, reward_randomness_scale=0.1)
+    experiment_4(n_steps=1000, n_trials=2000, reward_randomness_scale=0.1)
 
     exit(0)

@@ -3,8 +3,8 @@ import numpy as np
 from typing import List
 from functools import partial
 
-from environments.testbed import NonAssocativeTestBed
-from tools.random_walks import NormalRandomWalk, BernoulliRandomWalk, RandomWalk
+from bandits.environments.testbed import NonAssocativeTestBed
+from bandits.tools.random_walks import NormalRandomWalk, BernoulliRandomWalk, RandomWalk
 
 
 class ContinuousRewardBandit(ABC):
@@ -24,6 +24,8 @@ class StationaryRewardBandit(ContinuousRewardBandit):
         Otherwise known as the "stochastic bandit". Reward distribution is stationary
     """
     def __init__(self, mean: float = 0.0, reward_sigma: float = 1.0, dist: str = 'normal'):
+        assert dist.lower() == 'normal', f'{dist} not implemented'
+
         self._reward_mean = mean
         self._reward_sigma = reward_sigma
         # This is a normal distribution bandit
