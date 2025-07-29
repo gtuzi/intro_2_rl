@@ -20,7 +20,8 @@ the action taken.
 * [Ex 2 - stationary environment, exponential average (const step size) action value estimation, $\varepsilon$-greedy](#experiment-2-stationary-testbed-constant-step-size-for-action-value-varepsilon-greedy-selection)
 * [Ex 3 - stationary environment, exponential average (const step size) action value estimation, $\varepsilon$-greedy](#experiment-3-non-stationary-testbed-constant-step-size-for-action-value-varepsilon-greedy-selection)
 * [Ex 4 - stationary environment, sample average action value estimation, $\varepsilon$-greedy](#experiment-4-non-stationary-testbed-sample-average-action-value-estimation-varepsilon-greedy-selection)
-
+* [Ex 5 - stationary environment, comparing initial action values, sample average action value estimation, $\varepsilon$-greedy](#experiment-5-stationary-testbed-initial-values-comparison-sample-average-action-value-estimation-varepsilon-greedy-selection)
+* [Ex 6 - stationary environment, $\varepsilon$-greedy vs. UCB1](#experiment-6-stationary-testbed-varepsilon-greedy-vs-ucb1)
 
 ## Non-Associative Bandits
 The non-associative setting, which does not involve learning to act in 
@@ -416,3 +417,100 @@ much weight as more recent ones. Using the same test bed paramters as Excercise
 
 We can see that recency-weighted exponential averaging for action value 
 estimation (exercise 3) is more efficient than sample-averaging (exercise 4).
+
+
+## Optimistic Initial Values
+In the current presentation and experiments so far, the initial action values 
+$Q_0(a)$ were set to $0$ for all $a \in \mathcal{A}$. The results obtained were
+also dependent on this value, i.e. they are biased by the initial estimation.
+
+For the sample-average methods, the bias disappears once all
+actions have been selected at least once, but for methods with constant
+$\alpha$, the bias is permanent, though decreasing over time. This then becomes
+a user set parameter.
+
+Initial action values can also be used as a simple way to encourage exploration.
+Since actions are selected greedily - with $1 - \varepsilon$ probability - setting
+the initial value to something positive, will prompt the selection of these
+actions. As these action values converge to their true values, any optimistic 
+values will continuously be selected, thus resulting in initial exploration, as 
+the values for all the actions converge to their final estimates. This pattern
+holds even for $\varepsilon = 0$, as a purely greedy approach, will always 
+chase the optimistic value while these values converge to their final values, 
+and it becomes less exploratory. This way, purely greedy strategy behaves like
+an $\varepsilon$-greedy strategy with a decaying $\varepsilon > 0$.
+
+While this approach is effective in stationary problems, it is not very 
+effective for the non-stationary setting, as the optimism driven exploration 
+decreases over time, while in non-stationary environments action values need
+to track the dynamic/moving/non-stationary expectations of the bandits.
+Any method that focuses on the initial conditions in any special way
+is unlikely to help with the general nonstationary case.
+
+
+#### Experiment 5: Stationary Testbed, initial values comparison, sample-average action value estimation, $\varepsilon$-greedy selection.
+
+Here we're comparing the effects of optimism in the initial action value estimations.
+
+| Average Rewards                                                     | Average Regret                                                      |
+|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| <img src="images/rewards_experiment_5.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_5.png" alt="Grid" width="450"/> |
+
+As we can see, optimistic initial estimations prompt for more exploration even 
+when compared to $\varepsilon > 0$.
+
+
+## Upper-Confidence-Bound Action Selection
+
+$\varepsilon$-greedy action selection forces the non-greedy
+actions to be tried, but _indiscriminately_, with no preference for those that 
+are nearly greedy or particularly uncertain.
+
+It would be better to select among the non-greedy actions according to their 
+potential for actually being optimal, taking into account both how close their 
+estimates are to being maximal and the uncertainties in those estimates. One 
+way to do this is according to:
+
+$$
+\begin{align*}
+A_t \overset \cdot{=} \arg \max_a \Bigl[Q_t(a) + c \sqrt{\frac{\ln t}{N_t(a)}} \Bigr]
+\end{align*}
+$$
+
+
+where $N_t(a)$ denotes the number of times $a$ has been taken up to step $t$, 
+and $c$ denotes the degree of exploration.
+
+The square root, in the upper confidence bound (UCB) action selection,
+is viewed as a measure of the uncertainty or variance in the estimate of $a$’s 
+value. The quantity being max’ed over is thus a sort of upper bound 
+on the possible true value of action $a$, with $c$ determining the 
+confidence level. Every time $a$ is selected the uncertainty is reduced:
+$N_t(a)$ increases, thus decreasing the uncertainty about its value. While, with
+each step that $a$ is not selected, our uncertainty increases, prompting more 
+exploration. The use of the natural log causes a smaller increase in uncertainty
+over time, but ubounded nonetheless. This results in all actions being selected
+over time, but those with more frequent visitations or lower action values
+will be selected less frequently.
+
+
+
+#### Experiment 6: Stationary Testbed, $\varepsilon$-greedy vs. UCB1.
+
+| Average Rewards                                                     | Average Regret                                                      |
+|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| <img src="images/rewards_experiment_6.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_6.png" alt="Grid" width="450"/> |
+
+
+## Gradient Bandit Algorithms
+Using action-value functions to select actions is not the only way.
+Numerical _preferences_, denoted as $H_t(a) \in \mathbb{R}$ for each action 
+$a \in \mathcal{A}$, are an alternative way to perform selection.
+The larger the preference, the more often that action is
+taken, but the preference has no interpretation in terms of reward. Only the 
+_relative preference_ of one action over another matters. Action selection 
+probabilities are determined according to the _softmax-distribution_:
+
+$$
+\text{Pr}\{A_t = a_i\} \overset \cdot{=} \frac{e^{H_t(a_i)}}{\sum_{j = 1} ^ {|\mathcal{A}|}} e^{H_t(a_j)}
+$$

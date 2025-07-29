@@ -1,5 +1,5 @@
 import os.path
-from typing import Callable, List, Any, Dict, Union, Tuple
+from typing import Callable, List
 from joblib import Parallel, delayed
 
 import numpy as np
@@ -67,7 +67,7 @@ def run_non_associative_test_bed(
     )
 
 
-def parallel_simulate_eps_greedy(
+def parallel_simulate_eps(
         test_bed_constructor: Callable[[], NonAssocativeTestBed],
         policy_constructor: Callable[[float], EpsGreedyPolicy],
         epsilons: List[float],
@@ -110,6 +110,48 @@ def parallel_simulate_eps_greedy(
 
 
 
+def parallel_simulate_initial_q(
+        test_bed_constructor: Callable[[], NonAssocativeTestBed],
+        policy_constructor: Callable[[float], EpsGreedyPolicy],
+        init_qs: List[float],
+        n_trials: int,
+        n_steps: int,
+        desc=''
+):
+    rewards = {}
+    regrets = {}
+    best_means = {}
+    best_arms = {}
+    cummulative_rewards = {}
+    cummulative_best_means = {}
+
+    for init_q in tqdm(init_qs, desc=desc):
+        results = Parallel(n_jobs=-1)(
+            delayed(run_non_associative_test_bed)(
+                test_bed=test_bed_constructor(),
+                policy=policy_constructor(init_q),
+                n_steps=n_steps
+            )
+            for t in range(n_trials)
+        )
+
+        rewards[init_q] = [r['rewards'] for r in results]
+        regrets[init_q] = [r['regrets'] for r in results]
+        best_means[init_q] = [r['best_means'] for r in results]
+        best_arms[init_q] = [r['best_arms'] for r in results]
+        cummulative_rewards[init_q] = [r['cummulative_rewards'] for r in results]
+        cummulative_best_means[init_q] = [r['cummulative_best_means'] for r in results]
+
+    return dict(
+        rewards=rewards,
+        regrets=regrets,
+        best_means=best_means,
+        best_arms=best_arms,
+        cummulative_rewards=cummulative_rewards,
+        cummulative_best_means=cummulative_best_means
+    )
+
+
 def experiment_1(n_steps, n_trials):
     """
         For a fixed action-value (E[R | a]) for each bandit,
@@ -145,7 +187,7 @@ def experiment_1(n_steps, n_trials):
         eps=_e
     )
 
-    results = parallel_simulate_eps_greedy(
+    results = parallel_simulate_eps(
         test_bed_constructor=test_bed_constructor,
         policy_constructor=policy_constructor,
         epsilons=epsilons,
@@ -244,7 +286,7 @@ def experiment_2(n_steps, n_trials):
         eps=_e
     )
 
-    results = parallel_simulate_eps_greedy(
+    results = parallel_simulate_eps(
         test_bed_constructor=test_bed_constructor,
         policy_constructor=policy_constructor,
         epsilons=epsilons,
@@ -341,7 +383,7 @@ def experiment_3(n_steps, n_trials, reward_randomness_scale):
         eps=_e
     )
 
-    results = parallel_simulate_eps_greedy(
+    results = parallel_simulate_eps(
         test_bed_constructor=test_bed_constructor,
         policy_constructor=policy_constructor,
         epsilons=epsilons,
@@ -436,7 +478,7 @@ def experiment_4(n_steps, n_trials, reward_randomness_scale):
         eps=_e
     )
 
-    results = parallel_simulate_eps_greedy(
+    results = parallel_simulate_eps(
         test_bed_constructor=test_bed_constructor,
         policy_constructor=policy_constructor,
         epsilons=epsilons,
@@ -495,8 +537,110 @@ def experiment_4(n_steps, n_trials, reward_randomness_scale):
     finally:
         plt.show()
 
+
+def experiment_5(n_steps, n_trials):
+    """
+        For a fixed action-value (E[R | a]) for each bandit,
+        compare the performance of epsilon greedy
+        policies accross different values of exploration.
+
+        Q uses sample averaging (unbiased estimator)
+    """
+    exp = 5
+    n_bandits = 10  # Each bandit is triggered by one action
+    Q0s = [0., 5.]
+    reward_randomness_scale = 1.00
+    plot_root_name = f'experiment_{exp}'
+
+    test_bed_constructor = lambda: get_cont_reward_test_bed(
+        reward_means=np.random.normal(
+            0.,
+            1.,
+            size=n_bandits
+        ).tolist(),
+        reward_randomness_scale=[reward_randomness_scale] * n_bandits,
+        stationary=True
+    )
+
+
+    def eps_select(_q0):
+        if _q0 > 1e-2:
+            return 0.1
+        else:
+            return 0.
+
+
+    q_constructor = lambda _q0: QMonteCarlo(
+        n_actions=n_bandits,
+        initial_action_value=_q0
+    )
+
+    policy_constructor = lambda _q0: EpsGreedyPolicy(
+        q=q_constructor(_q0),
+        eps=eps_select(_q0)
+    )
+
+    results = parallel_simulate_initial_q(
+        test_bed_constructor=test_bed_constructor,
+        policy_constructor=policy_constructor,
+        init_qs=Q0s,
+        n_trials=n_trials,
+        n_steps=n_steps,
+        desc=f'Experiment {exp}')
+
+    reward_averages = dict()
+    regret_averages = dict()
+
+    rewards = results['rewards']
+    regrets = results['regrets']
+
+    for q0 in Q0s:
+        reward_averages[q0] = []
+        regret_averages[q0] = []
+
+        for step in range(n_steps):
+            # Average across trials at each step
+            res = [rewards[q0][trial][step] for trial in range(n_trials)]
+            reward_averages[q0].append(np.mean(res))
+
+            res = [regrets[q0][trial][step] for trial in range(n_trials)]
+            regret_averages[q0].append(np.mean(res) / (step + 1))
+
+    d = os.path.join(os.getcwd(), 'images')
+    _ = mk_clear_dir(d, False)
+
+    _ = plt.figure()
+    for q0 in Q0s:
+        plt.plot(reward_averages[q0])
+    plt.legend([f'$Q_0$: {q:.1e}, $\\varepsilon$: {eps_select(q): .1e}' for q in Q0s])
+    plt.ylabel('Average Reward')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAvg. Rewards')
+    plt.grid()
+    try:
+        plt.savefig(os.path.join(d, f'rewards_{plot_root_name}.png'))
+    except:
+        print(f'Could not save rewards_{plot_root_name} plot')
+    finally:
+        plt.show()
+
+    _ = plt.figure()
+    for q0 in Q0s:
+        plt.plot(regret_averages[q0])
+    plt.legend([f'$Q_0$: {q:.1e}, $\\varepsilon$: {eps_select(q): .1e}' for q in Q0s])
+    plt.ylabel('Regret/step')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAverage Regret')
+    plt.grid()
+    try:
+        plt.savefig(os.path.join(d, f'regrets_{plot_root_name}.png'))
+    except:
+        print(f'Could not save regrets_{plot_root_name} plot')
+    finally:
+        plt.show()
+
+
 if __name__ == '__main__':
-    experiment_3(n_steps=1000, n_trials=2000, reward_randomness_scale=0.1)
-    experiment_4(n_steps=1000, n_trials=2000, reward_randomness_scale=0.1)
+    experiment_5(n_steps=1000, n_trials=2000)
 
     exit(0)
