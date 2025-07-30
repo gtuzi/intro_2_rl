@@ -222,7 +222,7 @@ class NaiivePreferencePolicy(Policy):
         """
         self.step_count += 1
         advantage = reward - self.R.current_value if self.use_baseline else reward
-        indicator = np.zeros(shape=(len(self.action_set),), dtype=np.float)
+        indicator = np.zeros(shape=(len(self.action_set),), dtype=np.float32)
         indicator[action] = 1.0
         p = softmax([self.H[a].current_value for a in self.action_set], temp=self.temperature.current_value)
         d = advantage * (indicator - np.array(p))

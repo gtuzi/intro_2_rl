@@ -6,18 +6,18 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
+from bandits.tools.coefficients import ConstantCoefficient
 from nonassocative_value_functions import QMonteCarlo
 from nonassociative_policies import (
     EpsGreedyPolicy,
     ActionValuePolicy,
-    UCB1Policy
+    UCB1Policy, NaiivePreferencePolicy, Policy
 )
 from environments.testbed import NonAssocativeTestBed
 from environments.continuous_reward_testbed import \
     ContinuousValueRewardTestBed
 
 from utils import mk_clear_dir
-
 
 
 def get_cont_reward_test_bed(
@@ -33,7 +33,7 @@ def get_cont_reward_test_bed(
 
 def run_non_associative_test_bed(
         test_bed: NonAssocativeTestBed,
-        policy: ActionValuePolicy,
+        policy: Policy,
         n_steps: int):
 
     rewards = []
@@ -73,7 +73,7 @@ def run_non_associative_test_bed(
 
 def parallel_simulate_over_1dparam(
         test_bed_constructor: Callable[[], NonAssocativeTestBed],
-        policy_constructor: Callable[[float], ActionValuePolicy],
+        policy_constructor: Callable[[float], Policy],
         params: List[float],
         n_trials: int,
         n_steps: int,
@@ -113,18 +113,28 @@ def parallel_simulate_over_1dparam(
     )
 
 
-def experiment_6(n_steps, n_trials):
+def experiment_7(n_steps, n_trials):
     """
-        Compare the performance of eps-greedy vs. UCB1
+    Naiive preference policy over different constant temperatures
 
-        Refer to Figure 2.4 in the book
+    Action is sampled as a ~ softmax(H)
+
+    From eq (2.12) in Sutton book, 2nd edition (2018):
+
+    H(A, t+1) = H(A, t) + alpha * Advantage * (1 - pi(A))
+    H(o, t+1) = H(o, t) - alpha * Advantage * p(o)
+    where:
+    H: preference model
+    R_bar: baseline, a moving average of reward received
+    Advantage: R(t) - R_bar
+
     """
-    exp = 6
-
+    exp = 7
     n_bandits = 10  # Each bandit is triggered by one action
-
-    Q0 = 0.0
-    eps = 0.1
+    H0 = 0.0
+    Rbar0 = 0.0
+    alpha = 0.1
+    temperatures = [0.1, 0.5, 1.0, 2.0, 4.0]
     reward_randomness_scale = 1.00
     plot_root_name = f'experiment_{exp}'
 
@@ -138,82 +148,50 @@ def experiment_6(n_steps, n_trials):
         stationary=True
     )
 
-    q_constructor = lambda: QMonteCarlo(
+    policy_constructor = lambda _temp: NaiivePreferencePolicy(
         n_actions=n_bandits,
-        initial_action_value=Q0
-    )
-
-    policy_constructor = lambda _e: EpsGreedyPolicy(
-        q=q_constructor(),
-        eps=_e
+        preference_initial_value=H0,
+        reward_initial_value=Rbar0,
+        learning_rate=alpha,
+        temperature=ConstantCoefficient(_temp)
     )
 
     results = parallel_simulate_over_1dparam(
         test_bed_constructor=test_bed_constructor,
         policy_constructor=policy_constructor,
-        params=[eps],
+        params=temperatures,
         n_trials=n_trials,
         n_steps=n_steps,
         desc=f'Experiment {exp}')
 
-    reward_averages_epsgreedy = []
-    regret_averages_epsgreedy = []
+    reward_averages = dict()
+    regret_averages = dict()
 
-    for step in range(n_steps):
-        # Average across trials at each step
-        res = [
-            results['rewards'][eps][trial][step]
-            for trial in range(n_trials)
-        ]
-        reward_averages_epsgreedy.append(np.mean(res))
+    rewards = results['rewards']
+    regrets = results['regrets']
 
-        res = [
-            results['regrets'][eps][trial][step]
-            for trial in range(n_trials)
-        ]
-        regret_averages_epsgreedy.append(np.mean(res) / (step + 1))
+    for temp in temperatures:
+        reward_averages[temp] = []
+        regret_averages[temp] = []
 
-    c = 2
-    q_constructor = lambda: QMonteCarlo(n_actions=n_bandits, initial_action_value=Q0)
-    policy_constructor = lambda _c: UCB1Policy(q=q_constructor(), c=_c)
+        for step in range(n_steps):
+            # Average across trials at each step
+            res = [rewards[temp][trial][step] for trial in range(n_trials)]
+            reward_averages[temp].append(np.mean(res))
 
-    results = parallel_simulate_over_1dparam(
-        test_bed_constructor=test_bed_constructor,
-        policy_constructor=policy_constructor,
-        params=[c],
-        n_trials=n_trials,
-        n_steps=n_steps,
-        desc=f'Experiment {exp}')
-
-    reward_averages_ucb = []
-    regret_averages_ucb = []
-
-    for step in range(n_steps):
-        # Average across trials at each step
-        res = [
-            results['rewards'][c][trial][step]
-            for trial in range(n_trials)
-        ]
-        reward_averages_ucb.append(np.mean(res))
-
-        res = [
-            results['regrets'][c][trial][step]
-            for trial in range(n_trials)
-        ]
-
-        regret_averages_ucb.append(np.mean(res) / (step + 1))
+            res = [regrets[temp][trial][step] for trial in range(n_trials)]
+            regret_averages[temp].append(np.mean(res) / (step + 1))
 
     d = os.path.join(os.getcwd(), 'images')
     _ = mk_clear_dir(d, False)
 
     _ = plt.figure()
-
-    plt.plot(reward_averages_epsgreedy)
-    plt.plot(reward_averages_ucb)
-    plt.legend([f'$\\varepsilon$: {eps:.1e}', f'c: {c}'])
+    for temp in temperatures:
+        plt.plot(reward_averages[temp])
+    plt.legend([f'T: {temp:.1e}' for temp in temperatures])
     plt.ylabel('Average Reward')
     plt.xlabel('Simulation Step')
-    plt.title(f'Experiment {exp}: $\\varepsilon$-Greedy vs. UCB1\nAvg. Rewards')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAvg. Rewards')
     plt.grid()
     try:
         plt.savefig(os.path.join(d, f'rewards_{plot_root_name}.png'))
@@ -223,13 +201,12 @@ def experiment_6(n_steps, n_trials):
         plt.show()
 
     _ = plt.figure()
-
-    plt.plot(regret_averages_epsgreedy)
-    plt.plot(regret_averages_ucb)
-    plt.legend([f'$\\varepsilon$: {eps:.1e}', f'c: {c}'])
+    for temp in temperatures:
+        plt.plot(regret_averages[temp])
+    plt.legend([f'T: {temp:.1e}' for temp in temperatures])
     plt.ylabel('Regret/step')
     plt.xlabel('Simulation Step')
-    plt.title(f'Experiment {exp}: $\\varepsilon$-Greedy vs. UCB1\nAverage Regret')
+    plt.title(f'Experiment {exp}: Eps-Greedy\nAverage Regret')
     plt.grid()
     try:
         plt.savefig(os.path.join(d, f'regrets_{plot_root_name}.png'))
@@ -239,8 +216,6 @@ def experiment_6(n_steps, n_trials):
         plt.show()
 
 
-
 if __name__ == '__main__':
-    experiment_6(1000, 2000)
-
+    experiment_7(1000, 2000)
     exit(0)

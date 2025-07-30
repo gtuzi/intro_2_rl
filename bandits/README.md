@@ -512,5 +512,97 @@ _relative preference_ of one action over another matters. Action selection
 probabilities are determined according to the _softmax-distribution_:
 
 $$
-\text{Pr}\{A_t = a_i\} \overset \cdot{=} \frac{e^{H_t(a_i)}}{\sum_{j = 1} ^ {|\mathcal{A}|}} e^{H_t(a_j)}
+\begin{align*}
+\text{Pr}\{A_t = a_i\} &\overset \cdot{=} \frac{e^{H_t(a_i)}}{\sum_{j = 1} ^ {|\mathcal{A}|}e^{H_t(a_j)}} \overset \cdot{=} \pi_t(a_i, \mathbf{z}_t)
+\end{align*}
+$$
+
+where: $\mathbf{z}_t = H_t(\mathbf{a})$
+
+Initially all preferences $H_0$ are the same, so all the actions have equal 
+probability of being selected. 
+
+There is a natural learning algorithm for soft-max action preferences based on the idea
+of stochastic gradient _ascent_. 
+
+##### Gradient Ascent
+Let's define: $\sigma(\mathbf{z}_t)_i = \pi(a_i, \mathbf{z}_t)$ 
+and $\text{Pr}\{R_t | A_t \} = p_b(r | a_i)$. 
+
+Also, the output of the softmax $\pi(\mathbf{a}, \mathbf{z}_t)$ is $[p_0, ..., p_{|\mathcal{A}| - 1}]$ be the 
+probability distribution over rewards for bandit $i$, where its gradient is:
+
+$$
+\begin{align*}
+\frac{\delta \pi(\mathbf{a}, \mathbf{z})_i}{\delta z_j} = 
+\begin{cases}
+p_i(1 - p_i) \quad \text{ $i = j$} \\
+-p_i p_j \quad \quad \text{otherwise}
+\end{cases}
+\end{align*}
+$$
+
+
+The goal is to maximize the expectation of the reward 
+$J(\mathbf{z}_t) = \mathbb{E}[R_t | \mathbf{z}_t]$ via
+gradient ascent. In order to do this we need to obtain the gradient of the 
+expectation. Since this is not analytically possible, we obtain expectation of 
+a gradient which is estimated over samples. 
+
+
+$$
+\begin{align*}
+\nabla_{\mathbf{z}_t} \mathbb{E}[R_t | \mathbf{z}_t] &= \nabla_{\mathbf{z}_t}[\sum_{r, a} r p_b(r | a) \pi(a, \mathbf{z})] \\[1.0em]
+&= \sum_{r, a} r p_b(r | a)\nabla_{\mathbf{z}_t}\pi(a, \mathbf{z}_t) \\[1.0em]
+&= \sum_{r, a} r p_b(r | a) \pi(a, \mathbf{z}_t) \frac{\nabla_{\mathbf{z}_t}\pi(a, \mathbf{z}_t)}{\pi(a, \mathbf{z}_t)} \\[1.0em]
+&= \sum_{r, a} r p(r , a) \frac{\nabla_{\mathbf{z}_t}\pi(a, \mathbf{z}_t)}{\pi(a, \mathbf{z}_t)} \\[1.0em]
+&= \mathbb{E}[R_t \nabla_{\mathbf{z}_t}\log \pi(A_t, \mathbf{z}_t)] \\[1.0em]
+&= \mathbb{E}[(R_t - \bar{R}_t) \nabla_{\mathbf{z}_t}\log \pi(A_t, \mathbf{z}_t)] \quad \text{with baseline}
+\end{align*}
+$$
+
+
+For the gradient term we thus have 
+
+_Derivation form 1_:
+
+$$
+\begin{align*}
+\nabla_{\mathbf{z}_t} \log \pi(A_t = a_i, \mathbf{z}_t) &= \nabla_{\mathbf{z}_t}(z_{i, t} - \log \sum_j e^{z_{j, t}}) \\
+&= \nabla_{\mathbf{z}_t}z_{t, i} - \nabla_{\mathbf{z}_t} \log \sum_j e^{z_{j, t}} \\
+&= \mathbf{e}_i - \pi(\mathbf{a}, \mathbf{z}_t) \\
+&= [0, .., 1, ..., 0] - [p_0, p_1, ..., p_{|\mathcal{A}| - 1}] \\
+& = [-p_0, -p_1, ..., (1 - p_i), ..., -p_{|\mathcal{A}| - 1}]
+\end{align*}
+$$
+
+where:
+* $\nabla_{\mathbf{z}_t}z_{t, i} = \frac{\delta z_{i, t}}{\delta_{z_{j, t}}} = \delta_{i, j} \implies \mathbf{e}_i = [0, ..., 1, ..., 0]$
+* $\nabla_{\mathbf{z}_t} \log \sum_j e^{z_{j, t}} = \frac{1}{ \sum_j e^{z_{j, t}}} (\nabla_{\mathbf{z}_t}\sum_j e^{z_{j, t}}) = \frac{1}{ \sum_j e^{z_{j, t}}}([ e^{z_{0, t}}, e^{z_{1, t}}, ... ]) = \pi(\mathbf{a}, \mathbf{z}_t)$
+
+
+_Derivation form 2_:
+
+
+$$
+\begin{align*}
+\frac{\nabla_{\mathbf{z}_t}\pi(\mathbf{a}, \mathbf{z}_t)_i}{\pi(\mathbf{a}, \mathbf{z}_t)_i} &= [-\frac{p_0p_i}{p_i}, -\frac{p_1p_i}{p_i}, ..., \frac{p_i(1 - p_i)}{p_i}, ..., -\frac{p_{|\mathcal{A}| - 1}p_i}{p_i}] \\[1.0em]
+&= [-p_0, -p_1, ..., (1 - p_i), ..., -p_{|\mathcal{A}| - 1}]
+\end{align*}
+$$
+
+Thus in order to perform gradient ascent on the preference function, the update rule is:
+
+$$
+\mathbf{z}_{t+1} = \mathbf{z}_t + \alpha \nabla_{\mathbf{z}_t}J(\mathbf{z}_t)
+$$
+
+Since $\mathbf{z}_t = H_t(\mathbf{a})$, on each step, after selecting action $A_t$ 
+and receiving the reward $R_t$, the action preferences are updated as:
+
+$$
+\begin{align*}
+H_{t+1}(A_t) &\overset \cdot{=} H_t(A_t) + \alpha(R_t - \bar{R}_t)(1 - \pi_t(A_t)) \quad \text{and} \\
+H_t(a) &= H_t(a) - \alpha(R_t - \bar{R}_t) \pi_t(a) \quad \text{ for $a \ne A_t$}
+\end{align*}
 $$
