@@ -23,7 +23,7 @@ the action taken.
 * [Ex 5 - stationary environment, comparing initial action values, sample average action value estimation, $\varepsilon$-greedy](#experiment-5-stationary-testbed-initial-values-comparison-sample-average-action-value-estimation-varepsilon-greedy-selection)
 * [Ex 6 - stationary environment, $\varepsilon$-greedy vs. UCB1](#experiment-6-stationary-testbed-varepsilon-greedy-vs-ucb1)
 * [Ex 7 - Stationary environment, gradient method - naiive preference, baseline evaluation](#experiment-7-stationary-testbed-gradient-method---naiive-preference-baseline-evaluation)
-* [Ex 8: Non-Stationary Testbed, Softmax Exploration](#experiment-8-non-stationary-testbed-softmax-exploration)
+* [Ex 8 - Non-Stationary Testbed, Softmax Exploration](#experiment-8-non-stationary-testbed-softmax-exploration)
 
 ## Non-Associative Bandits
 The non-associative setting, which does not involve learning to act in 
