@@ -22,6 +22,8 @@ the action taken.
 * [Ex 4 - stationary environment, sample average action value estimation, $\varepsilon$-greedy](#experiment-4-non-stationary-testbed-sample-average-action-value-estimation-varepsilon-greedy-selection)
 * [Ex 5 - stationary environment, comparing initial action values, sample average action value estimation, $\varepsilon$-greedy](#experiment-5-stationary-testbed-initial-values-comparison-sample-average-action-value-estimation-varepsilon-greedy-selection)
 * [Ex 6 - stationary environment, $\varepsilon$-greedy vs. UCB1](#experiment-6-stationary-testbed-varepsilon-greedy-vs-ucb1)
+* [Ex 7 - Stationary environment, gradient bandit methods, baseline evaluation](#experiment-7-stationary-testbed-gradient-bandit-methods-baseline-evaluation)
+* 
 
 ## Non-Associative Bandits
 The non-associative setting, which does not involve learning to act in 
@@ -552,7 +554,7 @@ a gradient which is estimated over samples.
 
 $$
 \begin{align*}
-\nabla_{\mathbf{z}_t} \mathbb{E}[R_t | \mathbf{z}_t] &= \nabla_{\mathbf{z}_t}[\sum_{r, a} r p_b(r | a) \pi(a, \mathbf{z})] \\[1.0em]
+\nabla_{\mathbf{z}_t} \mathbb{E}[R_t | \mathbf{z}_t] &= \nabla_{\mathbf{z}_t}[\sum_{r, a} r p_b(r | a) \pi(a, \mathbf{z}_t)] \\[1.0em]
 &= \sum_{r, a} r p_b(r | a)\nabla_{\mathbf{z}_t}\pi(a, \mathbf{z}_t) \\[1.0em]
 &= \sum_{r, a} r p_b(r | a) \pi(a, \mathbf{z}_t) \frac{\nabla_{\mathbf{z}_t}\pi(a, \mathbf{z}_t)}{\pi(a, \mathbf{z}_t)} \\[1.0em]
 &= \sum_{r, a} r p(r , a) \frac{\nabla_{\mathbf{z}_t}\pi(a, \mathbf{z}_t)}{\pi(a, \mathbf{z}_t)} \\[1.0em]
@@ -561,8 +563,11 @@ $$
 \end{align*}
 $$
 
+Here $p_b(r | a)$ is the probability of obtaining reward $r$ from the selected 
+bandit with action $a$. Note that introducing a baseline does not change
+the proof: $\nabla \sum_{r, a} \bar{r}p_b(r | a)\pi(a) = \nabla\bar{r}\sum_{r, a}p(r, a) = \nabla \hat{r} = 0$
 
-For the gradient term we thus have 
+For the gradient of the log term we have: 
 
 _Derivation form 1_:
 
@@ -580,6 +585,9 @@ where:
 * $\nabla_{\mathbf{z}_t}z_{t, i} = \frac{\delta z_{i, t}}{\delta_{z_{j, t}}} = \delta_{i, j} \implies \mathbf{e}_i = [0, ..., 1, ..., 0]$
 * $\nabla_{\mathbf{z}_t} \log \sum_j e^{z_{j, t}} = \frac{1}{ \sum_j e^{z_{j, t}}} (\nabla_{\mathbf{z}_t}\sum_j e^{z_{j, t}}) = \frac{1}{ \sum_j e^{z_{j, t}}}([ e^{z_{0, t}}, e^{z_{1, t}}, ... ]) = \pi(\mathbf{a}, \mathbf{z}_t)$
 
+Note that:
+* $\nabla_{\mathbf{z}} e^{z_i} = [\frac{\partial e^{z_i}}{\partial z_0}, ..., \frac{\partial e^{z_i}}{\partial z_i}, ...]$
+* $\frac{\partial e^{z_i}}{\partial z_j} = e^{z_i} \frac{\partial_{z_i}}{\partial_{z_j}} = 0$
 
 _Derivation form 2_:
 
@@ -606,3 +614,20 @@ H_{t+1}(A_t) &\overset \cdot{=} H_t(A_t) + \alpha(R_t - \bar{R}_t)(1 - \pi_t(A_t
 H_t(a) &= H_t(a) - \alpha(R_t - \bar{R}_t) \pi_t(a) \quad \text{ for $a \ne A_t$}
 \end{align*}
 $$
+
+where $\bar{R}_t$ serves as the baseline. If the reward is higher than the baseline,
+then the probability of taking $A_t$ in the future is increased, and if the reward is below
+baseline, then the probability is decreased. The non-selected actions move in the opposite
+direction.
+
+
+#### Experiment 7: Stationary Testbed, Gradient Bandit Methods, Baseline Evaluation
+In this experiment we're evaluating the gradient method over different learning 
+steps and the use of baseline. Here the means of the bandits $q_*(a)$ were 
+sampled around +4 (refer to Figure 2.5 in the book). 
+
+| Average Rewards                                                     | Average Regret                                                      |
+|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| <img src="images/rewards_experiment_7.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_7.png" alt="Grid" width="450"/> |
+
+As we can see, using the baseline yields more efficient learning.

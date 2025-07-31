@@ -115,7 +115,8 @@ def parallel_simulate_over_1dparam(
 
 def experiment_7(n_steps, n_trials):
     """
-    Naiive preference policy over different constant temperatures
+    Naiive preference policy over different learning rates with and
+    without baseline
 
     Action is sampled as a ~ softmax(H)
 
@@ -130,6 +131,164 @@ def experiment_7(n_steps, n_trials):
 
     """
     exp = 7
+    n_bandits = 10  # Each bandit is triggered by one action
+    H0 = 0.
+    Rbar0 = 0.
+    alphas = [0.1, 0.4]
+    temperature = 1.
+    reward_randomness_scale = 1.
+    plot_root_name = f'experiment_{exp}'
+
+    test_bed_constructor = lambda: get_cont_reward_test_bed(
+        reward_means=np.random.normal(
+            4.,  # per Figure 2.5 in the book
+            1.,
+            size=n_bandits
+        ).tolist(),
+        reward_randomness_scale=[reward_randomness_scale] * n_bandits,
+        stationary=True
+    )
+
+
+    # ----- Without Baseline ----- #
+    policy_constructor = lambda _alpha: NaiivePreferencePolicy(
+        n_actions=n_bandits,
+        preference_initial_value=H0,
+        reward_initial_value=Rbar0,
+        learning_rate=ConstantCoefficient(_alpha),
+        temperature=ConstantCoefficient(temperature),
+        use_baseline=False
+    )
+
+    results = parallel_simulate_over_1dparam(
+        test_bed_constructor=test_bed_constructor,
+        policy_constructor=policy_constructor,
+        params=alphas,
+        n_trials=n_trials,
+        n_steps=n_steps,
+        desc=f'Experiment {exp}')
+
+    reward_averages = dict()
+    regret_averages = dict()
+
+    rewards = results['rewards']
+    regrets = results['regrets']
+
+    for alpha in alphas:
+        reward_averages[alpha] = []
+        regret_averages[alpha] = []
+
+        for step in range(n_steps):
+            # Average across trials at each step
+            res = [rewards[alpha][trial][step] for trial in range(n_trials)]
+            reward_averages[alpha].append(np.mean(res))
+
+            res = [regrets[alpha][trial][step] for trial in range(n_trials)]
+            regret_averages[alpha].append(np.mean(res) / (step + 1))
+
+
+    # ----- With Baseline ---- #
+    policy_constructor = lambda _alpha: NaiivePreferencePolicy(
+        n_actions=n_bandits,
+        preference_initial_value=H0,
+        reward_initial_value=Rbar0,
+        learning_rate=ConstantCoefficient(_alpha),
+        temperature=ConstantCoefficient(temperature),
+        use_baseline=True
+    )
+
+    results = parallel_simulate_over_1dparam(
+        test_bed_constructor=test_bed_constructor,
+        policy_constructor=policy_constructor,
+        params=alphas,
+        n_trials=n_trials,
+        n_steps=n_steps,
+        desc=f'Experiment {exp}')
+
+    reward_averages_with_baseline = dict()
+    regret_averages_with_baseline = dict()
+
+    rewards_with_baseline = results['rewards']
+    regrets_with_baseline = results['regrets']
+
+    for alpha in alphas:
+        reward_averages_with_baseline[alpha] = []
+        regret_averages_with_baseline[alpha] = []
+
+        for step in range(n_steps):
+            # Average across trials at each step
+            res = [rewards_with_baseline[alpha][trial][step] for trial in range(n_trials)]
+            reward_averages_with_baseline[alpha].append(np.mean(res))
+
+            res = [regrets_with_baseline[alpha][trial][step] for trial in range(n_trials)]
+            regret_averages_with_baseline[alpha].append(np.mean(res) / (step + 1))
+
+
+    d = os.path.join(os.getcwd(), 'images')
+    _ = mk_clear_dir(d, False)
+
+    legend = []
+    _ = plt.figure()
+    plt.plot(reward_averages[alphas[0]])
+    legend.append(f'$\\alpha$: {alphas[0]: .1e}')
+    plt.plot(reward_averages[alphas[1]])
+    legend.append(f'$\\alpha$: {alphas[1]: .1e}')
+    plt.plot(reward_averages_with_baseline[alphas[0]])
+    legend.append(f'Baseline - $\\alpha$: {alphas[0]: .1e}')
+    plt.plot(reward_averages_with_baseline[alphas[1]])
+    legend.append(f'Baseline - $\\alpha$: {alphas[1]: .1e}')
+    plt.legend(legend)
+    plt.ylabel('Average Reward')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Gradient Method \nAvg. Rewards')
+    plt.grid()
+    try:
+        plt.savefig(os.path.join(d, f'rewards_{plot_root_name}.png'))
+    except:
+        print(f'Could not save rewards_{plot_root_name} plot')
+    finally:
+        plt.show()
+
+    _ = plt.figure()
+    legend = []
+    plt.plot(regret_averages[alphas[0]])
+    legend.append(f'$\\alpha$: {alphas[0]: .1e}')
+    plt.plot(regret_averages[alphas[1]])
+    legend.append(f'$\\alpha$: {alphas[1]: .1e}')
+    plt.plot(regret_averages_with_baseline[alphas[0]])
+    legend.append(f'Baseline - $\\alpha$: {alphas[0]: .1e}')
+    plt.plot(regret_averages_with_baseline[alphas[1]])
+    legend.append(f'Baseline - $\\alpha$: {alphas[1]: .1e}')
+    plt.legend(legend)
+    plt.ylabel('Regret/step')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}:Gradient Method \nAverage Regret')
+    plt.grid()
+    try:
+        plt.savefig(os.path.join(d, f'regrets_{plot_root_name}.png'))
+    except:
+        print(f'Could not save regrets_{plot_root_name} plot')
+    finally:
+        plt.show()
+
+
+def experiment_8(n_steps, n_trials):
+    """
+    Naiive preference policy over different constant temperatures
+
+    Action is sampled as a ~ softmax(H)
+
+    From eq (2.12) in Sutton book, 2nd edition (2018):
+
+    H(A, t+1) = H(A, t) + alpha * Advantage * (1 - pi(A))
+    H(o, t+1) = H(o, t) - alpha * Advantage * p(o)
+    where:
+    H: preference model
+    R_bar: baseline, a moving average of reward received
+    Advantage: R(t) - R_bar
+
+    """
+    exp = 8
     n_bandits = 10  # Each bandit is triggered by one action
     H0 = 0.0
     Rbar0 = 0.0

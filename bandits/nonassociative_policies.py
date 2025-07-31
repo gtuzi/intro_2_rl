@@ -199,10 +199,18 @@ class NaiivePreferencePolicy(Policy):
         super(NaiivePreferencePolicy, self).__init__(name='NaiivePreference')
         if isinstance(learning_rate, (int, float)):
             learning_rate = ConstantCoefficient(learning_rate)
+
         self.action_set = [i for i in range(n_actions)]
-        self.H = [SimpleMovingAverage(initial_value=preference_initial_value, coefficient=learning_rate) for _ in
-                  range(n_actions)]
+
+        self.H = [
+            SimpleMovingAverage(
+                initial_value=preference_initial_value,
+                coefficient=learning_rate)
+            for _ in range(n_actions)
+        ]
+
         self.R = CummulativeMovingAverage(initial_value=reward_initial_value)
+
         self.temperature = temperature
         self.use_baseline = use_baseline
         self.step_count = 0
@@ -221,15 +229,29 @@ class NaiivePreferencePolicy(Policy):
             H(*, t+1) = H(*, t) + alpha * Advantage * (Indicator(A) - pi(*))
         """
         self.step_count += 1
-        advantage = reward - self.R.current_value if self.use_baseline else reward
+        advantage = (
+                reward - self.R.current_value) \
+            if self.use_baseline \
+            else reward
+
         indicator = np.zeros(shape=(len(self.action_set),), dtype=np.float32)
+
         indicator[action] = 1.0
-        p = softmax([self.H[a].current_value for a in self.action_set], temp=self.temperature.current_value)
+
+        p = softmax(
+            [self.H[a].current_value for a in self.action_set],
+            temp=self.temperature.current_value
+        )
+
+        # Note that here d[a_i] = -alpha * pi_i if a_i != A_t
+        #                       =  alpha * (1 - p_i) if a_i = A_t
         d = advantage * (indicator - np.array(p))
 
-        # Update all parameters
+        # Update all parameters: just adding d[a] takes care of the sign
         _ = [self.H[a].step(d[a]) for a in self.action_set]
+
         _ = self.temperature.step()
+
         if self.use_baseline:
             _ = self.R.step(reward)
 
