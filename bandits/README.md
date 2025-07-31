@@ -22,8 +22,8 @@ the action taken.
 * [Ex 4 - stationary environment, sample average action value estimation, $\varepsilon$-greedy](#experiment-4-non-stationary-testbed-sample-average-action-value-estimation-varepsilon-greedy-selection)
 * [Ex 5 - stationary environment, comparing initial action values, sample average action value estimation, $\varepsilon$-greedy](#experiment-5-stationary-testbed-initial-values-comparison-sample-average-action-value-estimation-varepsilon-greedy-selection)
 * [Ex 6 - stationary environment, $\varepsilon$-greedy vs. UCB1](#experiment-6-stationary-testbed-varepsilon-greedy-vs-ucb1)
-* [Ex 7 - Stationary environment, gradient bandit methods, baseline evaluation](#experiment-7-stationary-testbed-gradient-bandit-methods-baseline-evaluation)
-* 
+* [Ex 7 - Stationary environment, gradient method - naiive preference, baseline evaluation](#experiment-7-stationary-testbed-gradient-method---naiive-preference-baseline-evaluation)
+* [Ex 8: Non-Stationary Testbed, Softmax Exploration](#experiment-8-non-stationary-testbed-softmax-exploration)
 
 ## Non-Associative Bandits
 The non-associative setting, which does not involve learning to act in 
@@ -504,7 +504,7 @@ will be selected less frequently.
 | <img src="images/rewards_experiment_6.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_6.png" alt="Grid" width="450"/> |
 
 
-## Gradient Bandit Algorithms
+## Gradient Bandit Algorithms: Naiive Preference
 Using action-value functions to select actions is not the only way.
 Numerical _preferences_, denoted as $H_t(a) \in \mathbb{R}$ for each action 
 $a \in \mathcal{A}$, are an alternative way to perform selection.
@@ -519,7 +519,12 @@ $$
 \end{align*}
 $$
 
-where: $\mathbf{z}_t = H_t(\mathbf{a})$
+where: $\mathbf{z}_t = H_t(\mathbf{a})$. Therefore, in the naiive preference 
+method, actions are selected according to:
+
+$$
+a \sim \text{softmax}(H_t(\mathbf{z}_t))
+$$
 
 Initially all preferences $H_0$ are the same, so all the actions have equal 
 probability of being selected. 
@@ -621,7 +626,7 @@ baseline, then the probability is decreased. The non-selected actions move in th
 direction.
 
 
-#### Experiment 7: Stationary Testbed, Gradient Bandit Methods, Baseline Evaluation
+#### Experiment 7: Stationary Testbed, Gradient Method - Naiive Preference, Baseline Evaluation
 In this experiment we're evaluating the gradient method over different learning 
 steps and the use of baseline. Here the means of the bandits $q_*(a)$ were 
 sampled around +4 (refer to Figure 2.5 in the book). 
@@ -631,3 +636,51 @@ sampled around +4 (refer to Figure 2.5 in the book).
 | <img src="images/rewards_experiment_7.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_7.png" alt="Grid" width="450"/> |
 
 As we can see, using the baseline yields more efficient learning.
+
+## Extending Beyond the Book
+The following presented algorithms are not presented in any detail in the book.
+They are included here as they are often encountered in the literature. The 
+run script for these approaches is `additional_algorithms_main.py`.
+
+## Softmax (Boltzmann) Exploration
+Softmax methods are based on Luce’s axiom of choice (1959) and pick each 
+arm with a probability that is proportional to its _average reward_. 
+Arms with greater empirical means $Q_n(a_i)$ are therefore picked with 
+higher probability, where softmax function is used to generate the 
+probabilities. Alternative name, Boltzman exploration. Probability of 
+selecting a bandit $i$ is:
+
+$$
+p_i(n + 1) = \frac{e^{\frac{Q_n(a_i)}{\tau}}}{\sum_{j = 1} ^{k} e^{\frac{Q_n(a_j)}{\tau}}}
+$$
+
+where $\tau$ is a temperature parameter, controlling the randomness of the
+choice. When $\tau = 0$, Boltzmann Exploration acts like pure greedy. 
+As $\tau$ tends to infinity, the algorithms picks  arms uniformly at random. 
+The selection method here is similar to that of the naiive preference (above), 
+where we can also incorporate the temperature method. However, the difference 
+here primarily lies in the way the logits are obtained. In the preference approach
+we used gradient ascent to optimize the logit function $H_t$. Whereas here, 
+we're using the sample averages $Q_n$, just like in the action-value methods.
+
+Experiments with stationary test bed yield very similar results
+for different temperature values. It is more interesting to explore 
+the non-stationary test bed setting.
+
+Implementation of the strategy: 
+`nonassocative_policies.py/SoftmaxExplorationPolicy`
+
+#### Experiment 8: Non-Stationary Testbed, Softmax Exploration
+The estimated average used in the softmax function can be estimated
+as a simple average (unbiased), or as a recency-weighted exponential average 
+(refer to the action value section above). 
+
+
+| Average Rewards                                                     | Average Regret                                                      |
+|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| <img src="images/rewards_experiment_8.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_8.png" alt="Grid" width="450"/> |
+
+
+As we saw in the action-value strategy for the non-stationary test bed, 
+recency weighted averages deal with non-stationarity much better. Also, greedy 
+strategy fairs worse than the exploratory strategy.

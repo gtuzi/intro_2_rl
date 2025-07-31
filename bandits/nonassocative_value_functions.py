@@ -18,7 +18,11 @@ class Q(ABC):
 
     @action_values.setter
     def action_values(self, values: List[MovingAverage]):
-        assert len([v for v in values if isinstance(v, MovingAverage)]) > 0, 'action_values must be MovingAverage type'
+        assert len(
+            [v for v in values if isinstance(v, MovingAverage)
+             ]
+        ) > 0, 'action_values must be MovingAverage type'
+
         self._action_values = values
 
     # Action visit counts the times an action has been taken
@@ -28,7 +32,10 @@ class Q(ABC):
 
     @action_visit_counts.setter
     def action_visit_counts(self, values: List[int]):
-        assert len([v for v in values if isinstance(v, int)]) > 0, 'action_visit_counts must be int type'
+        assert len(
+            [v for v in values if isinstance(v, int)
+             ]
+        ) > 0, 'action_visit_counts must be int type'
         self._action_visit_counts = values
 
     def __call__(self, a: Optional[int] = None) -> Union[float, List[float]]:
@@ -50,11 +57,21 @@ class Q(ABC):
 
 
 class QMonteCarlo(Q):
-    def __init__(self, n_actions: int, initial_action_value: Union[float, List] = 0.0):
+    def __init__(
+            self,
+            n_actions: int,
+            initial_action_value: Union[float, List] = 0.0
+    ):
         super().__init__()
+
         if not isinstance(initial_action_value, List):
             initial_action_value = [initial_action_value] * n_actions
-        self.action_values = [CummulativeMovingAverage(initial_value=iv) for iv in initial_action_value]
+
+        self.action_values = [
+            CummulativeMovingAverage(initial_value=iv)
+            for iv in initial_action_value
+        ]
+
         self.action_visit_counts = [0 for _ in range(n_actions)]
 
     def step(self, step: int, action: int, reward: float):
@@ -70,8 +87,12 @@ class QCoefficientMovingAverage(Q):
                  coefficient: Coefficient = ConstantCoefficient(0.1),
                  initial_action_value: float = 0.0):
         super().__init__()
+
         self.action_values = [
-            ExponentialMovingAverage(initial_value=initial_action_value, coefficient=coefficient)
+            ExponentialMovingAverage(
+                initial_value=initial_action_value,
+                coefficient=coefficient
+            )
             for _ in range(n_actions)
         ]
         self.action_visit_counts = [0 for _ in range(n_actions)]

@@ -147,33 +147,6 @@ class UCB1Policy(ActionValuePolicy):
         self.q.step(step=step, action=action, reward=reward)
 
 
-class SoftmaxExplorationPolicy(ActionValuePolicy):
-    """
-        Softmax methods are based on Luce’s axiom of choice (1959)
-        and pick each arm with a probability that is proportional to its average reward.
-        Arms with greater empirical means are therefore picked with higher probability.
-        Alternative name, Boltzman exploration
-
-        Ref: https://arxiv.org/pdf/1402.6028.pdf
-    """
-
-    def __init__(self, q: Q, temperature: Union[float, Coefficient], **kwargs):
-        super(SoftmaxExplorationPolicy, self).__init__(q=q, name='Softmax')
-
-        if isinstance(temperature, (int, float)):
-            temperature = ConstantCoefficient(temperature)
-        self.temperature = temperature
-
-    def __call__(self, step: int, **kwargs) -> int:
-        p = np.array(softmax(z=self.q(), temp=self.temperature.current_value))
-        anp = np.random.choice(np.where(p == p.max())[0])  # Random break ties
-        return int(anp)
-
-    def step(self, step: int, action: int, reward: float):
-        self.temperature.step()
-        self.q.step(step=step, action=action, reward=reward)
-
-
 class NaiivePreferencePolicy(Policy):
     """
         Gradient based policy.
@@ -254,6 +227,35 @@ class NaiivePreferencePolicy(Policy):
 
         if self.use_baseline:
             _ = self.R.step(reward)
+
+
+########### Additional Algorithms ##############
+
+class SoftmaxExplorationPolicy(ActionValuePolicy):
+    """
+        Softmax methods are based on Luce’s axiom of choice (1959)
+        and pick each arm with a probability that is proportional to its average reward.
+        Arms with greater empirical means are therefore picked with higher probability.
+        Alternative name, Boltzman exploration
+
+        Ref: https://arxiv.org/pdf/1402.6028.pdf
+    """
+
+    def __init__(self, q: Q, temperature: Union[float, Coefficient], **kwargs):
+        super(SoftmaxExplorationPolicy, self).__init__(q=q, name='Softmax')
+
+        if isinstance(temperature, (int, float)):
+            temperature = ConstantCoefficient(temperature)
+        self.temperature = temperature
+
+    def __call__(self, step: int, **kwargs) -> int:
+        p = np.array(softmax(z=self.q(), temp=self.temperature.current_value))
+        anp = np.random.choice(np.where(p == p.max())[0])  # Random break ties
+        return int(anp)
+
+    def step(self, step: int, action: int, reward: float):
+        self.temperature.step()
+        self.q.step(step=step, action=action, reward=reward)
 
 
 class BetaDistribution:
