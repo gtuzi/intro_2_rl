@@ -17,7 +17,7 @@ the action taken.
 
 ## Experiments:
 * [Ex 1 - stationary environment, sample average action value estimation, $\varepsilon$-greedy](#experiment-1-stationary-testbed-sample-average-action-value-varepsilon-greedy-selection)
-* [Ex 2 - stationary environment, exponential average (const step size) action value estimation, $\varepsilon$-greedy](#experiment-2-stationary-testbed-constant-step-size-for-action-value-varepsilon-greedy-selection)
+* [Ex 2 - stationary environment, constant step size for action value, $\varepsilon$-greedy selection](#experiment-2-stationary-testbed-constant-step-size-for-action-value-varepsilon-greedy-selection)
 * [Ex 3 - stationary environment, exponential average (const step size) action value estimation, $\varepsilon$-greedy](#experiment-3-non-stationary-testbed-constant-step-size-for-action-value-varepsilon-greedy-selection)
 * [Ex 4 - stationary environment, sample average action value estimation, $\varepsilon$-greedy](#experiment-4-non-stationary-testbed-sample-average-action-value-estimation-varepsilon-greedy-selection)
 * [Ex 5 - stationary environment, comparing initial action values, sample average action value estimation, $\varepsilon$-greedy](#experiment-5-stationary-testbed-initial-values-comparison-sample-average-action-value-estimation-varepsilon-greedy-selection)
