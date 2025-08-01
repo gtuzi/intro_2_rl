@@ -23,7 +23,10 @@ the action taken.
 * [Ex 5 - stationary environment, comparing initial action values, sample average action value estimation, $\varepsilon$-greedy](#experiment-5-stationary-testbed-initial-values-comparison-sample-average-action-value-estimation-varepsilon-greedy-selection)
 * [Ex 6 - stationary environment, $\varepsilon$-greedy vs. UCB1](#experiment-6-stationary-testbed-varepsilon-greedy-vs-ucb1)
 * [Ex 7 - Stationary environment, gradient method - naiive preference, baseline evaluation](#experiment-7-stationary-testbed-gradient-method---naiive-preference-baseline-evaluation)
-* [Ex 8 - Non-Stationary Testbed, Softmax Exploration](#experiment-8-non-stationary-testbed-softmax-exploration)
+* [Ex 8 - Non-Stationary environment, Softmax Exploration](#experiment-8-non-stationary-testbed-softmax-exploration)
+* [Ex 9 - Stationary environment, Bernoulli-Greedy](#experiment-9-stationary-environment-bernoulli-greedy)
+* [Ex 10 - Stationary environment, Bernoulli Thompson Sampling](#experiment-10-stationary-environment-bernoulli-thompson-sampling)
+* [Ex 11 - Non-Stationary Environment, Bernoulli Thompson Sampling](#experiment-11-non-stationary-environment-bernoulli-thompson-sampling)
 
 ## Non-Associative Bandits
 The non-associative setting, which does not involve learning to act in 
@@ -570,7 +573,7 @@ $$
 
 Here $p_b(r | a)$ is the probability of obtaining reward $r$ from the selected 
 bandit with action $a$. Note that introducing a baseline does not change
-the proof: $\nabla \sum_{r, a} \bar{r}p_b(r | a)\pi(a) = \nabla\bar{r}\sum_{r, a}p(r, a) = \nabla \hat{r} = 0$
+the proof: $\nabla \sum_{r, a} \bar{r}p_b(r | a)\pi(a) = \nabla\bar{r}\sum_{r, a}p(r, a) = \nabla \bar{r} = 0$
 
 For the gradient of the log term we have: 
 
@@ -684,3 +687,121 @@ as a simple average (unbiased), or as a recency-weighted exponential average
 As we saw in the action-value strategy for the non-stationary test bed, 
 recency weighted averages deal with non-stationarity much better. Also, greedy 
 strategy fairs worse than the exploratory strategy.
+
+## Thompson Sampling
+
+The following material relies on this [tutorial](https://web.stanford.edu/~bvr/pubs/TS_Tutorial.pdf).
+
+#### Bernoulli Bandit
+Suppose there are K actions, and when played, any action yields either a 
+success or a failure. Action $k \in \{1, ..., K\}$ produces a success ($r = 1$)
+with probability $\theta_k \in [0, 1]$, hence $r = 0$ with probability 
+$1 - \theta_k$. The success probabilities $(\theta_1, ..., \theta_K)$ are
+unknown to the agent, but are fixed over time, and therefore can be learned 
+by experimentation.
+
+
+#### Dithering
+_Dithering_ is a common approach to exploration that operates through
+randomly perturbing actions that would be selected by a greedy algorithm. 
+One version of dithering, called $\varepsilon$-greedy exploration, 
+applies the greedy action with probability $1 - \varepsilon$ and otherwise 
+selects an action uniformly at random. Though this form of exploration 
+can improve behavior relative to a purely greedy approach, it wastes 
+resources by failing to “write off” actions regardless of how unlikely 
+they are to be optimal. This issue becomes increasingly problematic as the
+number of actions increases.
+Thompson sampling (1933), provides an alternative to dithering that more
+intelligently allocates exploration effort.
+
+#### Beta-Bernoulli Bandit
+In the Bernoulli setting, the success rate $\theta_k$ can also be interpreted
+as the mean reward. Let $\mathbf{\theta} = \{\theta_1, ..., \theta_K \}$.
+In the first period an action $a_1$ applied and a reward 
+$r_1$ is generated with probability 
+$\text{Pr}\{r_1 = 1 | a_1, \theta \} = \theta_{a_1}$. Afterwards, the agent
+applies action $a_2$ and observes $r_2$, and so on.
+
+Let the agent begin with an independent prior belief over each $\theta_k$.
+Take these prior beliefst to be beta-distributed with parameters 
+$\mathbf{\alpha} = \{\alpha_1, ..., \alpha_K \}$ and 
+$\mathbf{\beta} = \{\beta_1, ..., \beta_K \}$. Then, for an action $k$, the 
+prior density function $\theta_k$ is:
+
+$$
+p(\theta_k) = \frac{\Gamma(\alpha_k + \beta_k)}{\Gamma(\alpha_k)\Gamma(\beta_k)} \theta_k^{\alpha_k - 1}(1 - \theta_k)^{\beta_k - 1}
+$$
+
+where $\Gamma$ is the [gamma function](https://en.wikipedia.org/wiki/Gamma_function).
+
+
+#### Bernoulli-Greedy
+As observations are gathered, the distribution is updated according to 
+Bayes’ rule. It is particularly convenient to work with beta distributions 
+because of their conjugacy properties. In particular, each action’s posterior 
+distribution is also beta with parameters that can be updated according 
+to the following rule:
+
+$$
+(\alpha_k, \beta_k) = 
+\begin{cases}
+(\alpha_k, \beta_k) \quad a_t \ne k \\
+(\alpha_k, \beta_k) + (r_t, 1 - r_t) \quad a_t = k
+\end{cases}
+$$
+
+Only the parameters of a selected action are updated. For the case of 
+$\alpha_k = \beta_k = 1$, the prior $p(\theta_k)$ is uniform over $[0, 1]$.
+A beta distribution's mean is $\frac{\alpha_k}{\alpha_k + \beta_k}$ and the 
+distribution becomes more concentrated as $\alpha_k + \beta_k$ grows.
+The following is the greedy algorithm for the beta-Bernoulli bandit.
+
+<img src="images/bernoulli_greedy_algo1.png" alt="Grid" width="376"/>
+
+where for each bandit the means of the Beta distributions are used to select 
+the action.
+
+#### Experiment 9: Stationary Environment, Bernoulli-Greedy
+In the following experiment the testbed is composed of $k=10$ bernoulli 
+(density) bandits. Their success rate $\mu_{k}$ is sampled randomly from 
+$\mu_k \sim \mathcal{U}[0.1, 0.9]$. The success rate remains stationary through
+the simulation (i.e. non-stationary). Several combinations of initial 
+$\alpha$s and $\beta$s were tried. 1000 steps and 2000 trials were run.
+
+
+| Average Rewards                                                     | Average Regret                                                      |
+|---------------------------------------------------------------------|---------------------------------------------------------------------|
+| <img src="images/rewards_experiment_9.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_9.png" alt="Grid" width="450"/> |
+
+
+#### Thompson Sampling
+Thompson Sampling is a specialized case of a Beta-Bernoulli bandit, 
+and it is similar to _Algorithm 1_. 
+The only difference is that the success probability estimate 
+$\theta_k$ is _randomly_ sampled from the posterior distribution, 
+which is a beta distribution with parameters $(\alpha_k, \beta_k)$, 
+rather than taken to be the expectation $\frac{\alpha_k}{\alpha_k + \beta_k}$.
+The algorithm below shows how this is achieved:
+
+<img src="images/bernoulli_thompson_sampling_algo2.png" alt="Grid" width="376"/>
+
+#### Experiment 10: Stationary Environment, Bernoulli Thompson Sampling
+Same setting as in experiment 9 for BernoulliTS algo.
+
+
+| Average Rewards                                                      | Average Regret                                                       |
+|----------------------------------------------------------------------|----------------------------------------------------------------------|
+| <img src="images/rewards_experiment_10.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_10.png" alt="Grid" width="450"/> |
+
+
+#### Experiment 11: Non-Stationary Environment, Bernoulli Thompson Sampling
+In this experiment the true success rates of a bandit change over time 
+(random walk with normal distribution) with a variance of 0.02. The rest of the
+setup is the same as in experiment 9 
+
+
+| Average Rewards                                                      | Average Regret                                                       |
+|----------------------------------------------------------------------|----------------------------------------------------------------------|
+| <img src="images/rewards_experiment_11.png" alt="Grid" width="450"/> | <img src="images/regrets_experiment_11.png" alt="Grid" width="450"/> |
+
+As we can see here, Algorithm 2 doesn't deal too well with non-stationary environment

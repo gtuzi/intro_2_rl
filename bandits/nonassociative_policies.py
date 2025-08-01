@@ -312,6 +312,32 @@ class BernoulliPolicy(Policy):
         self.distributions[action].update_posterior(reward)
 
 
+class BernoulliGreedy(BernoulliPolicy):
+    """
+        Algorithm 1 in reference
+
+        Ref: https://web.stanford.edu/~bvr/pubs/TS_Tutorial.pdf
+    """
+
+    def __init__(
+            self,
+            n_actions: int,
+            initial_alpha: float = 1.,
+            initial_beta: float = 1.):
+        super(BernoulliGreedy, self).__init__(
+            n_actions=n_actions,
+            initial_alpha=initial_alpha,
+            initial_beta=initial_beta,
+            name='bernoulli_greedy')
+
+    def __call__(self, step: int, **kwargs) -> int:
+        """ Perform action a~pi(n)"""
+        # These are our expectations (E[theta]) of what the bernoulli "true" probability - in the environment -
+        # of generating a successful reward.
+        estimated_success_probabilities = [dist.mean for dist in self.distributions]
+        return int(np.argmax(estimated_success_probabilities))
+
+
 class BernoulliThompsonSampling(BernoulliPolicy):
     """
         Algorithm 2 in reference
@@ -337,28 +363,3 @@ class BernoulliThompsonSampling(BernoulliPolicy):
         estimated_success_probabilities = [dist.sample(1) for dist in self.distributions]
         return int(np.argmax(estimated_success_probabilities))
 
-
-class BernoulliGreedy(BernoulliPolicy):
-    """
-        Algorithm 1 in reference
-
-        Ref: https://web.stanford.edu/~bvr/pubs/TS_Tutorial.pdf
-    """
-
-    def __init__(
-            self,
-            n_actions: int,
-            initial_alpha: float = 1.,
-            initial_beta: float = 1.):
-        super(BernoulliGreedy, self).__init__(
-            n_actions=n_actions,
-            initial_alpha=initial_alpha,
-            initial_beta=initial_beta,
-            name='bernoulli_greedy')
-
-    def __call__(self, step: int, **kwargs) -> int:
-        """ Perform action a~pi(n)"""
-        # These are our expectations (E[theta]) of what the bernoulli "true" probability - in the environment -
-        # of generating a successful reward.
-        estimated_success_probabilities = [dist.mean for dist in self.distributions]
-        return int(np.argmax(estimated_success_probabilities))

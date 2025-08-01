@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
-from typing import List, Optional
+from typing import List, Union
 from functools import partial
 
-from environments.testbed import NonAssocativeTestBed
-from tools.random_walks import BernoulliRandomWalk, RandomWalk, NormalRandomWalk
+from bandits.environments.testbed import NonAssocativeTestBed
+from bandits.tools.random_walks import (
+    BernoulliRandomWalk,
+    RandomWalk,
+    NormalRandomWalk
+)
 
 
 class BinaryValueBandit(ABC):
@@ -43,7 +47,12 @@ class StationaryBernoulliBandit(BinaryValueBandit):
         return self._p
 
     def sample(self, n_samples: int) -> List[float]:
-        return self.rand(p=self.mean, size=n_samples).astype(dtype=np.float).tolist()
+        return self.rand(
+            p=self.mean,
+            size=n_samples
+        ).astype(
+            dtype=np.float32
+        ).tolist()
 
 
 class NonStationaryBernoulliBandit(BinaryValueBandit):
@@ -76,17 +85,19 @@ class NonStationaryBernoulliBandit(BinaryValueBandit):
         return samples
 
 
-
 class BinaryValueRewardTestBed(NonAssocativeTestBed):
     def __init__(
             self,
             success_rates: List,
-            reward_randomness_scales: List = [],
+            reward_randomness_scales: Union[List] = (),
             random_walk='normal',
             stationary: bool = True):
 
         if stationary:
-            self.bandits = [StationaryBernoulliBandit(success_rate=p) for p in success_rates]
+            self.bandits = [
+                StationaryBernoulliBandit(success_rate=p)
+                for p in success_rates
+            ]
         else:
             assert len(success_rates) == len(reward_randomness_scales), \
                 'Provide randomness scale for non-stationary testbed'
@@ -108,6 +119,9 @@ class BinaryValueRewardTestBed(NonAssocativeTestBed):
     def best_arm(self) -> float:
         success_rates = [b.mean for b in self.bandits]
         return success_rates.index(max(success_rates))
+
+    def arm_mean(self, a: int) -> float:
+        return self.bandits[a].mean
 
 
 if __name__ == '__main__':

@@ -6,11 +6,15 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
+from bandits.environments.binary_reward_testbed import BinaryValueRewardTestBed
 from bandits.nonassocative_value_functions import QMonteCarlo, \
     QCoefficientMovingAverage
 from bandits.tools.coefficients import ConstantCoefficient
-from nonassociative_policies import NaiivePreferencePolicy, Policy, \
-    SoftmaxExplorationPolicy
+from nonassociative_policies import (
+    Policy,
+    SoftmaxExplorationPolicy,
+    BernoulliGreedy, BernoulliThompsonSampling
+)
 from environments.testbed import NonAssocativeTestBed
 from environments.continuous_reward_testbed import \
     ContinuousValueRewardTestBed
@@ -26,6 +30,17 @@ def get_cont_reward_test_bed(
     return ContinuousValueRewardTestBed(
         reward_means=reward_means,
         reward_randomness_scales=reward_randomness_scale,
+        stationary=stationary)
+
+
+def get_binary_reward_test_bed(
+        success_rates,
+        reward_randomness_scales: List = (),
+        stationary=False
+):
+    return BinaryValueRewardTestBed(
+        success_rates=success_rates,
+        reward_randomness_scales=reward_randomness_scales,
         stationary=stationary)
 
 
@@ -112,6 +127,11 @@ def parallel_simulate_over_1dparam(
 
 
 def experiment_8(n_steps, n_trials):
+    """
+        Softmax-Exploration example. Iterate over different levels of temperature
+        and compare between simple averaging and exponentially-weighted recency
+        averaging (exponential moving average) of action-value / average value.
+    """
     exp = 8
     n_bandits = 10  # Each bandit is triggered by one action
     Q0 = 0.0
@@ -269,6 +289,312 @@ def experiment_8(n_steps, n_trials):
         plt.show()
 
 
+def experiment_9(n_steps, n_trials):
+    from itertools import product
+
+    """
+        Beta-Bernoulli greedy algorithm (Algorithm 1 in
+        https://web.stanford.edu/~bvr/pubs/TS_Tutorial.pdf).
+    """
+    exp = 9
+    n_bandits = 10  # Each bandit is triggered by one action
+    alphas = [0.5, 1., 2]
+    betas = [0.5, 1., 2]
+    ab = list(product(alphas, betas))
+    abi = list(range(len(ab)))
+    plot_root_text = f'experiment_{exp}'
+
+    min_success = 0.1
+    max_successs = 0.9
+
+    true_success_rates = lambda: [
+        float(np.random.uniform(min_success, max_successs, size=1))
+        for _ in range(n_bandits)
+    ]
+
+    test_bed_constructor = lambda: get_binary_reward_test_bed(
+        success_rates=true_success_rates(),
+        stationary=True)
+
+    policy_constructor = lambda _i: BernoulliGreedy(
+        initial_alpha = ab[_i][0],
+        initial_beta = ab[_i][1],
+        n_actions=n_bandits
+    )
+
+    results = parallel_simulate_over_1dparam(
+        test_bed_constructor=test_bed_constructor,
+        policy_constructor=policy_constructor,
+        params=abi,
+        n_trials=n_trials,
+        n_steps=n_steps,
+        desc=f'Experiment {exp}')
+
+    reward_averages = dict()
+    regret_averages = dict()
+
+    rewards = results['rewards']
+    regrets = results['regrets']
+
+    for i in abi:
+        reward_averages[i] = []
+        regret_averages[i] = []
+
+        for step in range(n_steps):
+            # Average across trials at each step
+            res = [rewards[i][trial][step] for trial in range(n_trials)]
+            reward_averages[i].append(np.mean(res))
+
+            res = [regrets[i][trial][step] for trial in range(n_trials)]
+            regret_averages[i].append(np.mean(res) / (step + 1))
+
+    d = os.path.join(os.getcwd(), 'images')
+    _ = mk_clear_dir(d, False)
+
+    _ = plt.figure()
+
+    legend = []
+    for i in abi:
+        plt.plot(reward_averages[i])
+        legend.append(f'$\\alpha$: {ab[i][0]:.1f}, $\\beta$: {ab[i][1]: .1f}')
+
+    plt.legend(legend)
+    plt.ylabel('Average Reward')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Bernoulli-Greedy')
+    try:
+        plt.savefig(os.path.join(d, f'rewards_{plot_root_text}.png'))
+    except:
+        print(f'Could not save rewards_{plot_root_text} plots')
+    finally:
+        plt.show()
+
+
+    _ = plt.figure()
+
+    legend = []
+    for i in abi:
+        plt.plot(regret_averages[i])
+        legend.append(f'$\\alpha$: {ab[i][0]:.1f}, $\\beta$: {ab[i][1]: .1f}')
+
+    plt.legend(legend)
+    plt.ylabel('Average Regret')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Bernoulli-Greedy')
+    try:
+        plt.savefig(os.path.join(d, f'regrets_{plot_root_text}.png'))
+    except:
+        print(f'Could not save regrets_{plot_root_text} plots')
+    finally:
+        plt.show()
+
+
+def experiment_10(n_steps, n_trials):
+    from itertools import product
+
+    """
+        Bernoulli with Thompson-Sampling (Algorithm 2 in
+        https://web.stanford.edu/~bvr/pubs/TS_Tutorial.pdf).
+    """
+    exp = 10
+    n_bandits = 10  # Each bandit is triggered by one action
+    alphas = [0.5, 1., 2]
+    betas = [0.5, 1., 2]
+    ab = list(product(alphas, betas))
+    abi = list(range(len(ab)))
+    plot_root_text = f'experiment_{exp}'
+
+    min_success = 0.1
+    max_successs = 0.9
+
+    true_success_rates = lambda: [
+        float(np.random.uniform(min_success, max_successs, size=1))
+        for _ in range(n_bandits)
+    ]
+
+    test_bed_constructor = lambda: get_binary_reward_test_bed(
+        success_rates=true_success_rates(),
+        stationary=True)
+
+    policy_constructor = lambda _i: BernoulliThompsonSampling(
+        initial_alpha = ab[_i][0],
+        initial_beta = ab[_i][1],
+        n_actions=n_bandits
+    )
+
+    results = parallel_simulate_over_1dparam(
+        test_bed_constructor=test_bed_constructor,
+        policy_constructor=policy_constructor,
+        params=abi,
+        n_trials=n_trials,
+        n_steps=n_steps,
+        desc=f'Experiment {exp}')
+
+    reward_averages = dict()
+    regret_averages = dict()
+
+    rewards = results['rewards']
+    regrets = results['regrets']
+
+    for i in abi:
+        reward_averages[i] = []
+        regret_averages[i] = []
+
+        for step in range(n_steps):
+            # Average across trials at each step
+            res = [rewards[i][trial][step] for trial in range(n_trials)]
+            reward_averages[i].append(np.mean(res))
+
+            res = [regrets[i][trial][step] for trial in range(n_trials)]
+            regret_averages[i].append(np.mean(res) / (step + 1))
+
+    d = os.path.join(os.getcwd(), 'images')
+    _ = mk_clear_dir(d, False)
+
+    _ = plt.figure()
+
+    legend = []
+    for i in abi:
+        plt.plot(reward_averages[i])
+        legend.append(f'$\\alpha$: {ab[i][0]:.1f}, $\\beta$: {ab[i][1]: .1f}')
+
+    plt.legend(legend)
+    plt.ylabel('Average Reward')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Bernoulli-TS')
+    try:
+        plt.savefig(os.path.join(d, f'rewards_{plot_root_text}.png'))
+    except:
+        print(f'Could not save rewards_{plot_root_text} plots')
+    finally:
+        plt.show()
+
+
+    _ = plt.figure()
+
+    legend = []
+    for i in abi:
+        plt.plot(regret_averages[i])
+        legend.append(f'$\\alpha$: {ab[i][0]:.1f}, $\\beta$: {ab[i][1]: .1f}')
+
+    plt.legend(legend)
+    plt.ylabel('Average Regret')
+    plt.xlabel('Simulation Step')
+    plt.title(
+        f'Experiment {exp}: Bernoulli-TS')
+    try:
+        plt.savefig(os.path.join(d, f'regrets_{plot_root_text}.png'))
+    except:
+        print(f'Could not save regrets_{plot_root_text} plots')
+    finally:
+        plt.show()
+
+
+def experiment_11(n_steps, n_trials):
+    from itertools import product
+
+    """
+        Bernoulli with Thompson-Sampling (Algorithm 2 in
+        https://web.stanford.edu/~bvr/pubs/TS_Tutorial.pdf).
+    """
+    exp = 11
+    n_bandits = 10  # Each bandit is triggered by one action
+    alphas = [0.5, 1., 2]
+    betas = [0.5, 1., 2]
+    ab = list(product(alphas, betas))
+    abi = list(range(len(ab)))
+    plot_root_text = f'experiment_{exp}'
+
+    rand_scale = 0.02
+    min_success = 0.1
+    max_successs = 0.9
+
+    true_success_rates = lambda: [
+        float(np.random.uniform(min_success, max_successs, size=1))
+        for _ in range(n_bandits)
+    ]
+
+    reward_randomness_scales = [rand_scale for _ in range(n_bandits)]
+
+    test_bed_constructor = lambda: get_binary_reward_test_bed(
+        success_rates=true_success_rates(),
+        reward_randomness_scales=reward_randomness_scales,
+        stationary=False)
+
+    policy_constructor = lambda _i: BernoulliThompsonSampling(
+        initial_alpha = ab[_i][0],
+        initial_beta = ab[_i][1],
+        n_actions=n_bandits
+    )
+
+    results = parallel_simulate_over_1dparam(
+        test_bed_constructor=test_bed_constructor,
+        policy_constructor=policy_constructor,
+        params=abi,
+        n_trials=n_trials,
+        n_steps=n_steps,
+        desc=f'Experiment {exp}')
+
+    reward_averages = dict()
+    regret_averages = dict()
+
+    rewards = results['rewards']
+    regrets = results['regrets']
+
+    for i in abi:
+        reward_averages[i] = []
+        regret_averages[i] = []
+
+        for step in range(n_steps):
+            # Average across trials at each step
+            res = [rewards[i][trial][step] for trial in range(n_trials)]
+            reward_averages[i].append(np.mean(res))
+
+            res = [regrets[i][trial][step] for trial in range(n_trials)]
+            regret_averages[i].append(np.mean(res) / (step + 1))
+
+    d = os.path.join(os.getcwd(), 'images')
+    _ = mk_clear_dir(d, False)
+
+    _ = plt.figure()
+
+    legend = []
+    for i in abi:
+        plt.plot(reward_averages[i])
+        legend.append(f'$\\alpha$: {ab[i][0]:.1f}, $\\beta$: {ab[i][1]: .1f}')
+
+    plt.legend(legend)
+    plt.ylabel('Average Reward')
+    plt.xlabel('Simulation Step')
+    plt.title(f'Experiment {exp}: Bernoulli-TS')
+    try:
+        plt.savefig(os.path.join(d, f'rewards_{plot_root_text}.png'))
+    except:
+        print(f'Could not save rewards_{plot_root_text} plots')
+    finally:
+        plt.show()
+
+
+    _ = plt.figure()
+
+    legend = []
+    for i in abi:
+        plt.plot(regret_averages[i])
+        legend.append(f'$\\alpha$: {ab[i][0]:.1f}, $\\beta$: {ab[i][1]: .1f}')
+
+    plt.legend(legend)
+    plt.ylabel('Average Regret')
+    plt.xlabel('Simulation Step')
+    plt.title(
+        f'Experiment {exp}: Bernoulli-TS')
+    try:
+        plt.savefig(os.path.join(d, f'regrets_{plot_root_text}.png'))
+    except:
+        print(f'Could not save regrets_{plot_root_text} plots')
+    finally:
+        plt.show()
+
+
 if __name__ == '__main__':
-    experiment_8(1000, 2000)
+    experiment_11(1000, 2000)
     exit(0)
