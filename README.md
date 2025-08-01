@@ -29,7 +29,7 @@ across environments.
 * Environments come primarily from [Gymnasium], unless noted
 
 ## Implemented Chapters:
-- [ ] Chapter 2:  Bandits (_TBD: merge from "Bandit" project_)
+- [x] Chapter 2:  [Bandits](bandits/README.md)
 - [x] Chapter 5:  [Monte Carlo Methods](tabular_methods/monte_carlo/README.md) 
 - [x] Chapter 6:  [Temporal Difference Methods](tabular_methods/td/README.md) 
 - [x] Chapter 7:  [n-Step Bootstrapping](tabular_methods/td/README.md)
@@ -41,12 +41,33 @@ across environments.
 
 
 ## Code Organization
+
+
 ```
 intro_2_rl/
 │
 ├── README.md                       # Project documentation
 │
 ├── LICENSE.md                      # Project license (MIT)
+│
+├── bandits/                        # The multi-armed bandit setting
+│   ├── eps_greedy_main.py          # Epsilon greedy methods experiments
+│   ├── gradient_main.py            # Gradient methods experiments
+│   ├── ucb_main.py                 # UCB1 methods experiments
+│   ├── addt'l_alg'os_main.py       # S-max exploration, Bernoully-Greedy, Thompson Sampling
+│   ├── utils.py                    # Utilities
+│   ├── non-assoc'_val'_funct's.py  # Non-associative setting action value functions
+│   ├── non-assoc'_policies.py      # Policies for the non-associative setting
+│   ├── summary.ipynb               # Theoretical development (better equation rendering).
+│   │
+│   ├── tools/
+│   │   ├── random_walks.py         # Random walks
+│   │   └── moving_averages.py      # Average estimators
+│   │
+│   └── environments/
+│       ├── binary_reward_testbed.py# k-armed bandits generating success/failure rewards
+│       └── cont'_reward_testbed.py # k-armed bandits generating continuous value rewards
+│
 │
 ├── tabular_methods/                # Tabular methods directory
 │   ├── monte_carlo/                # Source code for Monte Carlo (MC) methods
@@ -74,7 +95,7 @@ intro_2_rl/
 ├── approximate_methods/            # Approximate methods directory
 │   ├── off_policy/                 # Source code for off_policy methods (initial implementation. Needs debugging)
 │   │   ├── bairds.py               # Bairds counterexample, implemented examples. 
-│   │   ├── summary.ipynb           # Theoretical development.
+│   │   └── summary.ipynb           # Theoretical development.
 │   │
 │   ├── on_policy/                  # Source code for on_policy methods
 │   │   ├── agents.py               # Algorithms from: Ch. 10

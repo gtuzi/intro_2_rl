@@ -69,6 +69,7 @@ used for a generalization of the problem described above.
 ## Implementation: Run scripts
 These are the scripts to generate experiment results
 - [x] Action-value function methods: `eps_greedy_main.py`
+- [x] Gradient methods: `gradient_main.py`
 - [x] UCB1 method: `ucb_main.py`
 - [x] Additional methods, not in the book: `additional_algorithms_main.py`
 
