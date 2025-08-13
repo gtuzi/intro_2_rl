@@ -1215,9 +1215,9 @@ if __name__ == '__main__':
     seeds = (1, 2, 3 , 4, 5, 6, 7)
     alpha = 0.2
 
-    ENV_NAME = 'FrozenLake'
-    # env_name = 'CliffWalking'
-    # env_name = 'Taxi'
+    # ENV_NAME = 'FrozenLake'
+    # ENV_NAME = 'CliffWalking'
+    ENV_NAME = 'Taxi'
 
     if ENV_NAME == 'FrozenLake':
         q_init = 0.0
@@ -1243,7 +1243,7 @@ if __name__ == '__main__':
         return reward
 
     # ----------- Sarsa ------------ #
-    if 0:
+    if 1:
         sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1256,7 +1256,7 @@ if __name__ == '__main__':
         )
 
     # ------ Expected Sarsa ------- #
-    if 0:
+    if 1:
         expected_sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1269,7 +1269,7 @@ if __name__ == '__main__':
         )
 
     # --------- Q-Learning -------- #
-    if 0:
+    if 1:
         qlearning_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1281,7 +1281,7 @@ if __name__ == '__main__':
             train_seeds=seeds)
 
     # -------- nStep Sarsa -------- #
-    if 0:
+    if 1:
         nstep_sarsa_experiments(
             num_episodes=num_episodes,
             T=T,
@@ -1295,7 +1295,7 @@ if __name__ == '__main__':
         )
 
     # -------- Offpolicy nStepSarsa ------ #
-    if 1:
+    if 0:
         # Note: behavioral agent is random (U), so expect
         # the training returns to be bad.
         offpolicy_nstep_sarsa_experiments(

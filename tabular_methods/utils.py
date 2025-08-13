@@ -98,45 +98,19 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
         else:
             eps = self.eps
 
-        # We need to know which one is the greedy action and/or it's prob
-        a_greedy, pcond_greedy = self.get_greedy_action(s)
-
-        # We have get multiple greedy actions, arbitrarily tie-broken
-        num_greedy_actions = 1./pcond_greedy
-
-        p_greedy = (
-                ((1. - eps) / num_greedy_actions) +
-                eps / self.action_space_dims
-        )
-
-        greedy = np.random.choice([True, False], p=[1. - eps, eps])
-
-        if greedy:
-            return a_greedy, p_greedy
+        # Decide whether to be greedy or explore
+        if np.random.random() > eps:
+            # Get the greedy action and its conditional
+            # probability (for tie-breaking)
+            action, conditional_prob = self.get_greedy_action(s)
         else:
-            a = int(np.random.choice(self.action_space_dims))
-            # The greedy action can still be picked
-            if a == a_greedy:
-                return a, p_greedy
-            else:
-                if pcond_greedy > (1. - 0.0001):
-                    # We're guaranteed that the greedy action was not tie-broken
-                    # so the non-greedy has eps/num_actions probability
-                    return a, eps / self.action_space_dims
+            # Choose any action uniformly at random
+            action = int(np.random.choice(self.action_space_dims))
 
-                # The non-greedy action here, may have been one of the
-                # randomly tie-broken greedy actions. This means that the
-                # probability of this action may not exactly
-                # eps / action_space_dims, but rather p_greedy
+        # Look up the true probability of the chosen action using the correct method
+        prob = self.get_sa_probability(s, action)
 
-                av = self.Q[s]
-                max_vals = np.amax(av)
-                idc = np.argwhere(av == max_vals).squeeze().tolist()
-                if a in idc:
-                    return a, p_greedy
-                else:
-                    # This was a non-greedy action after all
-                    return a, eps / self.action_space_dims
+        return action, prob
 
     def state_value(self, s):
         probs = [
