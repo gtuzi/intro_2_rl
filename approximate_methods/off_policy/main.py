@@ -703,8 +703,8 @@ if __name__ == '__main__':
     do_log = False
     n_sarsa_steps = 4
 
-    epses = (0.1, ) # (0.01, 0.05, 0.1, 0.3, 0.5)
-    seeds = tuple(range(0, 3)) # tuple(range(0, 10))
+    epses = (0.01, 0.05, 0.1, 0.3, 0.5)
+    seeds = tuple(range(0, 5))
     episodic = True
 
     RENDER = False
