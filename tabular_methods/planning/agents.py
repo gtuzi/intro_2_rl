@@ -162,7 +162,10 @@ class TabularDynaQAgent(QEpsGreedyAgent):
                     # starting step
                     sp, r, done = s, 0, 0
 
-            if self.state_action_visit_count is not None:
+            if (
+                    (self.state_action_visit_count is not None) and
+                    (self.dynaq_plus_k is not None)
+            ):
                 # Encourage exploration for stale state-actions
                 # For actions that have not been visited, r = 0, so
                 # the reward is purely time

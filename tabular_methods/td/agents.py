@@ -1,9 +1,13 @@
-from typing import Union
+from typing import Union, Optional
 from collections import defaultdict
 
 import numpy as np
 
-from tabular_methods.utils import Experience, NoiseSchedule, QEpsGreedyAgent
+from tabular_methods.utils import (
+    Experience,
+    NoiseSchedule,
+    QEpsGreedyAgent
+)
 
 
 class Sarsa(QEpsGreedyAgent):
@@ -17,11 +21,14 @@ class Sarsa(QEpsGreedyAgent):
             update_coefficient: float,
             discount: float = 0.9,
             eps: Union[float, NoiseSchedule] = 0.01,
-            qval_init: float = 0.
+            qval_init: float = 0.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
-        assert 0. < update_coefficient < 1.
+
+        if not isinstance(update_coefficient, NoiseSchedule):
+            assert 0. < update_coefficient <= 1.
 
         if not isinstance(eps, NoiseSchedule):
             assert 0 <= eps <= 1
@@ -30,7 +37,8 @@ class Sarsa(QEpsGreedyAgent):
             obs_space_dims=obs_space_dims,
             action_space_dims = action_space_dims,
             discount=discount,
-            eps=eps
+            eps=eps,
+            seed=seed
         )
 
         self.t = 0
@@ -46,27 +54,33 @@ class Sarsa(QEpsGreedyAgent):
         self.Q = defaultdict(lambda: [self.qval_init] * self.action_space_dims)
         self.Q_update_count = defaultdict(lambda: [0] * self.action_space_dims)
 
-    def step(self, experience: Experience, **kwargs):
+    def reset(self):
+        # The agent here is prepared for a new episode
+        self.t = 0
+
+    def step(self, experience: Experience, **kwargs) -> float:
         s, a, r, sp, ap, done = (
             experience.s, experience.a,
             experience.r, experience.sp,
             experience.ap, experience.done
         )
 
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            self.update_coefficient.step()
+            alpha = self.update_coefficient.value
+        else:
+            alpha = self.update_coefficient
+
         tgt = r + self.discount * self.Q[sp][ap] * (1 - done)
         td_error = tgt - self.Q[s][a]
 
-        self.Q[s][a] += self.update_coefficient * td_error
+        self.Q[s][a] += alpha * td_error
         self.Q_update_count[s][a] += 1
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
-    def reset(self):
-        # The agent here is prepared for a new episode
-        self.t = 0
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
+        return td_error
 
 
 class ExpectedSarsa(QEpsGreedyAgent):
@@ -80,11 +94,14 @@ class ExpectedSarsa(QEpsGreedyAgent):
             update_coefficient: float,
             discount: float = 0.9,
             eps: Union[float, NoiseSchedule] = 0.01,
-            qval_init: float = 0.
+            qval_init: float = 0.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
-        assert 0. < update_coefficient < 1.
+
+        if not isinstance(update_coefficient, NoiseSchedule):
+            assert 0. < update_coefficient <= 1.
 
         if not isinstance(eps, NoiseSchedule):
             assert 0 <= eps <= 1
@@ -93,7 +110,8 @@ class ExpectedSarsa(QEpsGreedyAgent):
             obs_space_dims=obs_space_dims,
             action_space_dims=action_space_dims,
             discount=discount,
-            eps=eps
+            eps=eps,
+            seed=seed
         )
 
         self.t = 0
@@ -109,12 +127,22 @@ class ExpectedSarsa(QEpsGreedyAgent):
         self.Q = defaultdict(lambda: [self.qval_init] * self.action_space_dims)
         self.Q_update_count = defaultdict(lambda: [0] * self.action_space_dims)
 
-    def step(self, experience: Experience, **kwargs):
+    def reset(self):
+        # The agent here is prepared for a new episode
+        self.t = 0
+
+    def step(self, experience: Experience, **kwargs) -> float:
         s, a, r, sp, done = (
             experience.s, experience.a,
             experience.r, experience.sp,
             experience.done
         )
+
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            self.update_coefficient.step()
+            alpha = self.update_coefficient.value
+        else:
+            alpha = self.update_coefficient
 
         qp_expected = sum(
             [
@@ -127,17 +155,13 @@ class ExpectedSarsa(QEpsGreedyAgent):
 
         td_error = tgt - self.Q[s][a]
 
-        self.Q[s][a] += self.update_coefficient * td_error
+        self.Q[s][a] += alpha * td_error
         self.Q_update_count[s][a] += 1
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
-    def reset(self):
-        # The agent here is prepared for a new episode
-        self.t = 0
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
+        return td_error
 
 
 class QLearning(QEpsGreedyAgent):
@@ -153,11 +177,14 @@ class QLearning(QEpsGreedyAgent):
             update_coefficient: float,
             discount: float = 0.9,
             eps: Union[float, NoiseSchedule] = 0.01,
-            qval_init: float = 0.
+            qval_init: float = 0.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
-        assert 0. < update_coefficient < 1.
+
+        if not isinstance(update_coefficient, NoiseSchedule):
+            assert 0. < update_coefficient <= 1.
 
         if not isinstance(eps, NoiseSchedule):
             assert 0 <= eps <= 1
@@ -166,7 +193,8 @@ class QLearning(QEpsGreedyAgent):
             obs_space_dims=obs_space_dims,
             action_space_dims=action_space_dims,
             discount=discount,
-            eps=eps
+            eps=eps,
+            seed=seed
         )
 
         self.t = 0
@@ -182,28 +210,34 @@ class QLearning(QEpsGreedyAgent):
         self.Q = defaultdict(lambda: [self.qval_init] * self.action_space_dims)
         self.Q_update_count = defaultdict(lambda: [0] * self.action_space_dims)
 
-    def step(self, experience: Experience, **kwargs):
+    def reset(self):
+        # The agent here is prepared for a new episode
+        self.t = 0
+
+    def step(self, experience: Experience, **kwargs) -> float:
         s, a, r, sp, done = (
             experience.s, experience.a,
             experience.r, experience.sp,
             experience.done
         )
 
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            self.update_coefficient.step()
+            alpha = self.update_coefficient.value
+        else:
+            alpha = self.update_coefficient
+
         # Directly estimate q*
         tgt = r + self.discount * max(self.Q[sp]) * (1 - done)
         td_error = tgt - self.Q[s][a]
 
-        self.Q[s][a] += self.update_coefficient * td_error
+        self.Q[s][a] += alpha * td_error
         self.Q_update_count[s][a] += 1
 
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
-    def reset(self):
-        # The agent here is prepared for a new episode
-        self.t = 0
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
+        return td_error
 
 
 class nStepSarsa(QEpsGreedyAgent):
@@ -219,12 +253,15 @@ class nStepSarsa(QEpsGreedyAgent):
             update_coefficient: float,
             discount: float = 0.9,
             eps: Union[float, NoiseSchedule] = 0.01,
-            qval_init: float = 0.
+            qval_init: float = 0.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
-        assert 0. < update_coefficient < 1.
         assert n > 0
+
+        if not isinstance(update_coefficient, NoiseSchedule):
+            assert 0. < update_coefficient <= 1.
 
         if not isinstance(eps, NoiseSchedule):
             assert 0 <= eps <= 1
@@ -233,7 +270,8 @@ class nStepSarsa(QEpsGreedyAgent):
             obs_space_dims=obs_space_dims,
             action_space_dims=action_space_dims,
             discount=discount,
-            eps=eps
+            eps=eps,
+            seed=seed
         )
 
         self.t = 0
@@ -255,13 +293,9 @@ class nStepSarsa(QEpsGreedyAgent):
     def reset(self):
         # The agent here is prepared for a new episode
         self.t = 0
-
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
-
         self.trajectory = []
 
-    def step(self, e: Experience):
+    def step(self, e: Experience) -> float:
         self.trajectory.append(e)
         tau = self.t - self.n + 1
 
@@ -269,12 +303,22 @@ class nStepSarsa(QEpsGreedyAgent):
         if e.done and (tau < 0):
             tau = 0
 
+        loss = 0
+
         if tau >= 0:
-            self.update(tau)
+            loss = self.update(tau)
 
         self.t += 1
 
+        return loss
+
     def update(self, tau: int):
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            self.update_coefficient.step()
+            alpha = self.update_coefficient.value
+        else:
+            alpha = self.update_coefficient
+
         # ------ Policy Evaluation ------- #
         # starting from min(n-steps, T/done) back
         tau_end = min(tau+self.n, len(self.trajectory))
@@ -301,15 +345,15 @@ class nStepSarsa(QEpsGreedyAgent):
         # This is still a TD method
         td_error = target - self.Q[experience_tau.s][experience_tau.a]
 
-        self.Q[experience_tau.s][experience_tau.a] += (
-                self.update_coefficient * td_error
-        )
+        self.Q[experience_tau.s][experience_tau.a] += alpha * td_error
 
         self.Q_update_count[experience_tau.s][experience_tau.a] += 1
 
         # ------ Policy Improvement ------- #
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
+
+        return td_error
 
 
 class nStepsSarsaOffPolicy(QEpsGreedyAgent):
@@ -324,12 +368,15 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
             update_coefficient: float,
             discount: float = 0.9,
             eps: Union[float, NoiseSchedule] = 0.01,
-            qval_init: float = 0.
+            qval_init: float = 0.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
-        assert 0. < update_coefficient < 1.
         assert n_sarsa_steps > 0
+
+        if not isinstance(update_coefficient, NoiseSchedule):
+            assert 0. < update_coefficient <= 1.
 
         if not isinstance(eps, NoiseSchedule):
             assert 0 <= eps <= 1
@@ -338,7 +385,8 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
             obs_space_dims=obs_space_dims,
             action_space_dims=action_space_dims,
             discount=discount,
-            eps=eps
+            eps=eps,
+            seed=seed
         )
 
         self.t = 0
@@ -363,10 +411,6 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
         self.t = 0
         self.trajectory = []
 
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
-
-
     def step(self, e: Experience):
         self.trajectory.append(e)
         tau = self.t - self.n_sarsa_steps + 1
@@ -375,12 +419,22 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
         if e.done and (tau < 0):
             tau = 0
 
+        loss = 0
+
         if tau >= 0:
-            self.update(tau)
+            loss = self.update(tau)
 
         self.t += 1
 
-    def update(self, tau: int):
+        return loss
+
+    def update(self, tau: int) -> float:
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            self.update_coefficient.step()
+            alpha = self.update_coefficient.value
+        else:
+            alpha = self.update_coefficient
+
         # ------ Policy Evaluation ------- #
         # starting from min(n-steps, T/done) back
         tau_end = min(tau + self.n_sarsa_steps, len(self.trajectory))
@@ -422,13 +476,14 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
 
         # This is still a TD method
         td_error = rho * (target - self.Q[experience_tau.s][experience_tau.a])
-        self.Q[experience_tau.s][experience_tau.a] += (
-                self.update_coefficient * td_error)
+        self.Q[experience_tau.s][experience_tau.a] += alpha * td_error
         self.Q_update_count[experience_tau.s][experience_tau.a] += 1
 
         # ------ Policy Improvement ------- #
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
+
+        return td_error
 
 
 class QSigmaOffPolicy(QEpsGreedyAgent):
@@ -444,12 +499,15 @@ class QSigmaOffPolicy(QEpsGreedyAgent):
             update_coefficient: float,
             discount: float = 0.9,
             eps: Union[float, NoiseSchedule] = 0.01,
-            qval_init: float = 0.
+            qval_init: float = 0.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
-        assert 0. < update_coefficient < 1.
         assert n > 0
+
+        if not isinstance(update_coefficient, NoiseSchedule):
+            assert 0. < update_coefficient <= 1.
 
         if not isinstance(eps, NoiseSchedule):
             assert 0 <= eps <= 1
@@ -458,7 +516,8 @@ class QSigmaOffPolicy(QEpsGreedyAgent):
             obs_space_dims=obs_space_dims,
             action_space_dims=action_space_dims,
             discount=discount,
-            eps=eps
+            eps=eps,
+            seed=seed
         )
 
         self.t = 0
@@ -480,13 +539,9 @@ class QSigmaOffPolicy(QEpsGreedyAgent):
     def reset(self):
         # The agent here is prepared for a new episode
         self.t = 0
-
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
-
         self.trajectory = []
 
-    def step(self, e: Experience):
+    def step(self, e: Experience) -> float:
         self.trajectory.append(e)
         tau = self.t - self.n + 1
 
@@ -494,12 +549,22 @@ class QSigmaOffPolicy(QEpsGreedyAgent):
         if e.done and (tau < 0):
             tau = 0
 
+        loss = 0
+
         if tau >= 0:
-            self.update(tau)
+            loss = self.update(tau)
 
         self.t += 1
 
-    def update(self, tau):
+        return loss
+
+    def update(self, tau) -> float:
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            self.update_coefficient.step()
+            alpha = self.update_coefficient.value
+        else:
+            alpha = self.update_coefficient
+
         T = np.inf
         last_experience = self.trajectory[-1]
 
@@ -532,5 +597,8 @@ class QSigmaOffPolicy(QEpsGreedyAgent):
 
         e_tau = self.trajectory[tau]
         q_tau = self.Q[e_tau.s][e_tau.a]
-        self.Q[e_tau.s][e_tau.a] = q_tau + self.update_coefficient * (G - q_tau)
+        self.Q[e_tau.s][e_tau.a] = q_tau + alpha * (G - q_tau)
         self.Q_update_count[e_tau.s][e_tau.a] += 1
+
+        return G - q_tau
+

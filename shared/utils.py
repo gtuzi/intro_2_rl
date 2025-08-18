@@ -1,12 +1,15 @@
+from abc import ABC, abstractmethod
 from typing import Dict, Union, Any, List, Tuple
 import numpy as np
 import scipy
 
 
-class SoftPolicy:
+class SoftPolicy(ABC):
+    @abstractmethod
     def get_greedy_action(self, s) -> Tuple[int, float]:
         raise NotImplementedError
 
+    @abstractmethod
     def get_sa_probability(self, s, a) -> float:
         raise NotImplementedError
 
@@ -62,7 +65,6 @@ class LinearSchedule(NoiseSchedule):
         self.current = self.start
 
     def step(self, steps=1):
-        val = self.current
         self.current = self.bound(self.current + self.inc * steps, self.end)
 
     def reset(self):

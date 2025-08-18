@@ -1,11 +1,10 @@
-from typing import Tuple, Optional
-import numpy as np
-
+from abc import ABC, abstractmethod
+from typing import Optional
 from shared.utils import SoftPolicy
 from shared.utils import *
 
 
-class DiscreteActionAgent:
+class DiscreteActionAgent(ABC):
     def __init__(
             self,
             obs_space_dims: int,
@@ -14,10 +13,12 @@ class DiscreteActionAgent:
         self.obs_space_dims = obs_space_dims
         self.action_space_dims = action_space_dims
 
+    @abstractmethod
     def act(self, s) -> Tuple[int, float]:
         """ Return the action and probability """
         raise NotImplementedError
 
+    @abstractmethod
     def get_greedy_action(self, s) -> Tuple[int, float]:
         raise NotImplementedError
 
@@ -27,7 +28,7 @@ class DiscreteActionAgent:
     def reset(self):
         pass
 
-    def step(self, *args, **kwargs):
+    def step(self, *args, **kwargs) -> float:
         """ Learn: Qk+1 = somefunction(Qk) """
         pass
 
@@ -39,7 +40,8 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
             obs_space_dims: int,
             action_space_dims: int,
             discount: float,
-            eps: Union[float, NoiseSchedule] = 0.01
+            eps: Union[float, NoiseSchedule] = 0.01,
+            seed: Optional[int] = None
     ):
         DiscreteActionAgent.__init__(self, obs_space_dims, action_space_dims)
         SoftPolicy.__init__(self)
@@ -47,6 +49,7 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
         self.eps = eps
         self.Q = None
         self.Q_update_count = None
+        self.rng = np.random.default_rng(seed)
 
     def get_greedy_action(self, s) -> Tuple[int, float]:
         """
@@ -59,7 +62,7 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
         idc = np.argwhere(self.Q[s] == max_vals).squeeze().tolist()
         if isinstance(idc, list):
             # Random tie-breaking
-            return int(np.random.choice(idc)), 1. / len(idc)
+            return int(self.rng.choice(idc)), 1. / len(idc)
         else:
             assert isinstance(idc, int)
             return idc, 1.
@@ -99,13 +102,13 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
             eps = self.eps
 
         # Decide whether to be greedy or explore
-        if np.random.random() > eps:
+        if self.rng.random() > eps:
             # Get the greedy action and its conditional
             # probability (for tie-breaking)
             action, conditional_prob = self.get_greedy_action(s)
         else:
             # Choose any action uniformly at random
-            action = int(np.random.choice(self.action_space_dims))
+            action = int(self.rng.choice(self.action_space_dims))
 
         # Look up the true probability of the chosen action using the correct method
         prob = self.get_sa_probability(s, action)
@@ -140,6 +143,21 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
         a, p = self.get_greedy_action(s)
         return self.Q_update_count[s][a]
 
+    def entropy(self, s) -> float:
+        p = np.array(
+            [self.get_sa_probability(s=s, a=a)
+             for a in range(self.action_space_dims)
+             ]
+        )
+
+        p_safe = p[p > 0]
+
+        # Filter out zero probabilities to avoid log(0)
+        if not p_safe.any():
+            # Empty array
+            return 0.0
+
+        return float(-p.dot(np.log(p)))
 
 
 class DiscreteActionRandomAgent(DiscreteActionAgent, SoftPolicy):
