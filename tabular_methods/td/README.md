@@ -101,12 +101,17 @@ nStepSarsa used $n=4$
 
 
 #### Results
+* Sum of discounted rewards: $G_t = \sum_{k = t} \gamma^{k - t}r_t$
+* Average Sum of Discounted Rewards: $\bar{G}_0 = \frac{1}{N}\sum_n G^n_0$  
+* Average Initial State Value: $\bar{V}(s_0) = \frac{1}{N}\sum_n V(s^n_0)$
+* Average Sum of Rewards: $\bar{R}_0 = \frac{1}{N}\sum_{n}^{N}\sum_{t=0} r^{n}_t$
 
-| Environment       | $\frac{1}{N}\sum_{n}^{N}\sum_{t=0} r^{n}_t$                                                              | $\hat{V}(s_0) = \frac{1}{N}\sum_n^{N}V(s^n_0)$ vs $\hat{G}_0 = \frac{1}{N}\sum_n^{N}\sum_{t=0} \gamma^t r^{n}_t$ |
-|-------------------|----------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| Frozen Lake (v1)  | <img src="images/evaluation_metrics/FrozenLake_mean_eval_sum_raw_rewards.png" alt="Grid" width="200"/>   | <img src="images/learning/FrozenLake_value_accuracy_JOINT.png" alt="Grid" width="200"/>                          |
-| CliffWalking (v0) | <img src="images/evaluation_metrics/CliffWalking_mean_eval_sum_raw_rewards.png" alt="Grid" width="200"/> | <img src="images/learning/CliffWalking_value_accuracy_JOINT.png" alt="Grid" width="200"/>                        |
-| Taxi (v3)         | <img src="images/evaluation_metrics/Taxi_mean_eval_sum_raw_rewards.png" alt="Grid" width="200"/>         | <img src="images/learning/Taxi_value_accuracy_JOINT.png" alt="Grid" width="200"/>                                |
+
+| Environment       | $\bar{R}_0$                                                                                              | $\bar{V}(s_0)$ vs. $\bar{G}_0$                                                            |
+|-------------------|----------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
+| Frozen Lake (v1)  | <img src="images/evaluation_metrics/FrozenLake_mean_eval_sum_raw_rewards.png" alt="Grid" width="400"/>   | <img src="images/learning/FrozenLake_value_accuracy_JOINT.png" alt="Grid" width="400"/>   |
+| CliffWalking (v0) | <img src="images/evaluation_metrics/CliffWalking_mean_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/learning/CliffWalking_value_accuracy_JOINT.png" alt="Grid" width="400"/> |
+| Taxi (v3)         | <img src="images/evaluation_metrics/Taxi_mean_eval_sum_raw_rewards.png" alt="Grid" width="400"/>         | <img src="images/learning/Taxi_value_accuracy_JOINT.png" alt="Grid" width="400"/>         |
 
 
 ## Execution
