@@ -188,6 +188,23 @@ class DiscreteActionRandomAgent(DiscreteActionAgent, SoftPolicy):
     def get_sa_probability(self, s, a) -> float:
         return self.action_gen.probability(a)
 
+    def entropy(self, s):
+        # stateless
+        p = np.array([
+            self.action_gen.probability(a)
+            for a in range(self.action_space_dims)
+        ])
+
+        p_safe = p[p > 0]
+
+        # Filter out zero probabilities to avoid log(0)
+        if not p_safe.any():
+            # Empty array
+            return 0.0
+
+        return float(-p.dot(np.log(p)))
+
+
     def get_greedy_action(self, s) -> Tuple[int, float]:
         return self.act(s)
 

@@ -2,6 +2,7 @@
 import os
 import random
 import copy
+import pickle
 from typing import List, Callable, Dict, Any, Optional
 from collections import Counter
 
@@ -20,14 +21,46 @@ from tabular_methods.utils import (
 )
 
 
+def save_results(results: List[Dict[str, Any]], filepath: str):
+    """
+    Saves the experiment results object to a file using pickle.
+
+    Args:
+        results: The data structure returned by the training function (e.g., all_seeds_data).
+        filepath: The full path to the file where results will be saved (e.g., 'results/sarsa.pkl').
+    """
+    # Ensure the directory exists
+    directory = os.path.dirname(filepath)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    with open(filepath, 'wb') as f:
+        pickle.dump(results, f)
+    print(f"Results successfully saved to: {filepath}")
+
+
+def load_results(filepath: str) -> List[Dict[str, Any]]:
+    """
+    Loads experiment results from a pickle file.
+
+    Args:
+        filepath: The full path to the file to load.
+
+    Returns:
+        The data structure containing the experiment results.
+    """
+    with open(filepath, 'rb') as f:
+        results = pickle.load(f)
+    print(f"Results successfully loaded from: {filepath}")
+    return results
+
+
 def preprocess_for_numerical_plots(
         all_seeds_data: List[Dict[str, Any]],
         algorithm_name: str
 ) -> pd.DataFrame:
     """
-    Converts per-step evaluation data into a flat pandas DataFrame,
-    averaging metrics from evaluation batches. Only creates records for
-    timesteps where an evaluation was performed.
+    Unpacks both soft and hard evaluation results into separate columns.
     """
     records = []
     for seed_run in all_seeds_data:
@@ -36,46 +69,43 @@ def preprocess_for_numerical_plots(
             for step_time, step_metrics in episode_data['steps_data'].items():
                 eval_results_dict = step_metrics.get("evaluation_results")
 
-                # Only process and create records if an evaluation happened at this step
                 if eval_results_dict:
-                    # Create a base record with info about the training episode
-                    train_record = {
-                        'algorithm'  : algorithm_name,
-                        'seed'       : seed,
+                    record = {
+                        'algorithm'  : algorithm_name, 'seed': seed,
                         'train_steps': step_time,
-                        'episode_num': episode_data['episode_num'],
+                        'episode_num': episode_data['episode_num']
                     }
 
-                    # Add metrics that are averaged over the training episode
+                    # Process soft and hard evaluation results
+                    for eval_type in ['soft_eval', 'hard_eval']:
+                        if eval_type in eval_results_dict:
+                            eval_data = eval_results_dict[eval_type]
+                            eval_df = pd.DataFrame(eval_data["episodes"])
+                            prefix = f"{eval_type.split('_')[0]}_"  # 'soft_' or 'hard_'
+
+                            record[f'mean_{prefix}eval_G0'] = eval_df[
+                                'G0'].mean()
+                            record[f'mean_{prefix}eval_sum_raw_rewards'] = \
+                            eval_df['sum_raw_rewards'].mean()
+                            record[f'mean_{prefix}eval_episode_length'] = \
+                            eval_df['episode_length'].mean()
+                            record[f'{prefix}eval_best_seen_score'] = \
+                            eval_data['best_seen_score']
+
+                            # V0 is the same regardless of soft/hard eval, so only store once
+                            if 'mean_eval_V0' not in record:
+                                record['mean_eval_V0'] = eval_df['V0'].mean()
+
+                    # Add training metrics
                     episode_steps_df = pd.DataFrame.from_dict(
-                        data=episode_data['steps_data'],
-                        orient='index'
-                    )
-                    train_record['mean_entropy'] = episode_steps_df[
-                        'entropy'].mean()
-                    train_record['mean_behavioral_loss'] = episode_steps_df[
+                        episode_data['steps_data'], orient='index')
+                    record['mean_entropy'] = episode_steps_df['entropy'].mean()
+                    record['mean_behavioral_loss'] = episode_steps_df[
                         'behavioral_agent_loss'].mean()
-                    train_record['mean_target_loss'] = episode_steps_df[
+                    record['mean_target_loss'] = episode_steps_df[
                         'target_agent_loss'].mean()
-                    train_record['eval_best_seen_score'] = eval_results_dict[
-                        'best_seen_score']
 
-                    # Create a DataFrame from the list of evaluation episode results
-                    eval_df = pd.DataFrame(eval_results_dict["episodes"])
-
-                    # Create a single, aggregated record for this evaluation point
-                    eval_record = {
-                        'mean_eval_G0'             : eval_df['G0'].mean(),
-                        'mean_eval_V0'             : eval_df['V0'].mean(),
-                        'mean_eval_sum_raw_rewards': eval_df[
-                            'sum_raw_rewards'].mean(),
-                        'mean_eval_episode_length' : eval_df[
-                            'episode_length'].mean(),
-
-                        # Note: Action/State distributions are now lost in this aggregated view.
-                        # We will need a different approach if you want to plot them.
-                    }
-                    records.append({**train_record, **eval_record})
+                    records.append(record)
 
     return pd.DataFrame(records)
 
@@ -85,8 +115,8 @@ def preprocess_for_distribution_plots(
         algorithm_name: str
 ) -> pd.DataFrame:
     """
-    Creates a DataFrame specifically for distribution plots, preserving the
-    raw action_distribution and state_visitation dictionaries.
+    Creates a DataFrame for distribution plots, handling both soft and hard
+    evaluation types by creating an 'eval_type' column.
     """
     records = []
     for seed_run in all_seeds_data:
@@ -96,18 +126,20 @@ def preprocess_for_distribution_plots(
                 eval_results_dict = step_metrics.get("evaluation_results")
 
                 if eval_results_dict:
-                    # For each evaluation episode, create a separate record
-                    for eval_episode in eval_results_dict["episodes"]:
-                        record = {
-                            'algorithm'               : algorithm_name,
-                            'seed'                    : seed,
-                            'train_steps'             : step_time,
-                            'eval_action_distribution': eval_episode.get(
-                                'action_distribution'),
-                            'eval_state_visitation'   : eval_episode.get(
-                                'state_visitation')
-                        }
-                        records.append(record)
+                    # Iterate through both soft and hard evaluation results
+                    for eval_type in ['soft_eval', 'hard_eval']:
+                        if eval_type in eval_results_dict:
+                            eval_data = eval_results_dict[eval_type]
+                            for eval_episode in eval_data["episodes"]:
+                                record = {
+                                    'algorithm': algorithm_name,
+                                    'seed': seed,
+                                    'train_steps': step_time,
+                                    'eval_type': eval_type.split('_')[0],  # 'soft' or 'hard'
+                                    'eval_action_distribution': eval_episode.get('action_distribution'),
+                                    'eval_state_visitation': eval_episode.get('state_visitation')
+                                }
+                                records.append(record)
 
     return pd.DataFrame(records)
 
@@ -197,95 +229,109 @@ def sequential_evaluate(
         env_builder: Callable[[], Env],
         agent: QEpsGreedyAgent,
         seeds: List[int],
-        greedy_eval: bool = True,
         T: int = 30,
         reward_shaper: Callable = lambda reward, done, t: reward,
-        state_bins: List[np.ndarray] = None,
+        state_bins: Optional[List[np.ndarray]] = None,
+        soft_eval: bool = False,
+        hard_eval: bool = False,
         **kwargs
 ) -> Dict[str, Any]:
     """
-    Evaluates an agent by coordinating multiple single-episode evaluations.
+    Runs both a soft (epsilon-greedy) and hard (greedy) evaluation.
     """
+    results = {}
+    for is_greedy in [False, True]:
 
-    evaluation_episodes = []
-    best_seen_score = -float('inf')
-    num_episodes = len(seeds)
+        if is_greedy and (not hard_eval):
+            continue # skip
+        elif (not is_greedy) and (not soft_eval):
+            continue
 
-    with tqdm(total=num_episodes, desc=f'Eval', ncols=100) as pbar:
-        for seed in seeds:
-            # Call the core single-episode function
-            episode_data = evaluate_single_episode(
-                env_builder=env_builder,
-                agent=copy.deepcopy(agent),
-                seed=seed,
-                T=T,
-                greedy_eval=greedy_eval,
-                reward_shaper=reward_shaper,
-                state_bins=state_bins,
-                **kwargs
-            )
+        eval_type = 'hard_eval' if is_greedy else 'soft_eval'
 
-            current_score = episode_data['sum_raw_rewards']
-            best_seen_score = max(best_seen_score, current_score)
-            evaluation_episodes.append(episode_data)
+        evaluation_episodes = []
+        best_seen_score = -float('inf')
 
-            pbar.set_postfix({
-                "G0"  : f" {episode_data['G0']:.2f}",
-                "V[0]": f"{episode_data['V0']:.2f}"
-            })
-            pbar.update(1)
+        with tqdm(
+                total=len(seeds),
+                desc=f'Eval ({eval_type})',
+                ncols=100
+        ) as pbar:
+            for seed in seeds:
+                episode_data = evaluate_single_episode(
+                    env_builder=env_builder,
+                    agent=copy.deepcopy(agent),
+                    seed=seed,
+                    T=T,
+                    greedy_eval=is_greedy,
+                    reward_shaper=reward_shaper,
+                    state_bins=state_bins,
+                    **kwargs
+                )
 
-    return {
-        "episodes"       : evaluation_episodes,
-        "best_seen_score": best_seen_score
-    }
+                current_score = episode_data['sum_raw_rewards']
+                best_seen_score = max(best_seen_score, current_score)
+                evaluation_episodes.append(episode_data)
+                pbar.update(1)
+
+        results[eval_type] = {
+            "episodes"       : evaluation_episodes,
+            "best_seen_score": best_seen_score
+        }
+    return results
 
 
 def parallel_evaluate(
         env_builder: Callable[[], Env],
         agent: QEpsGreedyAgent,
         seeds: List[int],
-        greedy_eval: bool = True,
         T: int = 30,
         reward_shaper: Callable = lambda reward, done, t: reward,
         state_bins: Optional[List[np.ndarray]] = None,
         max_workers: Optional[int] = None,
+        soft_eval: bool = False,
+        hard_eval: bool = False,
         **kwargs
 ) -> Dict[str, Any]:
     """
-    Evaluates an agent by coordinating multiple single-episode evaluations in parallel using joblib.
+    Runs both soft and hard evaluations in parallel using joblib.
     """
-    # The 'n_jobs' parameter in joblib is equivalent to 'max_workers'.
-    # A value of -1 tells joblib to use all available CPU cores.
+    results = {}
+    for is_greedy in [False, True]:
 
-    n_jobs = max_workers if max_workers is not None else -1
+        if is_greedy and (not hard_eval):
+            continue # skip
+        elif (not is_greedy) and (not soft_eval):
+            continue
 
-    # The Parallel object runs the delayed function calls in separate processes.
-    # It returns a list of the results from each function call.
-    evaluation_episodes = Parallel(n_jobs=n_jobs)(
-        delayed(evaluate_single_episode)(
-            env_builder=env_builder,
-            agent= copy.deepcopy(agent),
-            seed=seed,
-            T=T,
-            greedy_eval=greedy_eval,
-            reward_shaper=reward_shaper,
-            state_bins=state_bins,
-            **kwargs
-        ) for seed in tqdm(seeds, desc="Parallel Eval")
-    )
+        eval_type = 'hard_eval' if is_greedy else 'soft_eval'
+        n_jobs = max_workers if max_workers is not None else -1
 
-    # Post-process the list of results to find the best score
-    best_seen_score = -float('inf')
-    if evaluation_episodes:
-        best_seen_score = max(ep['sum_raw_rewards'] for ep in evaluation_episodes)
+        evaluation_episodes = Parallel(n_jobs=n_jobs)(
+            delayed(evaluate_single_episode)(
+                env_builder=env_builder,
+                agent=copy.deepcopy(agent),
+                seed=seed,
+                T=T,
+                greedy_eval=is_greedy,
+                reward_shaper=reward_shaper,
+                state_bins=state_bins,
+                **kwargs
+            ) for seed in tqdm(seeds, desc=f"Parallel Eval ({eval_type})")
+        )
 
-    return {
-        "episodes": evaluation_episodes,
-        "best_seen_score": best_seen_score
-    }
+        best_seen_score = -float('inf')
+        if evaluation_episodes:
+            best_seen_score = max(ep['sum_raw_rewards'] for ep in evaluation_episodes)
+
+        results[eval_type] = {
+            "episodes": evaluation_episodes,
+            "best_seen_score": best_seen_score
+        }
+    return results
 
 # endregion eval
+
 
 # region train
 def train_single_seed(
@@ -302,9 +348,10 @@ def train_single_seed(
         do_eval: bool = True,
         eval_num_episodes: int = 10,
         evaluate_frequency: int = 1,
-        greedy_eval: bool = True,
         state_bins: Optional[List[np.ndarray]] = None,
         parallel_eval: bool = False,
+        soft_eval: bool = False,
+        hard_eval: bool = False,
         eval_max_workers: Optional[int] = None,
         **kwargs
 ) -> Dict[str, Any]:
@@ -321,22 +368,24 @@ def train_single_seed(
     env.action_space.seed(seed)
 
     bkwargs = behavioral_agent_kwargs.copy()
-    bkwargs['seed'] = seed
 
-    if 'eps_schedule_builder' in bkwargs:
-        eps_schedule_builder = bkwargs.pop('eps_schedule_builder')
-        eps_schedule_kwargs = bkwargs.pop('eps_schedule_kwargs')
-        bkwargs['eps'] = eps_schedule_builder(**eps_schedule_kwargs)
-    else:
-        assert 'eps'in bkwargs, 'Provide eps'
+    if issubclass(behavioral_agent_class, QEpsGreedyAgent):
+        bkwargs['seed'] = seed
 
-    if 'update_coefficient_builder' in bkwargs:
-        update_coefficient_builder = bkwargs.pop('update_coefficient_builder')
-        update_coefficient_kwargs = bkwargs.pop('update_coefficient_kwargs')
-        bkwargs['update_coefficient'] = update_coefficient_builder(**update_coefficient_kwargs)
-    else:
-        assert 'update_coefficient' in bkwargs, \
-            'Provide update_coefficient for behavioral agent'
+        if 'eps_schedule_builder' in bkwargs:
+            eps_schedule_builder = bkwargs.pop('eps_schedule_builder')
+            eps_schedule_kwargs = bkwargs.pop('eps_schedule_kwargs')
+            bkwargs['eps'] = eps_schedule_builder(**eps_schedule_kwargs)
+        else:
+            assert 'eps'in bkwargs, 'Provide eps'
+
+        if 'update_coefficient_builder' in bkwargs:
+            update_coefficient_builder = bkwargs.pop('update_coefficient_builder')
+            update_coefficient_kwargs = bkwargs.pop('update_coefficient_kwargs')
+            bkwargs['update_coefficient'] = update_coefficient_builder(**update_coefficient_kwargs)
+        else:
+            assert 'update_coefficient' in bkwargs, \
+                'Provide update_coefficient for behavioral agent'
 
     behavioral_agent = behavioral_agent_class(**bkwargs)
 
@@ -469,23 +518,25 @@ def train_single_seed(
                         evaluation_results = parallel_evaluate(
                             env_builder=env_builder,
                             agent=eval_agent,
-                            greedy_eval=greedy_eval,
                             seeds=eval_seeds,
                             T=T,
                             reward_shaper=reward_shaper,
                             state_bins=state_bins,
                             max_workers=eval_max_workers,
+                            soft_eval=soft_eval,
+                            hard_eval=hard_eval,
                             **kwargs
                         )
                     else:
                         evaluation_results = sequential_evaluate(
                             env_builder=env_builder,
                             agent=eval_agent,
-                            greedy_eval=greedy_eval,
                             seeds=eval_seeds,
                             T=T,
                             reward_shaper=reward_shaper,
                             state_bins=state_bins,
+                            soft_eval=soft_eval,
+                            hard_eval=hard_eval,
                             **kwargs
                         )
 
@@ -529,23 +580,25 @@ def train_single_seed(
                     evaluation_results = parallel_evaluate(
                         env_builder=env_builder,
                         agent=eval_agent,
-                        greedy_eval=greedy_eval,
                         seeds=eval_seeds,
                         T=T,
                         reward_shaper=reward_shaper,
                         state_bins=state_bins,
                         max_workers=eval_max_workers,
+                        soft_eval=soft_eval,
+                        hard_eval=hard_eval,
                         **kwargs
                     )
                 else:
                     evaluation_results = sequential_evaluate(
                         env_builder=env_builder,
                         agent=eval_agent,
-                        greedy_eval=greedy_eval,
                         seeds=eval_seeds,
                         T=T,
                         reward_shaper=reward_shaper,
                         state_bins=state_bins,
+                        soft_eval=soft_eval,
+                        hard_eval=hard_eval,
                         **kwargs
                     )
 
@@ -576,7 +629,7 @@ def train_single_seed(
             seed_data["training_episodes"].append(episode_data)
 
             pbar.set_postfix(
-                {"G0": f" {G0:.2f}", "V[0]": f"{episode_data['V0']:.2f}"}
+                {"G0": f" {G0:.2f}", "V[0]": f"{V0 if V0 is not None else 0:.2f}"}
             )
 
             pbar.update(1)
@@ -599,8 +652,9 @@ def sequential_train(
         do_eval: bool = True,
         eval_num_episodes: int = 10,
         evaluate_frequency: int = 1,
-        greedy_eval: bool = True,
         train_seeds=(1, 2, 3, 4),
+        soft_eval: bool = False,
+        hard_eval: bool = False,
         state_bins: Optional[List[np.ndarray]] = None,
         **kwargs
 ) -> List[Dict[str, Any]]:
@@ -624,7 +678,8 @@ def sequential_train(
             do_eval=do_eval,
             eval_num_episodes=eval_num_episodes,
             evaluate_frequency=evaluate_frequency,
-            greedy_eval=greedy_eval,
+            soft_eval=soft_eval,
+            hard_eval=hard_eval,
             state_bins=state_bins,
             **kwargs
         )
@@ -648,10 +703,11 @@ def parallel_train(
         do_eval: bool = True,
         eval_num_episodes: int = 10,
         evaluate_frequency: int = 1,
-        greedy_eval: bool = True,
         train_seeds=(1, 2, 3, 4),
         state_bins: Optional[List[np.ndarray]] = None,
         parallel_eval: bool = False,
+        soft_eval: bool = False,
+        hard_eval: bool = False,
         **kwargs
 ) -> List[Dict[str, Any]]:
     """
@@ -678,10 +734,11 @@ def parallel_train(
             do_eval=do_eval,
             eval_num_episodes=eval_num_episodes,
             evaluate_frequency=evaluate_frequency,
-            greedy_eval=greedy_eval,
-            state_bins=state_bins,
             parallel_eval=parallel_eval,
             eval_max_workers=actual_eval_workers,
+            soft_eval=soft_eval,
+            hard_eval=hard_eval,
+            state_bins = state_bins,
             **kwargs
         ) for seed in tqdm(train_seeds, desc="Total Progress (Seeds)")
     )

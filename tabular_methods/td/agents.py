@@ -364,7 +364,7 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
             self,
             obs_space_dims: int,
             action_space_dims: int,
-            n_sarsa_steps: int,
+            n: int,
             update_coefficient: float,
             discount: float = 0.9,
             eps: Union[float, NoiseSchedule] = 0.01,
@@ -373,7 +373,7 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
-        assert n_sarsa_steps > 0
+        assert n > 0
 
         if not isinstance(update_coefficient, NoiseSchedule):
             assert 0. < update_coefficient <= 1.
@@ -390,7 +390,7 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
         )
 
         self.t = 0
-        self.n_sarsa_steps = n_sarsa_steps
+        self.n = n
         self.update_coefficient = update_coefficient
         self.qval_init = qval_init
         self.trajectory = []
@@ -413,7 +413,7 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
 
     def step(self, e: Experience):
         self.trajectory.append(e)
-        tau = self.t - self.n_sarsa_steps + 1
+        tau = self.t - self.n + 1
 
         # If the episode ends before n-steps have been rolled out
         if e.done and (tau < 0):
@@ -437,7 +437,7 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
 
         # ------ Policy Evaluation ------- #
         # starting from min(n-steps, T/done) back
-        tau_end = min(tau + self.n_sarsa_steps, len(self.trajectory))
+        tau_end = min(tau + self.n, len(self.trajectory))
 
         target = sum(
             [
@@ -454,7 +454,7 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
         # In a way, rho is looking at the (a|s) following the r[tau+1].
         # But since we don't have any (a, s) following r[tau + n_steps] this
         # is truncated one step earlier.
-        tau_end_rho = min(tau + self.n_sarsa_steps + 1, len(self.trajectory) - 1)
+        tau_end_rho = min(tau + self.n + 1, len(self.trajectory) - 1)
 
         rho = [
             self.get_sa_probability(e.s, e.a) / e.p
@@ -471,7 +471,7 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
 
         if not experience_tau_end.done:
             # Episode not terminated
-            target += (self.discount ** self.n_sarsa_steps) * self.Q[
+            target += (self.discount ** self.n) * self.Q[
                 experience_tau_end.sp][experience_tau_end.ap]
 
         # This is still a TD method
