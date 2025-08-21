@@ -1,23 +1,18 @@
-from typing import Callable
-
-import numpy as np
 import gymnasium as gym
 from gymnasium import Env
-import seaborn as sns
 from scipy.stats import randint
 
-from shared.utils import CosineDecaySchedule
-from tabular_methods.utils import (
+from shared.utils import (
     LinearSchedule,
-    Experience,
-    DiscreteActionAgent,
-    DiscreteActionRandomAgent,
-    QEpsGreedyAgent, SoftPolicy
+    CosineDecaySchedule,
+    ExponentialSchedule
 )
 
 from tabular_methods.train import (
-    parallel_train, sequential_train, preprocess_for_numerical_plots,
-    preprocess_for_distribution_plots
+    parallel_train, sequential_train,
+    preprocess_for_distribution_plots,
+    preprocess_for_training_plots,
+    preprocess_for_evaluation_plots, print_health_report
 )
 
 from tabular_methods.plot import (
@@ -34,7 +29,7 @@ from agents import (
     ExpectedSarsa,
     nStepSarsa,
     nStepsSarsaOffPolicy,
-    QSigmaOffPolicy
+    nStepsQSigmaOffPolicy
 )
 
 global ENV_NAME
@@ -81,129 +76,78 @@ def build_cosine_sched(start, steps, end = 0.0):
     return CosineDecaySchedule(start, final_value=end, decay_steps=steps)
 
 
+def build_exponential_sched(start, steps, end = 0.0):
+    return ExponentialSchedule(start, end=end, steps=steps)
+
+
 def env_builder() -> Env:
     return build_env(ENV_NAME, render=False)
 
 
-if __name__ == '__main__':
-    do_on_policy = True
-    do_off_policy = False
 
-    seeds =  list(range(5)) # list(range(10))
+def run_on_policy_experiments(
+        num_train_seeds: int = 10,
+        eval_num_episodes=50,
+):
+    global ENV_NAME
+
+    seeds = list(range(num_train_seeds))
     state_bins = None
-    num_parallel_workers = min(10, len(seeds))
-    eval_num_episodes = 20 # 50
 
-    # ENV_NAME = 'FrozenLake'
-    # ENV_NAME = 'CliffWalking'
-    ENV_NAME = 'Taxi'
+    num_parallel_workers = min(10, len(seeds))
 
     if ENV_NAME == 'FrozenLake':
-        if do_on_policy:
-            num_episodes = 10000
-            T = 100
-            evaluate_frequency = max(1, int(0.001 * num_episodes * T))
+        num_episodes = 10000
+        T = 100
+        evaluate_frequency = max(1, int(0.001 * num_episodes * T))
 
-            q_init = -1.0
+        q_init = -1.0
 
-            epsilon_start = 1.0
-            epsilon_end = 0.001
-            eps_steps = num_episodes * T // 10
-            eps_schedule_builder = build_linear_sched
+        epsilon_start = 1.0
+        epsilon_end = 0.001
+        eps_steps = num_episodes * T // 10
+        eps_schedule_builder = build_linear_sched
 
-            alpha_start = 0.3
-            alpha_end = 0.1
-            alpha_steps = num_episodes * T
-            update_coefficient_builder = build_linear_sched # alpha / lr
-        elif do_off_policy:
-            num_episodes = 10000
-            T = 100
-            evaluate_frequency = max(1, int(0.001 * num_episodes * T))
-
-            q_init = -1.0
-
-            epsilon_start = 1.0
-            epsilon_end = 0.001
-            eps_steps = num_episodes * T // 10
-            eps_schedule_builder = build_linear_sched
-
-            alpha_start = 0.3
-            alpha_end = 0.1
-            alpha_steps = num_episodes * T
-            update_coefficient_builder = build_linear_sched  # alpha / lr
+        alpha_start = 0.3
+        alpha_end = 0.01
+        alpha_steps = num_episodes * T
+        update_coefficient_builder = build_linear_sched  # alpha / lr
 
     elif ENV_NAME == 'CliffWalking':
-        if do_on_policy:
-            num_episodes = 5000
-            T = 20
+        num_episodes = 5000
+        T = 20
 
-            q_init = 0.
+        q_init = 0.
 
-            epsilon_start = 1.0
-            epsilon_end = 0.01
-            eps_steps = num_episodes * T
-            eps_schedule_builder = build_linear_sched
+        epsilon_start = 1.0
+        epsilon_end = 0.01
+        eps_steps = num_episodes * T
+        eps_schedule_builder = build_linear_sched
 
-            alpha_start = 0.5
-            alpha_end = 0.01
-            alpha_steps = num_episodes * T
-            update_coefficient_builder = build_linear_sched  # alpha / lr
+        alpha_start = 0.5
+        alpha_end = 0.01
+        alpha_steps = num_episodes * T
+        update_coefficient_builder = build_linear_sched  # alpha / lr
 
-            # the smaller, the more frequent
-            evaluate_frequency = max(1, int(0.05 * num_episodes * T))
-        elif do_off_policy:
-            num_episodes = 5000
-            T = 20
-
-            q_init = 0.
-
-            epsilon_start = 1.0
-            epsilon_end = 0.01
-            eps_steps = num_episodes * T
-            eps_schedule_builder = build_linear_sched
-
-            alpha_start = 0.3
-            alpha_end = 0.01
-            alpha_steps = num_episodes * T
-            update_coefficient_builder = build_linear_sched  # alpha / lr
-
-            # the smaller, the more frequent
-            evaluate_frequency = max(1, int(0.05 * num_episodes * T))
+        # the smaller, the more frequent
+        evaluate_frequency = max(1, int(0.05 * num_episodes * T))
 
     elif ENV_NAME == 'Taxi':
-        if do_on_policy:
-            num_episodes = 5000
-            T = 50
-            q_init = 0.
+        num_episodes = 5000
+        T = 50
+        q_init = 0.
 
-            epsilon_start = 0.3
-            epsilon_end = 0.001
-            eps_steps = num_episodes * T
-            eps_schedule_builder = build_linear_sched
+        epsilon_start = 0.3
+        epsilon_end = 0.001
+        eps_steps = num_episodes * T
+        eps_schedule_builder = build_linear_sched
 
-            alpha_start = 1.0
-            alpha_end = 0.2
-            alpha_steps = num_episodes * T
-            update_coefficient_builder = build_linear_sched  # alpha / lr
+        alpha_start = 1.0
+        alpha_end = 0.2
+        alpha_steps = num_episodes * T
+        update_coefficient_builder = build_linear_sched  # alpha / lr
 
-            evaluate_frequency = max(1, int(0.02 * num_episodes * T))
-
-        elif do_off_policy:
-            num_episodes = 5000
-            T = 50
-            q_init = 0.
-
-            epsilon_start = 1.0
-            epsilon_end = 0.001
-            eps_steps = num_episodes * T
-            eps_schedule_builder = build_linear_sched
-
-            alpha_start = 0.1
-            alpha_end = 0.001
-            alpha_steps = num_episodes * T
-            update_coefficient_builder = build_cosine_sched  # alpha / lr
-
-            evaluate_frequency = max(1, int(0.01 * num_episodes * T))
+        evaluate_frequency = max(1, int(0.02 * num_episodes * T))
 
     else:
         raise NotImplementedError
@@ -211,6 +155,7 @@ if __name__ == '__main__':
     env = env_builder()
 
     gamma = 0.99
+
     agent_kwargs = dict(
         action_space_dims=int(env.action_space.n),
         obs_space_dims=int(env.observation_space.n),
@@ -220,224 +165,405 @@ if __name__ == '__main__':
         eps_schedule_kwargs={
             "start": epsilon_start,
             "steps": eps_steps,
-            "end": epsilon_end
+            "end"  : epsilon_end
         },
         update_coefficient_builder=update_coefficient_builder,
         update_coefficient_kwargs={
             "start": alpha_start,
             "steps": alpha_steps,
-            "end": alpha_end
+            "end"  : alpha_end
         }
     )
 
-    processed_numerical_results = { }
-    processed_distribution_results = { }
-
-    # region On-Policy
-    if do_on_policy:
-        for agent_name, agent_class in [
-            ('Sarsa', Sarsa),
-            ('ExpectedSarsa', ExpectedSarsa),
-            ('QLearning', QLearning),
-            ('nStepSarsa', nStepSarsa)
-        ]:
-
-            akwargs = agent_kwargs.copy()
-
-            if agent_class == nStepSarsa:
-                n = 4
-                akwargs.update(dict(n = n))
-
-            results = parallel_train(
-                env_builder=env_builder,
-                behavioral_agent_class=agent_class,
-                behavioral_agent_kwargs=akwargs,
-                T=T,
-                num_episodes=num_episodes,
-                reward_shaper=reward_shaper,
-                train_seeds=seeds,
-                do_eval=True,
-                eval_num_episodes=eval_num_episodes,
-                evaluate_frequency=evaluate_frequency,
-                parallel_eval=True,
-                soft_eval=True,
-                hard_eval=True,
-                num_parallel_workers=num_parallel_workers,
-            )
-
-            processed_numerical_results.update({
-                agent_name: preprocess_for_numerical_plots(
-                    results, agent_name)
-            })
-
-            processed_distribution_results.update({
-                agent_name: preprocess_for_distribution_plots(
-                    results, agent_name)
-            })
-
-        # --- Plotting --- #
-        all_algorithm_names = list(processed_distribution_results.keys())
-        palette = buil_high_contrast_palette(n_colors=len(all_algorithm_names))
-
-        color_map = {
-            name: color for name, color in zip(
-                list(processed_distribution_results.keys()),
-                palette
-            )
-        }
-
-        plot_training_metrics(
-            results=processed_numerical_results,
-            color_map=color_map,
-            file_root=f'{ENV_NAME}',
-            save_dir='images/training_metrics/on_policy',
-        )
-
-        plot_evaluation_metrics(
-            results=processed_numerical_results,
-            color_map=color_map,
-            file_root = f'{ENV_NAME}',
-            save_dir = 'images/evaluation_metrics/on_policy',
-        )
-
-        plot_value_accuracy(
-            results=processed_numerical_results,
-            metrics_to_compare=['V0', 'soft_G0'],
-            color_map=color_map,
-            file_root=f'{ENV_NAME}',
-            save_dir='images/learning/on_policy',
-        )
-
-        plot_action_distribution(
-            results=processed_distribution_results,
-            file_root = f'{ENV_NAME}',
-            save_dir = 'images/behaviors/on_policy',
-        )
-
-    # endregion
-    # --- 5. Generate an EXAMPLE State Visitation heatmap ---
-    # NOTE: This plot will only work if you ran the experiment with state_bins defined.
-    # You must change x_dim_idx and y_dim_idx to match the state dimensions
-    # you want to visualize for your specific environment.
-    # This example assumes a 4D state space (like CartPole) and plots dimension 0 vs. 2.
-    #
-    # print("\n--- Generating State Visitation Heatmap (Example: Dim 0 vs 2) ---")
-    # plot_state_visitation(
-    #     results=processed_results,
-    #     x_dim_idx=0,
-    #     y_dim_idx=2
-    # )
-
-    # region Off-Policy
-
-    processed_numerical_results = {}
+    processed_training_results = {}
+    processed_evaluation_results = {}
     processed_distribution_results = {}
 
-    # behavioral_class = ExpectedSarsa
-    behavioral_class = DiscreteActionRandomAgent
+    for agent_name, agent_class in [
+        ('Sarsa', Sarsa),
+        ('ExpectedSarsa', ExpectedSarsa),
+        ('QLearning', QLearning),
+        ('nStepSarsa-4', nStepSarsa)
+    ]:
 
-    if do_off_policy:
-        for agent_name, target_class in [
-            ('OffPolicyNStepSarsa-1', nStepsSarsaOffPolicy),
-            # ('OffPolicyNStepSarsa-2', nStepsSarsaOffPolicy),
-            ('OffPolicyNStepSarsa-3', nStepsSarsaOffPolicy),
-            # ('OffPolicyNStepSarsa-5', nStepsSarsaOffPolicy)
-        ]:
+        akwargs = agent_kwargs.copy()
 
-            behavioral_akwargs = dict(
-                obs_space_dims = agent_kwargs['obs_space_dims'],  # Not used
-                action_space_dims = agent_kwargs['action_space_dims'],
-                distribution=randint,
-                distribution_args=dict(
-                    low=0,
-                    high=agent_kwargs['action_space_dims']
-                )
-            )
+        if 'nStepSarsa' in agent_name:
+            n = int(agent_name.split('-')[1])
+            akwargs.update(dict(n=n))
 
-            target_akwargs = agent_kwargs.copy()
+        results = parallel_train(
+            env_builder=env_builder,
+            behavioral_agent_class=agent_class,
+            behavioral_agent_kwargs=akwargs,
+            T=T,
+            num_episodes=num_episodes,
+            reward_shaper=reward_shaper,
+            train_seeds=seeds,
+            do_eval=True,
+            eval_num_episodes=eval_num_episodes,
+            evaluate_frequency=evaluate_frequency,
+            parallel_eval=True,
+            soft_eval=True,
+            hard_eval=True,
+            num_parallel_workers=num_parallel_workers,
+        )
 
-            if agent_name == 'OffPolicyNStepSarsa-1':
-                target_akwargs.update(dict(n=1))
-            elif agent_name == 'OffPolicyNStepSarsa-2':
-                target_akwargs.update(dict(n=2))
-            elif agent_name == 'OffPolicyNStepSarsa-3':
-                target_akwargs.update(dict(n=3))
-            elif agent_name == 'OffPolicyNStepSarsa-4':
-                target_akwargs.update(dict(n=4))
-            elif agent_name == 'OffPolicyNStepSarsa-5':
-                target_akwargs.update(dict(n=5))
+        processed_training_results.update({
+            agent_name: preprocess_for_training_plots(
+                results, agent_name)
+        })
 
-            results = parallel_train(
-                env_builder=env_builder,
-                behavioral_agent_class=behavioral_class,
-                behavioral_agent_kwargs=behavioral_akwargs,
-                target_agent_class=target_class,
-                target_agent_kwargs=target_akwargs,
-                T=T,
-                num_episodes=num_episodes,
-                reward_shaper=reward_shaper,
-                train_seeds=seeds,
-                do_eval=True,
-                eval_num_episodes=eval_num_episodes,
-                evaluate_frequency=evaluate_frequency,
-                parallel_eval=True,
-                soft_eval=True,
-                hard_eval=True,
-                num_parallel_workers=num_parallel_workers,
-            )
+        processed_evaluation_results.update({
+            agent_name: preprocess_for_evaluation_plots(
+                results, agent_name)
+        })
 
-            processed_numerical_results.update({
-                agent_name: preprocess_for_numerical_plots(
-                    results, agent_name)
-            })
+        processed_distribution_results.update({
+            agent_name: preprocess_for_distribution_plots(
+                results, agent_name)
+        })
 
-            processed_distribution_results.update({
-                agent_name: preprocess_for_distribution_plots(
-                    results, agent_name)
-            })
+    # ------- Health Report --------- #
+    print_health_report(
+        training_results=processed_training_results,
+        evaluation_results=processed_evaluation_results,
+        distribution_results=processed_distribution_results
+    )
 
-        # --- Plotting --- #
-        all_algorithm_names = list(processed_distribution_results.keys())
-        palette = buil_high_contrast_palette(
-            n_colors=len(all_algorithm_names))
+    # --- Plotting --- #
+    all_algorithm_names = list(processed_distribution_results.keys())
+    palette = buil_high_contrast_palette(n_colors=len(all_algorithm_names))
 
-        color_map = {
-            name: color for name, color in zip(
-                list(processed_distribution_results.keys()),
-                palette
-            )
+    color_map = {
+        name: color for name, color in zip(
+            list(processed_distribution_results.keys()),
+            palette
+        )
+    }
+
+    plot_training_metrics(
+        results=processed_training_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/training_metrics/on_policy',
+    )
+
+    plot_evaluation_metrics(
+        results=processed_evaluation_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/evaluation_metrics/on_policy',
+    )
+
+    plot_value_accuracy(
+        results=processed_evaluation_results,
+        metrics_to_compare=['V0', 'soft_G0'],
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/learning/on_policy',
+    )
+
+    plot_action_distribution(
+        results=processed_distribution_results,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/behaviors/on_policy',
+    )
+
+
+def run_off_policy(
+        num_train_seeds: int = 10,
+        eval_num_episodes=50,
+):
+    global ENV_NAME
+
+    seeds = list(range(num_train_seeds))
+    state_bins = None
+
+    num_parallel_workers = min(10, len(seeds))
+
+    if ENV_NAME == 'FrozenLake':
+        num_episodes = 10000
+        T = 100
+        evaluate_frequency = max(1, int(0.001 * num_episodes * T))
+
+        q_init = 1.
+
+        # --- Behavioral Agent Params
+        b_epsilon_start = 1.0
+        b_epsilon_end = 0.3
+        b_eps_steps = num_episodes * T // 10
+        b_eps_schedule_builder = build_linear_sched
+
+        b_alpha_start = 0.3
+        b_alpha_end = 0.1
+        b_alpha_steps = num_episodes * T
+        b_update_coefficient_builder = build_linear_sched
+
+
+        # --- Target Agent Parameters
+        t_epsilon_start = 1e-3
+        t_epsilon_end = 1e-5
+        t_eps_steps = num_episodes * T
+        t_eps_schedule_builder = build_linear_sched
+
+        t_alpha_start = 1e-1
+        t_alpha_end = 1e-5
+        t_alpha_steps = num_episodes * T
+        t_update_coefficient_builder = build_linear_sched
+
+    elif ENV_NAME == 'CliffWalking':
+        num_episodes = 5000
+        T = 20
+
+        q_init = 0.
+
+        b_epsilon_start = 1.0
+        b_epsilon_end = 0.3
+        b_eps_steps = num_episodes * T
+        b_eps_schedule_builder = build_linear_sched
+
+        b_alpha_start = 0.3
+        b_alpha_end = 0.01
+        b_alpha_steps = num_episodes * T
+        b_update_coefficient_builder = build_linear_sched
+
+        t_epsilon_start = 1.0
+        t_epsilon_end = 0.01
+        t_eps_steps = num_episodes * T
+        t_eps_schedule_builder = build_linear_sched
+
+        t_alpha_start = 0.3
+        t_alpha_end = 0.01
+        t_alpha_steps = num_episodes * T
+        t_update_coefficient_builder = build_linear_sched
+
+        # the smaller, the more frequent
+        evaluate_frequency = max(1, int(0.05 * num_episodes * T))
+
+    elif ENV_NAME == 'Taxi':
+        num_episodes = 5000
+        T = 50
+        q_init = 0.
+
+        b_epsilon_start = 1.0
+        b_epsilon_end = 0.3
+        b_eps_steps = num_episodes * T
+        b_eps_schedule_builder = build_linear_sched
+
+        b_alpha_start = 0.1
+        b_alpha_end = 0.001
+        b_alpha_steps = num_episodes * T
+        b_update_coefficient_builder = build_linear_sched
+
+        t_epsilon_start = 1e-3
+        t_epsilon_end = 1e-5
+        t_eps_steps = num_episodes * T
+        t_eps_schedule_builder = build_linear_sched
+
+        t_alpha_start = 1e-1
+        t_alpha_end = 1e-3
+        t_alpha_steps = num_episodes * T
+        t_update_coefficient_builder = build_linear_sched
+
+        evaluate_frequency = max(1, int(0.01 * num_episodes * T))
+
+    else:
+        raise NotImplementedError
+
+    env = env_builder()
+
+    gamma = 0.99
+
+    # ---- Setup Behavioral Agent ----- #
+    behavioral_agent_kwargs = dict(
+        action_space_dims=int(env.action_space.n),
+        obs_space_dims=int(env.observation_space.n),
+        discount=gamma,
+        qval_init=q_init,
+        eps_schedule_builder=b_eps_schedule_builder,
+        eps_schedule_kwargs={
+            "start": b_epsilon_start,
+            "steps": b_eps_steps,
+            "end"  : b_epsilon_end
+        },
+        update_coefficient_builder=b_update_coefficient_builder,
+        update_coefficient_kwargs={
+            "start": b_alpha_start,
+            "steps": b_alpha_steps,
+            "end"  : b_alpha_end
         }
+    )
 
-        plot_training_metrics(
-            results=processed_numerical_results,
-            color_map=color_map,
-            file_root=f'{ENV_NAME}',
-            save_dir='images/training_metrics/off_policy',
+    uniform_behavioral_akwargs = dict(
+        obs_space_dims=behavioral_agent_kwargs['obs_space_dims'],
+        action_space_dims=behavioral_agent_kwargs['action_space_dims'],
+        distribution=randint,
+        distribution_args=dict(
+            low=0,
+            high=behavioral_agent_kwargs['action_space_dims']
+        )
+    )
+
+    behavioral_class = QLearning
+
+
+    # ----- Setup Target Agent ----- #
+    target_agent_kwargs = dict(
+        action_space_dims=int(env.action_space.n),
+        obs_space_dims=int(env.observation_space.n),
+        discount=gamma,
+        qval_init=q_init,
+        eps_schedule_builder=t_eps_schedule_builder,
+        eps_schedule_kwargs={
+            "start": t_epsilon_start,
+            "steps": t_eps_steps,
+            "end"  : t_epsilon_end
+        },
+        update_coefficient_builder=t_update_coefficient_builder,
+        update_coefficient_kwargs={
+            "start": t_alpha_start,
+            "steps": t_alpha_steps,
+            "end"  : t_alpha_end
+        }
+    )
+
+    processed_training_results = {}
+    processed_evaluation_results = {}
+    processed_distribution_results = {}
+
+    for agent_name, target_class in [
+        # ('OffPolicyNStepSarsa-4', nStepsSarsaOffPolicy),
+        ('OffPolicyNStepQSigma-2', nStepsQSigmaOffPolicy),
+        # ('OffPolicyNStepQSigma-4', nStepsQSigmaOffPolicy),
+        ('OffPolicyNStepQSigma-4', nStepsQSigmaOffPolicy)
+    ]:
+
+        behaviora_kwargs = behavioral_agent_kwargs.copy()
+        targeta_akwargs = target_agent_kwargs.copy()
+        train_kwargs = dict()  # needed for sigma function
+
+        if 'OffPolicyNStepSarsa-' in agent_name:
+            n = int(agent_name.split('-')[1])
+            targeta_akwargs.update(dict(n=n))
+        elif 'OffPolicyNStepQSigma-' in agent_name:
+            n = int(agent_name.split('-')[1])
+            targeta_akwargs.update(dict(n=n))
+            sigma_fn = lambda t: 0 if (t % 2 == 0) else 1.
+            # sigma_fn = lambda t: 0.5
+            train_kwargs.update(dict(sigma_fn=sigma_fn))
+
+        results = parallel_train(
+            env_builder=env_builder,
+            behavioral_agent_class=behavioral_class,
+            behavioral_agent_kwargs=behaviora_kwargs,
+            target_agent_class=target_class,
+            target_agent_kwargs=targeta_akwargs,
+            T=T,
+            num_episodes=num_episodes,
+            reward_shaper=reward_shaper,
+            train_seeds=seeds,
+            eval_num_episodes=eval_num_episodes,
+            evaluate_frequency=evaluate_frequency,
+            do_eval=True,
+            parallel_eval=True,
+            soft_eval=True,
+            hard_eval=True,
+            num_parallel_workers=num_parallel_workers,
+            **train_kwargs
         )
 
-        plot_evaluation_metrics(
-            results=processed_numerical_results,
-            color_map=color_map,
-            file_root=f'{ENV_NAME}',
-            save_dir='images/evaluation_metrics/off_policy',
-        )
+        # region post-process
+        processed_training_results.update({
+            agent_name: preprocess_for_training_plots(
+                results, agent_name)
+        })
 
-        plot_value_accuracy(
-            results=processed_numerical_results,
-            metrics_to_compare = ['V0', 'soft_G0'],
-            color_map=color_map,
-            file_root=f'{ENV_NAME}',
-            save_dir='images/learning/off_policy',
-        )
+        processed_evaluation_results.update({
+            agent_name: preprocess_for_evaluation_plots(
+                results, agent_name)
+        })
 
-        plot_action_distribution(
-            results=processed_distribution_results,
-            eval_types_to_plot=['soft', 'hard'],
-            file_root=f'{ENV_NAME}',
-            save_dir='images/behaviors/off_policy',
+        processed_distribution_results.update({
+            agent_name: preprocess_for_distribution_plots(
+                results, agent_name)
+        })
+
+        # endregion
+
+    # region  Present
+
+    # ----------- Health Status ----------- #
+    print_health_report(
+        training_results=processed_training_results,
+        evaluation_results=processed_evaluation_results,
+        distribution_results=processed_distribution_results
+    )
+
+    # --- Plotting --- #
+    all_algorithm_names = list(processed_distribution_results.keys())
+    palette = buil_high_contrast_palette(
+        n_colors=len(all_algorithm_names))
+
+    color_map = {
+        name: color for name, color in zip(
+            list(processed_distribution_results.keys()),
+            palette
         )
+    }
+
+    plot_training_metrics(
+        results=processed_training_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/training_metrics/off_policy',
+    )
+
+    plot_evaluation_metrics(
+        results=processed_evaluation_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/evaluation_metrics/off_policy',
+    )
+
+    plot_value_accuracy(
+        results=processed_evaluation_results,
+        metrics_to_compare=['V0', 'soft_G0'],
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/learning/off_policy',
+    )
+
+    plot_action_distribution(
+        results=processed_distribution_results,
+        eval_types_to_plot=['soft', 'hard'],
+        file_root=f'{ENV_NAME}',
+        save_dir='images/behaviors/off_policy',
+    )
 
     # endregion
 
-    print("Done !")
+
+if __name__ == '__main__':
+    global ENV_NAME
+
+    num_train_seeds=10
+    eval_num_episodes=100
+
+    for env_name in ['FrozenLake', 'CliffWalking', 'Taxi']:
+
+        ENV_NAME = env_name
+
+        if 1:
+            run_on_policy_experiments(
+                num_train_seeds=num_train_seeds,
+                eval_num_episodes=eval_num_episodes
+            )
+
+        if 0:
+            run_off_policy(
+                num_train_seeds=num_train_seeds,
+                eval_num_episodes=eval_num_episodes
+            )
+
     exit(0)

@@ -278,9 +278,12 @@ class nStepSarsa(QEpsGreedyAgent):
         self.n = n
         self.update_coefficient = update_coefficient
         self.qval_init = qval_init
-        self.trajectory = []
+        self.trajectory = { }
 
     def initialize(self):
+        self.t = 0
+        self.trajectory = {}
+
         # The agent here is completely dumb
         if isinstance(self.eps, NoiseSchedule):
             # Reset noise to starting exploration
@@ -293,22 +296,27 @@ class nStepSarsa(QEpsGreedyAgent):
     def reset(self):
         # The agent here is prepared for a new episode
         self.t = 0
-        self.trajectory = []
+        self.trajectory = { }
 
     def step(self, e: Experience) -> float:
-        self.trajectory.append(e)
+        self.trajectory[self.t] = e
         tau = self.t - self.n + 1
 
-        # If the episode ends before n-steps have been rolled out
-        if e.done and (tau < 0):
-            tau = 0
-
         loss = 0
-
         if tau >= 0:
             loss = self.update(tau)
+            _ = self.trajectory.pop(tau)
 
-        self.t += 1
+        while e.done and self.trajectory:
+            tau += 1
+            if tau >= 0:
+                loss = self.update(tau)
+                self.trajectory.pop(tau)
+
+        if e.done:
+            self.t = 0
+        else:
+            self.t += 1
 
         return loss
 
@@ -319,35 +327,38 @@ class nStepSarsa(QEpsGreedyAgent):
         else:
             alpha = self.update_coefficient
 
-        # ------ Policy Evaluation ------- #
-        # starting from min(n-steps, T/done) back
-        tau_end = min(tau+self.n, len(self.trajectory))
+        T = np.inf
+        if self.trajectory[self.t].done:
+            # T is the now time, terminal R (T+1) is here.
+            # So wrt the book, "T" here is "T-1" in the book
+            T = self.t
 
-        target = sum(
-            [
-                # Notationally, in the book, for a[t], reward is r[t+1].
-                # So while the book starts the accumulation of rewards at
-                # tau+1, this means that tau+1 indexes the
-                # (s[tau], a[tau], r[tau+1], s[tau+1]) experience
-                (self.discount ** i) * e.r
-                for i, e in enumerate(self.trajectory[tau:tau_end])
-            ]
-        )
+        G = [
+            # Notationally, in the book, for a[t], reward is r[t+1].
+            # So while the book starts the accumulation of rewards at
+            # tau+1, this means that tau+1 indexes the
+            # (s[tau], a[tau], r[tau+1], s[tau+1]) experience
+            (self.discount ** i) * self.trajectory[t].r
+            for i, t in enumerate(range(tau, min(tau + self.n, T + 1)))
+        ]
+        assert 0 < len(G) <= self.n
+        G = sum(G)
 
-        experience_tau = self.trajectory[tau]
-        experience_tau_end = self.trajectory[tau_end-1]
+        if (
+                (tau + self.n - 1 <= self.t)
+                and
+                (not self.trajectory[tau + self.n - 1].done
+        )):
+            # Include (S, A) which generated terminal S'
+            sp = self.trajectory[tau + self.n - 1].sp
+            ap = self.trajectory[tau + self.n - 1].ap
+            G = G + (self.discount ** self.n) * self.Q[sp][ap]
 
-        if not experience_tau_end.done:
-            # Episode not terminated
-            target += (self.discount ** self.n) * self.Q[
-                experience_tau_end.sp][experience_tau_end.ap]
-
-        # This is still a TD method
-        td_error = target - self.Q[experience_tau.s][experience_tau.a]
-
-        self.Q[experience_tau.s][experience_tau.a] += alpha * td_error
-
-        self.Q_update_count[experience_tau.s][experience_tau.a] += 1
+        s = self.trajectory[tau].s
+        a = self.trajectory[tau].a
+        td_error = G - self.Q[s][a]
+        self.Q[s][a] = self.Q[s][a] + alpha * td_error
+        self.Q_update_count[s][a] += 1
 
         # ------ Policy Improvement ------- #
         if isinstance(self.eps, NoiseSchedule):
@@ -393,10 +404,13 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
         self.n = n
         self.update_coefficient = update_coefficient
         self.qval_init = qval_init
-        self.trajectory = []
+        self.trajectory = { }
         self.td_errors = None
 
     def initialize(self):
+        self.t = 0
+        self.trajectory = {}
+
         # The agent here is completely dumb
         if isinstance(self.eps, NoiseSchedule):
             # Reset noise to starting exploration
@@ -409,75 +423,96 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
     def reset(self):
         # The agent here is prepared for a new episode
         self.t = 0
-        self.trajectory = []
+        self.trajectory = { }
 
-    def step(self, e: Experience):
-        self.trajectory.append(e)
+    def step(self, e: Experience) -> float:
+        self.trajectory[self.t] = e
         tau = self.t - self.n + 1
 
-        # If the episode ends before n-steps have been rolled out
-        if e.done and (tau < 0):
-            tau = 0
-
         loss = 0
-
         if tau >= 0:
             loss = self.update(tau)
+            _ = self.trajectory.pop(tau)
 
-        self.t += 1
+        while e.done and self.trajectory:
+            tau += 1
+            if tau >= 0:
+                loss = self.update(tau)
+                self.trajectory.pop(tau)
+
+        if e.done:
+            self.t = 0
+        else:
+            self.t += 1
 
         return loss
 
     def update(self, tau: int) -> float:
+
         if isinstance(self.update_coefficient, NoiseSchedule):
             self.update_coefficient.step()
             alpha = self.update_coefficient.value
         else:
             alpha = self.update_coefficient
 
-        # ------ Policy Evaluation ------- #
-        # starting from min(n-steps, T/done) back
-        tau_end = min(tau + self.n, len(self.trajectory))
+        T = np.inf
+        if self.trajectory[self.t].done:
+            # T is the now time, terminal R (T+1) is here.
+            # So wrt the book, "T" here is "T-1" in the book
+            T = self.t
 
-        target = sum(
-            [
-                # Notationally, in the book, for a[t], reward is r[t+1].
-                # So while the book starts the accumulation of rewards at
-                # tau+1, this means that tau+1 indexes the
-                # (s[tau], a[tau], r[tau+1], s[tau+1]) experience
-                (self.discount ** i) * e.r
-                for i, e in enumerate(self.trajectory[tau:tau_end])
-            ]
-        )
+        G = [
+            # Notationally, in the book, for a[t], reward is r[t+1].
+            # So while the book starts the accumulation of rewards at
+            # tau+1, this means that tau+1 indexes the
+            # (s[tau], a[tau], r[tau+1], s[tau+1]) experience
+            (self.discount ** i) * self.trajectory[t].r
+            for i, t in enumerate(range(tau, min(tau + self.n, T + 1)))
+        ]
+        assert 0 < len(G) <= self.n
+        G = sum(G)
 
-        # Rho, however, is computed for one (a,s) ahead of the current rho
-        # In a way, rho is looking at the (a|s) following the r[tau+1].
-        # But since we don't have any (a, s) following r[tau + n_steps] this
-        # is truncated one step earlier.
-        tau_end_rho = min(tau + self.n + 1, len(self.trajectory) - 1)
+        if (
+                (tau + self.n - 1 <= self.t)
+                and
+                (not self.trajectory[tau + self.n - 1].done
+        )):
+            # Include (S, A) which generated terminal S'
+            sp = self.trajectory[tau + self.n - 1].sp
+            ap = self.trajectory[tau + self.n - 1].ap
+            G = G + (self.discount ** self.n) * self.Q[sp][ap]
 
         rho = [
-            self.get_sa_probability(e.s, e.a) / e.p
-            for e in self.trajectory[tau:tau_end_rho]
+            self.get_sa_probability(
+                s=self.trajectory[t].sp,
+                a=self.trajectory[t].ap
+            ) / (self.trajectory[t].pp + 1e-8)
+            for t in range(tau, min(tau + self.n, T))
         ]
 
-        if len(rho) > 0:
+        if tau < T:
+            assert 0 < len(rho) <= self.n
             rho = np.prod(rho)
+        elif tau == T:
+            assert len(rho) == 0
+            rho = 1
         else:
-            rho = 1.
+            raise Exception(
+                "tau has gone beyond n-step horizon. Must not happen")
 
-        experience_tau = self.trajectory[tau]
-        experience_tau_end = self.trajectory[tau_end-1]
+        if (tau + self.n - 1 <= self.t) and (
+                not self.trajectory[tau + self.n - 1].done
+        ):
+            # Include (S, A) which generated terminal S'
+            sp = self.trajectory[tau + self.n - 1].sp
+            ap = self.trajectory[tau + self.n - 1].ap
+            G = G + (self.discount ** self.n) * self.Q[sp][ap]
 
-        if not experience_tau_end.done:
-            # Episode not terminated
-            target += (self.discount ** self.n) * self.Q[
-                experience_tau_end.sp][experience_tau_end.ap]
-
-        # This is still a TD method
-        td_error = rho * (target - self.Q[experience_tau.s][experience_tau.a])
-        self.Q[experience_tau.s][experience_tau.a] += alpha * td_error
-        self.Q_update_count[experience_tau.s][experience_tau.a] += 1
+        s = self.trajectory[tau].s
+        a = self.trajectory[tau].a
+        td_error = G - self.Q[s][a]
+        self.Q[s][a] = self.Q[s][a] + alpha * rho * td_error
+        self.Q_update_count[s][a] += 1
 
         # ------ Policy Improvement ------- #
         if isinstance(self.eps, NoiseSchedule):
@@ -486,9 +521,9 @@ class nStepsSarsaOffPolicy(QEpsGreedyAgent):
         return td_error
 
 
-class QSigmaOffPolicy(QEpsGreedyAgent):
+class nStepsQSigmaOffPolicy(QEpsGreedyAgent):
     """
-        Algorithm in Section 7.6 in Sutton 2020 book.
+        Algorithm in Section 7.6 in Barto & Sutton 2nd edition, 2020 book.
     """
 
     def __init__(
@@ -524,9 +559,12 @@ class QSigmaOffPolicy(QEpsGreedyAgent):
         self.n = n
         self.update_coefficient = update_coefficient
         self.qval_init = qval_init
-        self.trajectory = []
+        self.trajectory = { }
 
     def initialize(self):
+        self.t = 0
+        self.trajectory = { }
+
         # The agent here is completely dumb
         if isinstance(self.eps, NoiseSchedule):
             # Reset noise to starting exploration
@@ -539,22 +577,26 @@ class QSigmaOffPolicy(QEpsGreedyAgent):
     def reset(self):
         # The agent here is prepared for a new episode
         self.t = 0
-        self.trajectory = []
+        self.trajectory = { }
 
     def step(self, e: Experience) -> float:
-        self.trajectory.append(e)
+        self.trajectory[self.t] = e
         tau = self.t - self.n + 1
-
-        # If the episode ends before n-steps have been rolled out
-        if e.done and (tau < 0):
-            tau = 0
-
         loss = 0
-
         if tau >= 0:
             loss = self.update(tau)
+            _ = self.trajectory.pop(tau)
 
-        self.t += 1
+        while e.done and self.trajectory:
+            tau += 1
+            if tau >= 0:
+                loss = self.update(tau)
+                self.trajectory.pop(tau)
+
+        if e.done:
+            self.t = 0
+        else:
+            self.t += 1
 
         return loss
 
@@ -566,24 +608,27 @@ class QSigmaOffPolicy(QEpsGreedyAgent):
             alpha = self.update_coefficient
 
         T = np.inf
-        last_experience = self.trajectory[-1]
-
-        # if t + 1 < T. "done" is int
-        if last_experience.done:
-            T = last_experience.t + 1
-            G = last_experience.r
+        # "done" is int
+        if self.trajectory[self.t].done:
+            # Our T is book's T-1, where our
+            # terminal e[T].r = R[T+1] corresponding to
+            # the book's R[T]
+            # T = self.t
+            pass
         else:
-            G = self.Q[last_experience.sp][last_experience.ap]
+            # if t + 1 < T
+            G = self.Q[self.trajectory[self.t].sp][self.trajectory[self.t].ap]
 
-        # t + 1 or T index is not included
-        for k in reversed(range(tau, min(last_experience.t + 1, T))):
-            # k in the book is pegged to the t+1 in the sarsa experience
-            # here k is pegged to t in the sarsa experience
+        for k in reversed(range(tau, self.t + 1)):
+            # [tau, t]
             ek: Experience = self.trajectory[k]
-            if ek.done:
+            done = ek.done # done is done[t+1], so done[k]
+
+            if done:
+                # Start from terminal R if we're done
                 G = ek.r
             else:
-                V = sum(
+                Vbar = sum(
                     [
                         self.get_sa_probability(ek.sp, a) * self.Q[ek.sp][a]
                         for a in range(self.action_space_dims)
@@ -592,13 +637,24 @@ class QSigmaOffPolicy(QEpsGreedyAgent):
 
                 # r is t+1
                 prob_p = self.get_sa_probability(ek.sp, ek.ap)
-                q_p = self.Q[ek.sp][ek.ap]
-                G = ek.r + self.discount * (ek.rhop * ek.sigmap + (1 - ek.sigmap) * prob_p) * (G - q_p) + self.discount * V
+                tdp_error = G - self.Q[ek.sp][ek.ap]
+                qsig_term = ek.rhop * ek.sigmap + (1 - ek.sigmap) * prob_p
+                G = ek.r + self.discount * qsig_term * tdp_error + self.discount * Vbar
 
+        # Update the tau'th sample
         e_tau = self.trajectory[tau]
         q_tau = self.Q[e_tau.s][e_tau.a]
-        self.Q[e_tau.s][e_tau.a] = q_tau + alpha * (G - q_tau)
+
+        td_error = G - q_tau
+        self.Q[e_tau.s][e_tau.a] = q_tau + alpha * td_error
         self.Q_update_count[e_tau.s][e_tau.a] += 1
 
-        return G - q_tau
+        # ------ Policy Improvement ------- #
+        if isinstance(self.eps, NoiseSchedule):
+            self.eps.step()
+
+
+        # print(f"error: {td_error:.1e}, alpha: {alpha:.1e}")
+
+        return td_error
 

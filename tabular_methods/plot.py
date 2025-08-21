@@ -397,18 +397,25 @@ def plot_evaluation_metrics(
             'hard_eval_best_seen_score'
         ]
 
-    if results:
-        first_df = next(iter(results.values()))
-        metrics_to_plot = [m for m in metrics_to_plot if m in first_df.columns]
-
-    if not metrics_to_plot:
-        print("No evaluation metrics found in the data to plot.")
+    if not results:
         return
 
     if color_map is None:
         palette = sns.color_palette("colorblind", len(results))
         color_map = {name: color for name, color in
                      zip(results.keys(), palette)}
+
+    # Defensively filter the list of metrics to only those that exist in at least one DataFrame
+    available_metrics = set()
+    for df in results.values():
+        available_metrics.update(df.columns)
+
+    metrics_to_plot = [m for m in metrics_to_plot if m in available_metrics]
+
+    if not metrics_to_plot:
+        print(
+            "Warning: No evaluation metrics found in the provided data to plot.")
+        return
 
     cols = 2
     rows = math.ceil(len(metrics_to_plot) / cols)
@@ -420,44 +427,56 @@ def plot_evaluation_metrics(
     for i, metric in enumerate(metrics_to_plot):
         ax = axes[i // cols, i % cols]
 
+        # --- INDIVIDUAL PLOTS (if saving) ---
         if save_dir and file_root:
             fig_single, ax_single = plt.subplots(1, 1, figsize=(8, 6))
+            plotted_on_single = False
             for name, df in results.items():
                 if metric in df.columns and not df[metric].isnull().all():
                     plot_mean_std(df=df, x_col=x_col, y_col=metric,
                                   ax=ax_single, label=name,
                                   color=color_map[name])
+                    plotted_on_single = True
 
-            props = METRIC_PROPERTIES.get(metric,
-                                          {'title': metric, 'ylabel': 'Value'})
-            ax_single.set_title(props['title'])
-            ax_single.set_ylabel(props['ylabel'])
-            ax_single.set_xlabel(x_col)
-            ax_single.legend()
-            plt.tight_layout()
+            if plotted_on_single:
+                props = METRIC_PROPERTIES.get(metric, {
+                    'title': metric, 'ylabel': 'Value'
+                })
+                ax_single.set_title(props['title'])
+                ax_single.set_ylabel(props['ylabel'])
+                ax_single.set_xlabel(x_col)
+                ax_single.legend()
+                plt.tight_layout()
 
-            filename = f"{file_root}_{metric}.png"
-            os.makedirs(save_dir, exist_ok=True)
-            fig_single.savefig(os.path.join(save_dir, filename))
+                filename = f"{file_root}_{metric}.png"
+                os.makedirs(save_dir, exist_ok=True)
+                fig_single.savefig(os.path.join(save_dir, filename))
+
             plt.close(fig_single)
 
+        # --- JOINT PLOT ---
+        plotted_on_joint = False
         for name, df in results.items():
             if metric in df.columns and not df[metric].isnull().all():
                 plot_mean_std(df=df, x_col=x_col, y_col=metric, ax=ax,
                               label=name, color=color_map[name])
+                plotted_on_joint = True
 
         props = METRIC_PROPERTIES.get(metric,
                                       {'title': metric, 'ylabel': 'Value'})
         ax.set_title(props['title'])
         ax.set_ylabel(props['ylabel'])
         ax.set_xlabel(x_col)
-        ax.legend()
+        if plotted_on_joint:
+            ax.legend()
 
+    # Hide any unused subplots
     for i in range(len(metrics_to_plot), rows * cols):
         axes[i // cols, i % cols].set_visible(False)
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
+    # Save and Show Joint Plot
     if save_dir and file_root:
         os.makedirs(save_dir, exist_ok=True)
         filename = f"{file_root}_evaluation_metrics.png"

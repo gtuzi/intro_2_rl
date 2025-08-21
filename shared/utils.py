@@ -191,6 +191,44 @@ class CosineDecayWithHoldSchedule(NoiseSchedule):
         return self._value
 
 
+class ExponentialSchedule(NoiseSchedule):
+    def __init__(self, start, end, steps):
+        if steps <= 0:
+            steps = 1
+        if start == end:
+            steps = 1
+
+        # Calculate the multiplicative decay factor
+        self.decay_rate = (end / start) ** (1.0 / steps)
+
+        self.start = start
+        self.current = start
+        self.end = end
+
+        # Determine the bounding function to prevent overshooting
+        if end > start:
+            self.bound = min
+        else:
+            self.bound = max
+
+    def initialize(self):
+        self.current = self.start
+
+    def step(self, steps=1):
+        for _ in range(steps):
+            self.current *= self.decay_rate
+        self.current = self.bound(self.current, self.end)
+
+    def reset(self):
+        # This is intentionally empty to allow the schedule to persist
+        # across episodes within a single training run.
+        pass
+
+    @property
+    def value(self):
+        return self.current
+
+
 class PDFSampler:
     def __init__(
             self,

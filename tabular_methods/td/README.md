@@ -37,7 +37,7 @@ taking into account how likely each action is under the _current_ policy.
 <img src="images/pub/ExpectedSarsa_UpdateRule.png" alt="Grid" width="2002"/>
 
 
-### Sarsa-Max (Q Learning)
+### Sarsa-Max (Q-learning)
 
 <img src="images/pub/QLearningAlgo.png" alt="Grid" width="800"/>
 
@@ -47,11 +47,23 @@ taking into account how likely each action is under the _current_ policy.
 <img src="images/pub/nStepSarsa.png" alt="Grid" width="800"/>
 
 
-### Offpolicy - nStepSarsa &  Q(&sigma;)
-As of this writing, these implementations are not yielding good results. Further work is necessary. 
+#### Offpolicy - $n$StepSarsa
+This algorithm did not perform that well in the experiments
+below.
 
+<img src="images/pub/OffPolicy_nStepSarsaAlgo.png" alt="Grid" width="800"/>
+
+
+### Offpolicy - $n$Step$Q(\sigma)$
+
+This algorithm is reported in the off-policy experiments below.
+
+<img src="images/pub/OffPolicy_nStepSigma.png" alt="Grid" width="800"/>
+
+---
 
 ## Experiments
+
 
 ### Environments Setup
 Different environments have been tested with the following parameters
@@ -60,9 +72,8 @@ Different environments have been tested with the following parameters
 * Num eval seeds = $100$
 * $\gamma = 0.99$
 
---- 
 
-* _Frozen Lake_ - stochastic: 
+* __Frozen Lake__ - stochastic: 
   * Reward
     * Reach goal: $+1$
     * Reach hole: 0
@@ -76,12 +87,11 @@ Different environments have been tested with the following parameters
     * $\varepsilon$ linearly annealed $[1, 0.01]$
     * $\alpha$ linearly annealed $[0.3, 0.1]$
   * Off-Policy Algorithms
-    * $\varepsilon$ linearly annealed $[1, 0.01]$
-    * $\alpha$ linearly annealed $[0.3, 0.1]$
+    * $\varepsilon$ linearly annealed $[1e-3, 1e-5]$
+    * $\alpha$ linearly annealed $[1e-1, 1e-5]$
 
----
 
-* CliffWalking - is not stochastic
+* __CliffWalking__
   * Reward
     * Each time step incurs $-1$ reward 
     * Player stepped into the cliff incurs $-100$ reward
@@ -92,12 +102,11 @@ Different environments have been tested with the following parameters
     * $\varepsilon$ linearly annealed $[1, 0.01]$
     * $\alpha$ linearly annealed $[0.5, 0.01]$
   * Off-Policy Algorithms
-    * $\varepsilon$ linearly annealed $[1, 0.01]$
-    * $\alpha$ linearly annealed $[0.3, 0.01]$
+    * $\varepsilon$ linearly annealed $[1e-3, 1e-5]$
+    * $\alpha$ linearly annealed $[1e-1, 1e-3]$
 
----
 
-* Taxi - taxi is not stochastic.
+* __Taxi__
   * Reward
     * $-1$ per step unless other reward is triggered
     * $+20$ delivering passenger
@@ -112,11 +121,13 @@ Different environments have been tested with the following parameters
     * $\varepsilon$ linearly annealed $[1.0, 0.001]$
     * $\alpha$ linearly annealed $[0.1, 0.001]$
 
+---
 
 ##### Algorithm Parameters
 
 All the algorithms shown share the same parameters per environment as shown.
-nStepSarsa used $n=4$
+For off-policy, QLearning was used as the behavioral policy, with the epsilon
+annealed from 1 to 0.3.
 
 
 #### Results
@@ -194,6 +205,8 @@ For off-policy, evaluation is performed by the target policy
 | Frozen Lake (v1)  | <img src="images/learning/off_policy/FrozenLake_value_accuracy_JOINT.png" alt="Grid" width="400"/>   | <img src="images/training_metrics/off_policy/FrozenLake_mean_target_loss.png" alt="Grid" width="400"/>   |
 | CliffWalking (v0) | <img src="images/learning/off_policy/CliffWalking_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/off_policy/CliffWalking_mean_target_loss.png" alt="Grid" width="400"/> |
 | Taxi (v3)         | <img src="images/learning/off_policy/Taxi_value_accuracy_JOINT.png" alt="Grid" width="400"/>         | <img src="images/training_metrics/off_policy/Taxi_mean_target_loss.png" alt="Grid" width="400"/>         |
+
+---
 
 
 ## Execution

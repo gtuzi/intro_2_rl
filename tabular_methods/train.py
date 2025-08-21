@@ -20,6 +20,12 @@ from tabular_methods.utils import (
     SoftPolicy
 )
 
+# ************************************* #
+# ************************************* #
+# ************************************* #
+
+
+# region Data Handling
 
 def save_results(results: List[Dict[str, Any]], filepath: str):
     """
@@ -55,12 +61,42 @@ def load_results(filepath: str) -> List[Dict[str, Any]]:
     return results
 
 
-def preprocess_for_numerical_plots(
+def preprocess_for_training_plots(
         all_seeds_data: List[Dict[str, Any]],
         algorithm_name: str
 ) -> pd.DataFrame:
     """
-    Unpacks both soft and hard evaluation results into separate columns.
+    Creates a DataFrame with only training metrics, one record per episode.
+    """
+    records = []
+    for seed_run in all_seeds_data:
+        seed = seed_run['seed']
+        for episode_data in seed_run['training_episodes']:
+            episode_steps_df = pd.DataFrame.from_dict(
+                episode_data['steps_data'], orient='index')
+
+            if not episode_steps_df.empty:
+                final_step_time = episode_steps_df.index.max()
+                record = {
+                    'algorithm'           : algorithm_name, 'seed': seed,
+                    'train_steps'         : final_step_time,
+                    'episode_num'         : episode_data['episode_num'],
+                    'mean_entropy'        : episode_steps_df['entropy'].mean(),
+                    'mean_behavioral_loss': episode_steps_df[
+                        'behavioral_agent_loss'].mean(),
+                    'mean_target_loss'    : episode_steps_df[
+                        'target_agent_loss'].mean(),
+                }
+                records.append(record)
+    return pd.DataFrame(records)
+
+
+def preprocess_for_evaluation_plots(
+        all_seeds_data: List[Dict[str, Any]],
+        algorithm_name: str
+) -> pd.DataFrame:
+    """
+    Creates a DataFrame with only evaluation metrics, one record per evaluation event.
     """
     records = []
     for seed_run in all_seeds_data:
@@ -68,20 +104,16 @@ def preprocess_for_numerical_plots(
         for episode_data in seed_run['training_episodes']:
             for step_time, step_metrics in episode_data['steps_data'].items():
                 eval_results_dict = step_metrics.get("evaluation_results")
-
                 if eval_results_dict:
                     record = {
                         'algorithm'  : algorithm_name, 'seed': seed,
-                        'train_steps': step_time,
-                        'episode_num': episode_data['episode_num']
+                        'train_steps': step_time
                     }
-
-                    # Process soft and hard evaluation results
                     for eval_type in ['soft_eval', 'hard_eval']:
                         if eval_type in eval_results_dict:
                             eval_data = eval_results_dict[eval_type]
                             eval_df = pd.DataFrame(eval_data["episodes"])
-                            prefix = f"{eval_type.split('_')[0]}_"  # 'soft_' or 'hard_'
+                            prefix = f"{eval_type.split('_')[0]}_"
 
                             record[f'mean_{prefix}eval_G0'] = eval_df[
                                 'G0'].mean()
@@ -91,22 +123,9 @@ def preprocess_for_numerical_plots(
                             eval_df['episode_length'].mean()
                             record[f'{prefix}eval_best_seen_score'] = \
                             eval_data['best_seen_score']
-
-                            # V0 is the same regardless of soft/hard eval, so only store once
                             if 'mean_eval_V0' not in record:
                                 record['mean_eval_V0'] = eval_df['V0'].mean()
-
-                    # Add training metrics
-                    episode_steps_df = pd.DataFrame.from_dict(
-                        episode_data['steps_data'], orient='index')
-                    record['mean_entropy'] = episode_steps_df['entropy'].mean()
-                    record['mean_behavioral_loss'] = episode_steps_df[
-                        'behavioral_agent_loss'].mean()
-                    record['mean_target_loss'] = episode_steps_df[
-                        'target_agent_loss'].mean()
-
                     records.append(record)
-
     return pd.DataFrame(records)
 
 
@@ -144,13 +163,107 @@ def preprocess_for_distribution_plots(
     return pd.DataFrame(records)
 
 
+def print_health_report(
+        training_results: Dict[str, pd.DataFrame],
+        evaluation_results: Dict[str, pd.DataFrame],
+        distribution_results: Optional[Dict[str, pd.DataFrame]] = None
+):
+    """
+    Analyzes preprocessed results and prints a comprehensive data health report,
+    distinguishing between valid numbers, missing values (NaN/None), and Infs.
+    """
+    print("\n" + "=" * 70)
+    print(" " * 23 + "EXPERIMENT HEALTH REPORT")
+    print("=" * 70)
+
+    all_algorithms = set(training_results.keys())
+    all_algorithms.update(evaluation_results.keys())
+    if distribution_results:
+        all_algorithms.update(distribution_results.keys())
+
+    for name in sorted(list(all_algorithms)):
+        print(f"\n--- Algorithm: {name} ---")
+
+        # --- Training Metrics Report ---
+        print("  Training Data:")
+        if name not in training_results or training_results[name].empty:
+            print("    No data found.")
+        else:
+            df = training_results[name]
+            metrics_to_check = [
+                'mean_entropy', 'mean_behavioral_loss', 'mean_target_loss'
+            ]
+
+            for metric in metrics_to_check:
+                if metric in df.columns:
+                    total_points = len(df)
+                    inf_count = np.isinf(df[metric]).sum()
+                    nan_count = df[metric].isnull().sum()
+                    numeric_count = total_points - inf_count - nan_count
+                    print(
+                        f"    - {metric:<35}: Numeric: {numeric_count:>4}, Missing (NaN/None): {nan_count:>4}, Infs: {inf_count:>4}")
+
+        # --- Evaluation Metrics Report ---
+        print("  Evaluation Data:")
+        if name not in evaluation_results or evaluation_results[name].empty:
+            print("    No data found.")
+        else:
+            df = evaluation_results[name]
+            metrics_to_check = [
+                'mean_soft_eval_G0', 'mean_hard_eval_G0',
+                'mean_soft_eval_sum_raw_rewards',
+                'mean_hard_eval_sum_raw_rewards',
+                'mean_soft_eval_episode_length',
+                'mean_hard_eval_episode_length',
+                'soft_eval_best_seen_score', 'hard_eval_best_seen_score',
+                'mean_eval_V0'
+            ]
+
+            for metric in metrics_to_check:
+                if metric in df.columns:
+                    total_points = len(df)
+                    inf_count = np.isinf(df[metric]).sum()
+                    nan_count = df[metric].isnull().sum()
+                    numeric_count = total_points - inf_count - nan_count
+                    print(
+                        f"    - {metric:<35}: Numeric: {numeric_count:>4}, Missing (NaN/None): {nan_count:>4}, Infs: {inf_count:>4}")
+
+        # --- Distribution Metrics Report ---
+        print("  Distribution Data:")
+        if not distribution_results or name not in distribution_results or \
+                distribution_results[name].empty:
+            print("    No data found.")
+        else:
+            df = distribution_results[name]
+            metrics_to_check = [
+                'eval_action_distribution', 'eval_state_visitation'
+            ]
+
+            for metric in metrics_to_check:
+                if metric in df.columns:
+                    total_points = len(df)
+                    nan_count = df[metric].isnull().sum()
+                    successful_count = total_points - nan_count
+                    print(
+                        f"    - {metric:<35}: Valid: {successful_count:>4}, Missing (NaN/None): {nan_count:>4}")
+
+    print("\n" + "=" * 70 + "\n")
+
+
 def discretize_state(state: np.ndarray, bins: List[np.ndarray]) -> tuple:
     """Converts a continuous state vector into a discrete tuple of bin indices."""
     # np.digitize finds which bin each state component falls into
     return tuple(np.digitize(s, b) for s, b in zip(state, bins))
 
+# endregion
 
-# region eval
+
+# ************************************* #
+# ************************************* #
+# ************************************* #
+
+
+# region Evaluation Methods
 def evaluate_single_episode(
         env_builder: Callable[[], Env],
         agent: QEpsGreedyAgent,
@@ -332,8 +445,11 @@ def parallel_evaluate(
 
 # endregion eval
 
+# ************************************* #
+# ************************************* #
+# ************************************* #
 
-# region train
+# region Train Methods
 def train_single_seed(
         seed: int,
         env_builder: Callable[[], Env],
@@ -476,7 +592,7 @@ def train_single_seed(
                 ):
                     target_next_p = target_agent.get_sa_probability(
                         next_state, next_action)
-                    rhop = target_next_p / next_p
+                    rhop = target_next_p / (next_p + 1e-8)
 
                 e = Experience(
                     s=state,
@@ -495,15 +611,15 @@ def train_single_seed(
                 # --- Update Agents ---
                 # agent.step() returns a loss value
                 b_loss = behavioral_agent.step(e)
+
                 t_loss = (
                     target_agent.step(e)
                     if target_agent is not None else None
                 )
 
                 # --- Evaluation Logic ---
-                if do_eval and (
-                        (global_time - last_eval_step >= evaluate_frequency)
-                ):
+                evaluation_results = None
+                if do_eval and ((global_time - last_eval_step >= evaluate_frequency)):
                     # Must generate this list as it controls the number
                     # of episodes.
                     eval_seeds = [
@@ -540,19 +656,18 @@ def train_single_seed(
                             **kwargs
                         )
 
-                    # --- Per-step data collection ---
-                    step_metrics = {
-                        "raw_reward"            : raw_reward,
-                        "behavioral_agent_loss" : b_loss,
-                        "target_agent_loss"     : t_loss,
-                        "entropy"               : behavioral_agent.entropy(state),
-                        "evaluation_results"    : evaluation_results
-                    }
-
-                    episode_data["steps_data"][global_time] = step_metrics
-
                     last_eval_step = global_time
 
+                # --- Per-step data collection ---
+                step_metrics = {
+                    "raw_reward"            : raw_reward,
+                    "behavioral_agent_loss" : b_loss,
+                    "target_agent_loss"     : t_loss,
+                    "entropy"               : behavioral_agent.entropy(state),
+                    "evaluation_results"    : evaluation_results
+                }
+
+                episode_data["steps_data"][global_time] = step_metrics
                 global_time += 1
 
                 if done:
@@ -563,6 +678,8 @@ def train_single_seed(
             # --- Post-episode data finalization ---
 
             # -- Final Episode ----
+            # This ensures an evaluation is run at the very end of training for this seed.
+            last_recorded_step = global_time - 1
             if (
                     do_eval and
                     (global_time != last_eval_step) and
@@ -602,16 +719,12 @@ def train_single_seed(
                         **kwargs
                     )
 
-                # --- Per-step data collection ---
-                step_metrics = {
-                    "raw_reward"           : raw_reward,
-                    "behavioral_agent_loss": b_loss,
-                    "target_agent_loss"    : t_loss,
-                    "entropy"              : behavioral_agent.entropy(state),
-                    "evaluation_results"   : evaluation_results
-                }
-
-                episode_data["steps_data"][global_time] = step_metrics
+                # Update the existing metrics from the last step with the new
+                # evaluation results.
+                # This does not overwrite the training data from that step.
+                if last_recorded_step in episode_data["steps_data"]:
+                    episode_data["steps_data"][last_recorded_step][
+                        "evaluation_results"] = evaluation_results
 
             V0 = (
                     behavioral_agent.state_value(state_0)
