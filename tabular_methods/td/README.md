@@ -5,9 +5,23 @@
 
 ## Table of Contents
 - [Introduction](#introduction)
-- [Implemented Algorithms](#implemented-algorithms)
-- [Execution](#execution)
-- [Environments](#environments)
+- [Implemented List](#implemented-algorithms)
+- [Algorithms](#algorithms)
+  - [On-policy](#on-policy)
+    - [Sarsa](#sarsa)
+    - [Expected Sarsa](#expected-sarsa)
+    - [Q-Learning](#sarsa-max-q-learning)
+    - [nStepSarsa](#nstep-sarsa)
+  - [Off-policy](#off-policy)
+    - [nStep-Sarsa](#offpolicynstepsarsa)
+    - [nStep-Q(sigma)](#nstepqsigma)
+- [Experiments](#experiments) 
+  - [Environments](#environments) 
+  - [Environment Setup](#environments-setup)
+  - [Parameters, Definitions, and Metrics](#parameters-definitions-and-metrics)
+  - [Performance Evaluation](#performance-evaluation)
+  - [Learned Correctnes](#learned-correctness)
+- [How to run the experiments](#execution)
 
 
 ## Introduction
@@ -23,9 +37,11 @@ Expanded discussions are in [summary](summary.ipynb)
 - [x] QSigmaOffPolicy (Section 7.6): `agents/QSigmaOffPolicy`
 
 ## Algorithms
-The following algorithms have been implemented
 
-### Sarsa
+The following algorithms have been implemented
+### On-Policy
+
+#### Sarsa
 
 <img src="images/pub/SarsaAlgo.png" alt="Grid" width="800"/>
 
@@ -37,24 +53,25 @@ taking into account how likely each action is under the _current_ policy.
 <img src="images/pub/ExpectedSarsa_UpdateRule.png" alt="Grid" width="2002"/>
 
 
-### Sarsa-Max (Q-learning)
+#### Sarsa-Max (Q-learning)
 
 <img src="images/pub/QLearningAlgo.png" alt="Grid" width="800"/>
 
 
-### nStep Sarsa
+#### nStep Sarsa
 
 <img src="images/pub/nStepSarsa.png" alt="Grid" width="800"/>
 
+### Off-Policy
 
-#### Offpolicy - $n$StepSarsa
+#### OffPolicy$n$StepSarsa
 This algorithm did not perform that well in the experiments
 below.
 
 <img src="images/pub/OffPolicy_nStepSarsaAlgo.png" alt="Grid" width="800"/>
 
 
-### Offpolicy - $n$Step$Q(\sigma)$
+#### $n$Step$Q(\sigma)$
 
 This algorithm is reported in the off-policy experiments below.
 
@@ -63,6 +80,10 @@ This algorithm is reported in the off-policy experiments below.
 ---
 
 ## Experiments
+
+
+### Environments
+- [Gymnasium] - `FrozenLake-v1`, `CliffWalking-v0`, `Taxi-v3`
 
 
 ### Environments Setup
@@ -123,14 +144,12 @@ Different environments have been tested with the following parameters
 
 ---
 
-##### Algorithm Parameters
+### Parameters, Definitions, and Metrics
 
 All the algorithms shown share the same parameters per environment as shown.
 For off-policy, QLearning was used as the behavioral policy, with the epsilon
 annealed from 1 to 0.3.
 
-
-#### Results
 * Greedy action and policy: $a \sim \pi_h(\cdot|s) = \arg \max_{a'} Q(s, a')$
 * Soft action and policy: $a \sim \pi_f(\cdot|s) = \varepsilon-\text{greedy}(Q(s, \cdot))$
 * Hard sum of discounted rewards: $G_{t, \pi_h} = \sum_{k = t} \gamma^{k - t}r_t$
@@ -144,9 +163,9 @@ annealed from 1 to 0.3.
 * Hard average sum of rewards: $\bar{R}_{0, \pi_f} = \frac{1}{N}\sum_{n}^{N}R_{0, \pi_f}$
 
 
-#### Performance Evaluation
+### Performance Evaluation
 
-The following table answers the question: how does each algorithm perform, wrt
+The following table answer the question: how does each algorithm perform, wrt
 1) pure returns
 2) discounted returns (its objective)
 3) episode length on hard simulations
@@ -175,7 +194,7 @@ For off-policy, evaluation is performed by the target policy
 | Taxi (v3)         | <img src="images/evaluation_metrics/off_policy/Taxi_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>         | <img src="images/evaluation_metrics/off_policy/Taxi_mean_hard_eval_G0.png" alt="Grid" width="400"/>         | <img src="images/evaluation_metrics/off_policy/Taxi_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>         |
 
 
-#### Learned Correctness Evaluation
+### Learned Correctness
 Correctness concerns itself with how well does the algorithm learn. 
 In the following table the following questions are addressed:
 * Is the agent learning ? This is measured by the loss, i.e. TD error approaching 0.
@@ -211,6 +230,3 @@ For off-policy, evaluation is performed by the target policy
 
 ## Execution
 Run code in `main.py`. Each algorithm has its own `experiments` task.
-
-## Environments
-- [Gymnasium] - `FrozenLake-v1`, `CliffWalking-v0`, `Taxi-v3`
