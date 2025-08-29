@@ -21,7 +21,7 @@
   - [Metrics and Other Definitions](#metrics-and-other-definitions)
   - [Performance Evaluation](#performance-evaluation)
   - [Learned Correctnes](#learned-correctness)
-- [How to run the experiments](#execution)
+- [How to run the experiments](#how-to-run-the-experiments)
 
 
 ## Introduction
@@ -231,5 +231,5 @@ For off-policy, evaluation is performed by the target policy
 ---
 
 
-## Execution
+## How to run the experiments
 Run code in `main.py`.
