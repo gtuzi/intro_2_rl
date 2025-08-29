@@ -4,7 +4,7 @@
 
 
 ## Table of Contents
-- [Introduction](#Introduction)
+- [Introduction](#introduction)
 - [Implemented Algorithms](#implemented-algorithms)
 - [Detailed Development](#explanations-development-and-experimental-details)
 - [REINFORCE - MC Policy Gradient](#reinforce-the-monte-carlo-policy-gradient-)
@@ -14,6 +14,11 @@
 - [n-Step with Eligibility Traces Actor–Critic](#n-step-with-eligibility-traces-actorcritic)
 - [Policy Gradient for Continuing Problems](#policy-gradient-for-continuing-problems)
 - [Policy Parameterization for _Continuous Actions_](#policy-parameterization-for-_continuous-actions_)
+- [Experiments](#experiments)
+  - [Environments](#environments-)
+  - [Reward Shaping](#reward-shaping)
+  - [Episodic Results](#episodic-results)
+  - [Continuing Task Results](#continuing-task-results)
 
 
 ## Introduction
@@ -145,6 +150,31 @@ The pseudo-code of which is shown below:
 
 The implementation is in `agents/ACWithEligibilityTracesContinuing`
 
+
+## Policy Parameterization for _Continuous Actions_
+
+For continuous actions (i.e. infinite actions) we learn the statistics of the
+distribution of said action. For example, the action set might be the real numbers, with actions chosen
+from a normal (Gaussian) distribution. To produce a policy parameterization, 
+the policy can be defined as the normal probability density over a 
+real-valued scalar action, with mean and standard deviation given by 
+parametric function approximators that depend on the state.
+
+$$
+\pi(a | s, \mathbf{\theta}) \overset \cdot{=} \frac{1}{\sigma(s, \mathbf{\theta})} \exp \Bigl(- \frac{\bigl(a - \mu(s, \mathbf{\theta}) \bigr)^2}{2\sigma(s, \mathbf{\theta})^2} \Bigr)
+$$
+
+
+where: $\pi: \mathcal{S} \times\mathbb{R} ^{d'} \rightarrow \mathbb{R}$ 
+and $\sigma: \mathcal{S} \times\mathbb{R} ^{d'} \rightarrow \mathbb{R}^{+}$
+are two _parametrized function approximators_. With these definitions, 
+all the algorithms from discrete action, can be used to 
+learn continuous action selection. Implemented continuous action algorithms:
+* `agents/ReinforceContinuousAction`
+* `agents/ReinforceBaselineContinuousAction`
+* `agents/ACWithEligibilityTracesContinuousAction`
+
+
 ## Experiments
 In the following experiments, for each algorithm presented several
 hyperparameters are shown. Some of the hyper-parameters cause simulation
@@ -208,7 +238,6 @@ def acrobot_reward_shaper(reward: float, state: np.ndarray, **kwargs) -> float:
 
 ### Episodic Results
 
-
 #### Performance Evaluation
 
 The following table answer the question: how does each algorithm perform, wrt
@@ -219,6 +248,8 @@ The following table answer the question: how does each algorithm perform, wrt
 
 #### REINFORCE
 
+`norm_r` denotes whether reward normalization was applied.
+
 | Environment | $\bar{R}_{0, h}$                                                                                                       | $\bar{G}_{0, h}$                                                                                          | Average Episode Length                                                                                                |
 |-------------|------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------| 
 | MountainCar | <img src="images/evaluation_metrics/reinforce/MountainCar_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforce/MountainCar_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforce/MountainCar_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
@@ -228,6 +259,8 @@ The following table answer the question: how does each algorithm perform, wrt
 
 
 #### REINFORCE - with Baseline
+
+`norm_r` denotes whether reward normalization was applied.
 
 | Environment | $\bar{R}_{0, h}$                                                                                                               | $\bar{G}_{0, h}$                                                                                                  | Average Episode Length                                                                                                        |
 |-------------|--------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------| 
@@ -354,45 +387,20 @@ Here the learned expected reward is compared against the actual shaped reward.
 
 
 
-## Policy Parameterization for _Continuous Actions_
-
-For continuous actions (i.e. infinite actions) we learn the statistics of the
-distribution of said action. For example, the action set might be the real numbers, with actions chosen
-from a normal (Gaussian) distribution. To produce a policy parameterization, 
-the policy can be defined as the normal probability density over a 
-real-valued scalar action, with mean and standard deviation given by 
-parametric function approximators that depend on the state.
-
-$$
-\pi(a | s, \mathbf{\theta}) \overset \cdot{=} \frac{1}{\sigma(s, \mathbf{\theta})} \exp \Bigl(- \frac{\bigl(a - \mu(s, \mathbf{\theta}) \bigr)^2}{2\sigma(s, \mathbf{\theta})^2} \Bigr)
-$$
 
 
-where: $\pi: \mathcal{S} \times\mathbb{R} ^{d'} \rightarrow \mathbb{R}$ 
-and $\sigma: \mathcal{S} \times\mathbb{R} ^{d'} \rightarrow \mathbb{R}^{+}$
-are two _parametrized function approximators_. With these definitions, 
-all the algorithms from discrete action, can be used to 
-learn continuous action selection.
-
-###### Experiments
+### Continuous Action Results
 
 The following algorithms were adopted for continuous action policies. The 
 environment used here was the continuous action [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car_continuous/)
 
-Note that the continuous action environment has a different reward from
-the discrete action environment. From the website:
 
-"A negative reward of $-0.1 * action^2$ is received at each timestep to 
-penalise for taking actions of large magnitude. If the mountain car reaches 
-the goal then a positive reward of +100 is added to the negative 
-reward for that timestep."
-
-| Algorithms                             | Train                                                                                                            | 
-|----------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| Episodic: REINFORCE                    | <img src="images/ReinforceContinuousAction_G0_train.png" alt="Grid" width="450"/>                                |
-| Episodic: REINFORCE with Baseline      | <img src="images/ReinforceBaselineContinuousAction_G0_train.png" alt="Grid" width="450"/>                        |
-| Episodic: AC with Eligibility Traces   | <img src="images/ACWithEligibilityTracesContinuousAction_G0_train.png" alt="Grid" width="450"/>                  |
-| Continuing: AC with Eligibility Traces | <img src="images/ACWithEligibilityTracesContinuousActionContinuingTask_avg_R_train.png" alt="Grid" width="450"/> |
+| Algorithm                              | TBD | 
+|----------------------------------------|-----|
+| Episodic: REINFORCE                    |     |
+| Episodic: REINFORCE with Baseline      |     |
+| Episodic: AC with Eligibility Traces   |     |
+| Continuing: AC with Eligibility Traces |     |
 
 For the REINFORCE algorithms, the return was mean-centered, as it significantly
 improved learning.
