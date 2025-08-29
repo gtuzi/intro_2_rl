@@ -17,8 +17,8 @@
     - [nStep-Q(sigma)](#nstepqsigma)
 - [Experiments](#experiments) 
   - [Environments](#environments) 
-  - [Environment Setup](#environments-setup)
-  - [Parameters, Definitions, and Metrics](#parameters-definitions-and-metrics)
+  - [Environment and Agent Parameter Setup](#environments-setup-and-agent-parameter-setup)
+  - [Metrics and Other Definitions](#metrics-and-other-definitions)
   - [Performance Evaluation](#performance-evaluation)
   - [Learned Correctnes](#learned-correctness)
 - [How to run the experiments](#execution)
@@ -81,12 +81,11 @@ This algorithm is reported in the off-policy experiments below.
 
 ## Experiments
 
-
 ### Environments
 - [Gymnasium] - `FrozenLake-v1`, `CliffWalking-v0`, `Taxi-v3`
 
 
-### Environments Setup
+### Environments Setup and Agent Parameter Setup
 Different environments have been tested with the following parameters
 
 * Num train seeds = $10$
@@ -99,7 +98,7 @@ Different environments have been tested with the following parameters
     * Reach goal: $+1$
     * Reach hole: 0
     * Reach frozen: 0
-    * Slippery: True (stochastic)
+    * _Slippery_: True (stochastic)  / False
     * Map: $4 \times 4$
   * Initial state-action value $q_{init} = -1$
   * Number of episodes = $10000$ 
@@ -144,7 +143,7 @@ Different environments have been tested with the following parameters
 
 ---
 
-### Parameters, Definitions, and Metrics
+### Metrics and Other Definitions
 
 All the algorithms shown share the same parameters per environment as shown.
 For off-policy, QLearning was used as the behavioral policy, with the epsilon
@@ -154,13 +153,13 @@ annealed from 1 to 0.3.
 * Soft action and policy: $a \sim \pi_f(\cdot|s) = \varepsilon-\text{greedy}(Q(s, \cdot))$
 * Hard sum of discounted rewards: $G_{t, \pi_h} = \sum_{k = t} \gamma^{k - t}r_t$
 * Soft sum of discounted rewards: $G_{t, \pi_f} = \sum_{k = t} \gamma^{k - t}r_t$
-* Hard average sum of rewards: $R_{0, \pi_h} = \sum_{t=0} r^{n}_t$
-* Soft average sum of rewards: $R_{0, \pi_f} = \sum_{t=0} r^{n}_t$
-* Hard average sum of discounted rewards: $\bar{G}_{0, h} = \frac{1}{N}\sum_n G^n_{0, h}$
-* Soft average sum of discounted rewards: $\bar{G}_{0, f} = \frac{1}{N}\sum_n G^n_{0, f}$
-* Average initial state value: $\bar{V}(s_0) = \frac{1}{N}\sum_n V(s^n_0)$
-* Hard average sum of rewards: $\bar{R}_{0, \pi_h} = \frac{1}{N}\sum_{n}^{N}R_{0, \pi_h}$
-* Hard average sum of rewards: $\bar{R}_{0, \pi_f} = \frac{1}{N}\sum_{n}^{N}R_{0, \pi_f}$
+* Hard sum of raw rewards: $R_{0, \pi_h} = \sum_{t=0} r_t$
+* Soft sum of raw rewards: $R_{0, \pi_f} = \sum_{t=0} r_t$
+* Hard average sum of discounted rewards over N trials/seeds: $\bar{G}_{0, h} = \frac{1}{N}\sum_n G^{(n)}_{0, h}$
+* Soft average sum of discounted rewards over N trials/seeds: $\bar{G}_{0, f} = \frac{1}{N}\sum_n G^{(n)}_{0, f}$
+* Average initial state value over N trials/seeds: $\bar{V}(s_0) = \frac{1}{N}\sum_n V(s^{(n)}_0)$
+* Hard average sum of raw rewards over N trials/seeds: $\bar{R}_{0, \pi_h} = \frac{1}{N}\sum_{n}^{N}R^{(n)}_{0, \pi_h}$
+* Hard average sum of raw rewards over N trials/seeds: $\bar{R}_{0, \pi_f} = \frac{1}{N}\sum_{n}^{N}R^{(n)}_{0, \pi_f}$
 
 
 ### Performance Evaluation
@@ -168,7 +167,7 @@ annealed from 1 to 0.3.
 The following table answer the question: how does each algorithm perform, wrt
 1) pure returns
 2) discounted returns (its objective)
-3) episode length on hard simulations
+3) episode length on hard (i.e. greedy) evaluations
 
 Under these scenarios we concern ourselves with how well the algo works 
 in an (almost) black-box fashion.
@@ -176,22 +175,24 @@ in an (almost) black-box fashion.
 
 #### On-Policy Results
 
-| Environment       | $\bar{R}_{0, h}$                                                                                                        | $\bar{G}_{0, h}$                                                                                           | Average Episode Length                                                                                                 |
-|-------------------|-------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------| 
-| Frozen Lake (v1)  | <img src="images/evaluation_metrics/on_policy/FrozenLake_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>   | <img src="images/evaluation_metrics/on_policy/FrozenLake_mean_hard_eval_G0.png" alt="Grid" width="400"/>   | <img src="images/evaluation_metrics/on_policy/FrozenLake_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>   |
-| CliffWalking (v0) | <img src="images/evaluation_metrics/on_policy/CliffWalking_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/on_policy/CliffWalking_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/on_policy/CliffWalking_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
-| Taxi (v3)         | <img src="images/evaluation_metrics/on_policy/Taxi_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>         | <img src="images/evaluation_metrics/on_policy/Taxi_mean_hard_eval_G0.png" alt="Grid" width="400"/>         | <img src="images/evaluation_metrics/on_policy/Taxi_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>         |
+| Environment               | $\bar{R}_{0, h}$                                                                                                               | $\bar{G}_{0, h}$                                                                                                  | Average Episode Length                                                                                                        |
+|---------------------------|--------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------| 
+| Frozen Lake (v1)          | <img src="images/evaluation_metrics/on_policy/FrozenLake_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>          | <img src="images/evaluation_metrics/on_policy/FrozenLake_mean_hard_eval_G0.png" alt="Grid" width="400"/>          | <img src="images/evaluation_metrics/on_policy/FrozenLake_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>          |
+| Frozen Lake-Slippery (v1) | <img src="images/evaluation_metrics/on_policy/FrozenLake-Slippery_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/on_policy/FrozenLake-Slippery_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/on_policy/FrozenLake-Slippery_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| CliffWalking (v0)         | <img src="images/evaluation_metrics/on_policy/CliffWalking_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>        | <img src="images/evaluation_metrics/on_policy/CliffWalking_mean_hard_eval_G0.png" alt="Grid" width="400"/>        | <img src="images/evaluation_metrics/on_policy/CliffWalking_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>        |
+| Taxi (v3)                 | <img src="images/evaluation_metrics/on_policy/Taxi_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>                | <img src="images/evaluation_metrics/on_policy/Taxi_mean_hard_eval_G0.png" alt="Grid" width="400"/>                | <img src="images/evaluation_metrics/on_policy/Taxi_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>                |
 
 
 #### Off-Policy Results
 
 For off-policy, evaluation is performed by the target policy
 
-| Environment       | $\bar{R}_{0, h}$                                                                                                         | $\bar{G}_{0, h}$                                                                                            | Average Episode Length                                                                                                  |
-|-------------------|--------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------| 
-| Frozen Lake (v1)  | <img src="images/evaluation_metrics/off_policy/FrozenLake_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>   | <img src="images/evaluation_metrics/off_policy/FrozenLake_mean_hard_eval_G0.png" alt="Grid" width="400"/>   | <img src="images/evaluation_metrics/off_policy/FrozenLake_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>   |
-| CliffWalking (v0) | <img src="images/evaluation_metrics/off_policy/CliffWalking_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/off_policy/CliffWalking_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/off_policy/CliffWalking_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
-| Taxi (v3)         | <img src="images/evaluation_metrics/off_policy/Taxi_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>         | <img src="images/evaluation_metrics/off_policy/Taxi_mean_hard_eval_G0.png" alt="Grid" width="400"/>         | <img src="images/evaluation_metrics/off_policy/Taxi_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>         |
+| Environment                 | $\bar{R}_{0, h}$                                                                                                                | $\bar{G}_{0, h}$                                                                                                   | Average Episode Length                                                                                                         |
+|-----------------------------|---------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------| 
+| Frozen Lake (v1)            | <img src="images/evaluation_metrics/off_policy/FrozenLake_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>          | <img src="images/evaluation_metrics/off_policy/FrozenLake_mean_hard_eval_G0.png" alt="Grid" width="400"/>          | <img src="images/evaluation_metrics/off_policy/FrozenLake_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>          |
+| Frozen Lake - Slippery (v1) | <img src="images/evaluation_metrics/off_policy/FrozenLake-Slippery_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/off_policy/FrozenLake-Slippery_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/off_policy/FrozenLake-Slippery_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| CliffWalking (v0)           | <img src="images/evaluation_metrics/off_policy/CliffWalking_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>        | <img src="images/evaluation_metrics/off_policy/CliffWalking_mean_hard_eval_G0.png" alt="Grid" width="400"/>        | <img src="images/evaluation_metrics/off_policy/CliffWalking_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>        |
+| Taxi (v3)                   | <img src="images/evaluation_metrics/off_policy/Taxi_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>                | <img src="images/evaluation_metrics/off_policy/Taxi_mean_hard_eval_G0.png" alt="Grid" width="400"/>                | <img src="images/evaluation_metrics/off_policy/Taxi_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>                |
 
 
 ### Learned Correctness
@@ -208,25 +209,27 @@ expected values in $V$
 
 #### On-Policy Results
 
-| Environment       | $\bar{G}_{0, f}$ vs $\bar{V}(s_0)$                                                                  | Avg Loss                                                                                                    |
-|-------------------|-----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| Frozen Lake (v1)  | <img src="images/learning/on_policy/FrozenLake_value_accuracy_JOINT.png" alt="Grid" width="400"/>   | <img src="images/training_metrics/on_policy/FrozenLake_mean_behavioral_loss.png" alt="Grid" width="400"/>   |
-| CliffWalking (v0) | <img src="images/learning/on_policy/CliffWalking_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/on_policy/CliffWalking_mean_behavioral_loss.png" alt="Grid" width="400"/> |
-| Taxi (v3)         | <img src="images/learning/on_policy/Taxi_value_accuracy_JOINT.png" alt="Grid" width="400"/>         | <img src="images/training_metrics/on_policy/Taxi_mean_behavioral_loss.png" alt="Grid" width="400"/>         |
+| Environment                 | $\bar{G}_{0, f}$ vs $\bar{V}(s_0)$                                                                         | Avg Loss                                                                                                           |
+|-----------------------------|------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| Frozen Lake (v1)            | <img src="images/learning/on_policy/FrozenLake_value_accuracy_JOINT.png" alt="Grid" width="400"/>          | <img src="images/training_metrics/on_policy/FrozenLake_mean_behavioral_loss.png" alt="Grid" width="400"/>          |
+| Frozen Lake - Slippery (v1) | <img src="images/learning/on_policy/FrozenLake-Slippery_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/on_policy/FrozenLake-Slippery_mean_behavioral_loss.png" alt="Grid" width="400"/> |
+| CliffWalking (v0)           | <img src="images/learning/on_policy/CliffWalking_value_accuracy_JOINT.png" alt="Grid" width="400"/>        | <img src="images/training_metrics/on_policy/CliffWalking_mean_behavioral_loss.png" alt="Grid" width="400"/>        |
+| Taxi (v3)                   | <img src="images/learning/on_policy/Taxi_value_accuracy_JOINT.png" alt="Grid" width="400"/>                | <img src="images/training_metrics/on_policy/Taxi_mean_behavioral_loss.png" alt="Grid" width="400"/>                |
 
 
 #### Off-Policy Results
 
 For off-policy, evaluation is performed by the target policy
 
-| Environment       | $\bar{G}_{0, f}$ vs $\bar{V}(s_0)$                                                                   | Avg Loss                                                                                                 |
-|-------------------|------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
-| Frozen Lake (v1)  | <img src="images/learning/off_policy/FrozenLake_value_accuracy_JOINT.png" alt="Grid" width="400"/>   | <img src="images/training_metrics/off_policy/FrozenLake_mean_target_loss.png" alt="Grid" width="400"/>   |
-| CliffWalking (v0) | <img src="images/learning/off_policy/CliffWalking_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/off_policy/CliffWalking_mean_target_loss.png" alt="Grid" width="400"/> |
-| Taxi (v3)         | <img src="images/learning/off_policy/Taxi_value_accuracy_JOINT.png" alt="Grid" width="400"/>         | <img src="images/training_metrics/off_policy/Taxi_mean_target_loss.png" alt="Grid" width="400"/>         |
+| Environment                 | $\bar{G}_{0, f}$ vs $\bar{V}(s_0)$                                                                          | Avg Loss                                                                                                        |
+|-----------------------------|-------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| Frozen Lake (v1)            | <img src="images/learning/off_policy/FrozenLake_value_accuracy_JOINT.png" alt="Grid" width="400"/>          | <img src="images/training_metrics/off_policy/FrozenLake_mean_target_loss.png" alt="Grid" width="400"/>          |
+| Frozen Lake - Slippery (v1) | <img src="images/learning/off_policy/FrozenLake-Slippery_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/off_policy/FrozenLake-Slippery_mean_target_loss.png" alt="Grid" width="400"/> |
+| CliffWalking (v0)           | <img src="images/learning/off_policy/CliffWalking_value_accuracy_JOINT.png" alt="Grid" width="400"/>        | <img src="images/training_metrics/off_policy/CliffWalking_mean_target_loss.png" alt="Grid" width="400"/>        |
+| Taxi (v3)                   | <img src="images/learning/off_policy/Taxi_value_accuracy_JOINT.png" alt="Grid" width="400"/>                | <img src="images/training_metrics/off_policy/Taxi_mean_target_loss.png" alt="Grid" width="400"/>                |
 
 ---
 
 
 ## Execution
-Run code in `main.py`. Each algorithm has its own `experiments` task.
+Run code in `main.py`.

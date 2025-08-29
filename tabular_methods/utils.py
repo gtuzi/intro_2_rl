@@ -115,7 +115,7 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
 
         return action, prob
 
-    def state_value(self, s):
+    def state_value(self, s) -> float:
         probs = [
             self.get_sa_probability(s, a)
             for a in range(self.action_space_dims)
@@ -127,6 +127,9 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
 
         return sum([p * q for p, q in zip(probs, action_values)])
 
+    def state_action_value(self, s, a) -> float:
+        return self.Q[s][a]
+
     def state_update_count(self, s):
         updates = [
             self.Q_update_count[s][a]
@@ -135,9 +138,9 @@ class QEpsGreedyAgent(DiscreteActionAgent, SoftPolicy):
 
         return sum(updates)
 
-    def optimal_state_value(self, s):
+    def optimal_state_value(self, s) -> float:
         a, p = self.get_greedy_action(s)
-        return self.Q[s][a]
+        return self.state_action_value(s, a)
 
     def optimal_state_update_count(self, s):
         a, p = self.get_greedy_action(s)
@@ -177,13 +180,17 @@ class DiscreteActionRandomAgent(DiscreteActionAgent, SoftPolicy):
         self.action_gen = PDFSampler(distribution, distribution_args)
         self.t = 0
 
+    def reset(self):
+        self.t = 0
+
     def act(self, s) -> Tuple[int, float]:
         a = self.action_gen.sample(size=1)
         p = self.action_gen.probability(a)
         return a, p
 
-    def step(self, trajectory: List[Experience]):
+    def step(self, trajectory: List[Experience]) -> float:
         self.t += 1
+        return 0.
 
     def get_sa_probability(self, s, a) -> float:
         return self.action_gen.probability(a)
@@ -207,6 +214,3 @@ class DiscreteActionRandomAgent(DiscreteActionAgent, SoftPolicy):
 
     def get_greedy_action(self, s) -> Tuple[int, float]:
         return self.act(s)
-
-    def reset(self):
-        self.t = 0

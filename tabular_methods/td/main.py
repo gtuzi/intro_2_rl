@@ -1,6 +1,5 @@
 import gymnasium as gym
 from gymnasium import Env
-from scipy.stats import randint
 
 from shared.utils import (
     LinearSchedule,
@@ -9,10 +8,12 @@ from shared.utils import (
 )
 
 from tabular_methods.train import (
-    parallel_train, sequential_train,
+    parallel_train,
+    sequential_train,
     preprocess_for_distribution_plots,
     preprocess_for_training_plots,
-    preprocess_for_evaluation_plots, print_health_report
+    preprocess_for_evaluation_plots,
+    print_health_report
 )
 
 from tabular_methods.plot import (
@@ -36,23 +37,27 @@ global ENV_NAME
 
 
 def build_env(name: str, **kwargs) -> Env:
+
     render = kwargs.pop('render', False)
-    if name == 'FrozenLake':
+
+    if 'FrozenLake' in name:
+        is_slippery = kwargs.pop('is_slippery', False)
+
         env = gym.make(
             'FrozenLake-v1',
             render_mode="human" if render else None,
             desc=None,
             map_name="4x4",
-            is_slippery=True,
+            is_slippery=is_slippery,
             **kwargs
         )
-    elif name == 'Taxi':
+    elif 'Taxi' in name:
         env = gym.make(
             'Taxi-v3',
             render_mode="human" if render else None,
             **kwargs
         )
-    elif name == 'CliffWalking':
+    elif 'CliffWalking' in name:
         env = gym.make(
             "CliffWalking-v0",
             render_mode = "human" if render else None,
@@ -62,6 +67,11 @@ def build_env(name: str, **kwargs) -> Env:
         raise NotImplementedError
 
     return env
+
+
+def env_builder(**kwargs) -> Env:
+    global ENV_NAME
+    return build_env(ENV_NAME, render=False, **kwargs)
 
 
 def reward_shaper(reward: float, done: bool, t: int):
@@ -80,10 +90,10 @@ def build_exponential_sched(start, steps, end = 0.0):
     return ExponentialSchedule(start, end=end, steps=steps)
 
 
-def env_builder() -> Env:
-    return build_env(ENV_NAME, render=False)
 
-
+############################################
+# Experiments
+############################################
 
 def run_on_policy_experiments(
         num_train_seeds: int = 10,
@@ -92,14 +102,17 @@ def run_on_policy_experiments(
     global ENV_NAME
 
     seeds = list(range(num_train_seeds))
-    state_bins = None
-
     num_parallel_workers = min(10, len(seeds))
+    env_kwargs = { }
 
-    if ENV_NAME == 'FrozenLake':
+    if ENV_NAME == 'FrozenLake' or ENV_NAME == 'FrozenLake-Slippery':
+        if ENV_NAME.lower() == 'FrozenLake-Slippery'.lower():
+            env_kwargs['is_slippery'] = True
+        else:
+            env_kwargs['is_slippery'] = False
+
         num_episodes = 10000
         T = 100
-        evaluate_frequency = max(1, int(0.001 * num_episodes * T))
 
         q_init = -1.0
 
@@ -116,7 +129,6 @@ def run_on_policy_experiments(
     elif ENV_NAME == 'CliffWalking':
         num_episodes = 5000
         T = 20
-
         q_init = 0.
 
         epsilon_start = 1.0
@@ -128,9 +140,6 @@ def run_on_policy_experiments(
         alpha_end = 0.01
         alpha_steps = num_episodes * T
         update_coefficient_builder = build_linear_sched  # alpha / lr
-
-        # the smaller, the more frequent
-        evaluate_frequency = max(1, int(0.05 * num_episodes * T))
 
     elif ENV_NAME == 'Taxi':
         num_episodes = 5000
@@ -146,14 +155,12 @@ def run_on_policy_experiments(
         alpha_end = 0.2
         alpha_steps = num_episodes * T
         update_coefficient_builder = build_linear_sched  # alpha / lr
-
-        evaluate_frequency = max(1, int(0.02 * num_episodes * T))
-
     else:
         raise NotImplementedError
 
+    # the smaller, the more frequent
+    evaluate_frequency = max(1, int(0.01 * num_episodes * T))
     env = env_builder()
-
     gamma = 0.99
 
     agent_kwargs = dict(
@@ -193,7 +200,7 @@ def run_on_policy_experiments(
             akwargs.update(dict(n=n))
 
         results = parallel_train(
-            env_builder=env_builder,
+            env_builder=lambda: env_builder(**env_kwargs),
             behavioral_agent_class=agent_class,
             behavioral_agent_kwargs=akwargs,
             T=T,
@@ -278,14 +285,18 @@ def run_off_policy(
     global ENV_NAME
 
     seeds = list(range(num_train_seeds))
-    state_bins = None
-
     num_parallel_workers = min(10, len(seeds))
 
-    if ENV_NAME == 'FrozenLake':
+    env_kwargs = {}
+
+    if ENV_NAME == 'FrozenLake' or ENV_NAME == 'FrozenLake-Slippery':
+        if ENV_NAME.lower() == 'FrozenLake-Slippery'.lower():
+            env_kwargs['is_slippery'] = True
+        else:
+            env_kwargs['is_slippery'] = False
+
         num_episodes = 10000
         T = 100
-        evaluate_frequency = max(1, int(0.001 * num_episodes * T))
 
         q_init = 1.
 
@@ -338,9 +349,6 @@ def run_off_policy(
         t_alpha_steps = num_episodes * T
         t_update_coefficient_builder = build_linear_sched
 
-        # the smaller, the more frequent
-        evaluate_frequency = max(1, int(0.05 * num_episodes * T))
-
     elif ENV_NAME == 'Taxi':
         num_episodes = 5000
         T = 50
@@ -366,13 +374,12 @@ def run_off_policy(
         t_alpha_steps = num_episodes * T
         t_update_coefficient_builder = build_linear_sched
 
-        evaluate_frequency = max(1, int(0.01 * num_episodes * T))
-
     else:
         raise NotImplementedError
 
+    # the smaller, the more frequent
+    evaluate_frequency = max(1, int(0.01 * num_episodes * T))
     env = env_builder()
-
     gamma = 0.99
 
     # ---- Setup Behavioral Agent ----- #
@@ -393,16 +400,6 @@ def run_off_policy(
             "steps": b_alpha_steps,
             "end"  : b_alpha_end
         }
-    )
-
-    uniform_behavioral_akwargs = dict(
-        obs_space_dims=behavioral_agent_kwargs['obs_space_dims'],
-        action_space_dims=behavioral_agent_kwargs['action_space_dims'],
-        distribution=randint,
-        distribution_args=dict(
-            low=0,
-            high=behavioral_agent_kwargs['action_space_dims']
-        )
     )
 
     behavioral_class = QLearning
@@ -454,7 +451,7 @@ def run_off_policy(
             train_kwargs.update(dict(sigma_fn=sigma_fn))
 
         results = parallel_train(
-            env_builder=env_builder,
+            env_builder=lambda: env_builder(**env_kwargs),
             behavioral_agent_class=behavioral_class,
             behavioral_agent_kwargs=behaviora_kwargs,
             target_agent_class=target_class,
@@ -544,26 +541,30 @@ def run_off_policy(
     # endregion
 
 
+
 if __name__ == '__main__':
     global ENV_NAME
 
     num_train_seeds=10
     eval_num_episodes=100
 
-    for env_name in ['FrozenLake', 'CliffWalking', 'Taxi']:
+    for env_name in [
+        'FrozenLake',
+        'FrozenLake-Slippery',
+        # 'CliffWalking',
+        # 'Taxi'
+        ]:
 
         ENV_NAME = env_name
 
-        if 1:
-            run_on_policy_experiments(
-                num_train_seeds=num_train_seeds,
-                eval_num_episodes=eval_num_episodes
-            )
+        run_on_policy_experiments(
+            num_train_seeds=num_train_seeds,
+            eval_num_episodes=eval_num_episodes
+        )
 
-        if 0:
-            run_off_policy(
-                num_train_seeds=num_train_seeds,
-                eval_num_episodes=eval_num_episodes
-            )
+        run_off_policy(
+            num_train_seeds=num_train_seeds,
+            eval_num_episodes=eval_num_episodes
+        )
 
     exit(0)

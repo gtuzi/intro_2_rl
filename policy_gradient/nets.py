@@ -227,6 +227,7 @@ class ValueFunction(nn.Module):
             self,
             in_size: int,
             hidden_dims: Optional[Union[int, List, Tuple]] = None,
+            normalize_input: bool = False
     ):
         super(ValueFunction, self).__init__()
 
@@ -235,6 +236,7 @@ class ValueFunction(nn.Module):
 
         self.in_size = in_size
         self.hidden_dims = hidden_dims
+        self.normalize_input = normalize_input
         self.net = None
         self._build_net()
 
@@ -243,7 +245,7 @@ class ValueFunction(nn.Module):
             in_size=self.in_size,
             hidden_dims=self.hidden_dims,
             out_size=1,
-            normalize_input=False
+            normalize_input=self.normalize_input
         )
 
     def forward(self, x: Tensor):

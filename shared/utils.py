@@ -13,6 +13,11 @@ class SoftPolicy(ABC):
     def get_sa_probability(self, s, a) -> float:
         raise NotImplementedError
 
+    @abstractmethod
+    def entropy(self, **kwargs) -> float:
+        raise NotImplementedError
+
+
 
 class NoiseSchedule:
     def initialize(self):
@@ -226,6 +231,69 @@ class ExponentialSchedule(NoiseSchedule):
 
     @property
     def value(self):
+        return self.current
+
+
+class LinearWarmupDecaySchedule(NoiseSchedule):
+    """
+    A schedule that linearly warms up to a peak value, then linearly decays.
+
+    1. Phase 1 (Warmup): Linearly increases from `start_lr` to `peak_lr` over `warmup_steps`.
+    2. Phase 2 (Decay): Linearly decreases from `peak_lr` to `end_lr` over `decay_steps`.
+    3. Phase 3 (Hold): Stays at `end_lr` indefinitely after the decay phase is complete.
+    """
+
+    def __init__(self, start_lr: float, peak_lr: float, end_lr: float,
+                 warmup_steps: int, decay_steps: int):
+
+        self.start_lr = start_lr
+        self.peak_lr = peak_lr
+        self.end_lr = end_lr
+        self.warmup_steps = warmup_steps
+        self.decay_steps = decay_steps
+
+        # Pre-calculate the increments for each phase
+        self.warmup_inc = (peak_lr - start_lr) / float(
+            warmup_steps) if warmup_steps > 0 else 0
+        self.decay_inc = (end_lr - peak_lr) / float(
+            decay_steps) if decay_steps > 0 else 0
+
+        # Internal state
+        self.current = start_lr
+        self.t = 0
+
+    def initialize(self):
+        """Resets the schedule to its initial state."""
+        self.current = self.start_lr
+        self.t = 0
+
+    def step(self, steps: int = 1):
+        """
+        Advance the schedule by a number of steps.
+
+        Note: This implementation calculates the value based on the absolute step `self.t`
+        for robustness, rather than using incremental updates.
+        """
+        self.t += steps
+
+        if self.t < self.warmup_steps:
+            # Phase 1: Warming up
+            self.current = self.start_lr + self.warmup_inc * self.t
+        elif self.t < (self.warmup_steps + self.decay_steps):
+            # Phase 2: Decaying
+            steps_into_decay = self.t - self.warmup_steps
+            self.current = self.peak_lr + self.decay_inc * steps_into_decay
+        else:
+            # Phase 3: Holding at the end value
+            self.current = self.end_lr
+
+    def reset(self):
+        """For episode-based reset logic, not used in this schedule's state."""
+        pass
+
+    @property
+    def value(self) -> float:
+        """Returns the current value of the schedule."""
         return self.current
 
 

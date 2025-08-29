@@ -57,24 +57,9 @@ future rewards up until the end of the episode. In this sense REINFORCE is a Mon
 Carlo algorithm and is well defined only for the episodic case with all updates made in
 retrospect after the episode is completed.
 
-<img src="images/reinforce.png" alt="Grid" width="450"/>
+<img src="images/pub/reinforce.png" alt="Grid" width="450"/>
 
-###### Experiments
-The algorithm above didn't perform well on `MountainCar`. Had success 
-with `CartPole`, the results of which are shown below. The model is located
-in `agents/Reinforce` and it is an PyTorch MLP implementation of the policy 
-model. Both normalized and unnormalized gradients were tried. In this experiment
-100 trials were tried over a few learning steps (learning rates), all of which
-were decayed over the steps. The metric displayed is the undiscounted sum or 
-rewards, even though a discount of 0.99 was used in the run.
-
-|                       | Train                                                                      | Eval                                                                      |
-|-----------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------|
-| Normalized Gradient   | <img src="images/Reinforce_G0_train_normgrad.png" alt="Grid" width="450"/> | <img src="images/Reinforce_G0_eval_normgrad.png" alt="Grid" width="450"/> |
-| Unnormalized Gradient | <img src="images/Reinforce_G0_train.png" alt="Grid" width="450"/>          | <img src="images/Reinforce_G0_eval.png" alt="Grid" width="450"/>          |
-
-Note that _eval_ experiments denote the episodes where the action 
-was strictly greedy. Normalizing the gradients speeds up learning.
+The implementation is in `agents/Reinforce`
 
 
 ## REINFORCE with Baseline
@@ -100,15 +85,9 @@ returns generated _at the end of the episode_, to learn the policy parameters
 $\mathbf{\theta}$, we can also use the same method for learning the parameters
 of the state value function $\mathbf{w}$.
 
-<img src="images/reinforce_with_baseline.png" alt="Grid" width="450"/>
+<img src="images/pub/reinforce_with_baseline.png" alt="Grid" width="450"/>
 
-###### Experiments
-REINFORCE with baseline is implemented in `agents/ReinforceBaseline`
-
-|                       | Train                                                                              | Eval                                                                              |
-|-----------------------|------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
-| Normalized Gradient   | <img src="images/ReinforceBaseline_G0_train_normgrad.png" alt="Grid" width="450"/> | <img src="images/ReinforceBaseline_G0_eval_normgrad.png" alt="Grid" width="450"/> |
-| Unnormalized Gradient | <img src="images/ReinforceBaseline_G0_train.png" alt="Grid" width="450"/>          | <img src="images/ReinforceBaseline_G0_eval.png" alt="Grid" width="450"/>          |
+The implementation is in `agents/ReinforceBaseline`
 
 
 ## Actor - Critic Methods - Introduction
@@ -125,6 +104,7 @@ state-value function is used to assess actions in this way it is called a
 _critic_, and the overall policy-gradient method is termed an _actor–critic_
 method.
 
+
 ## One-Step Actor–Critic
 They are the analog of the TD methods, such as TD(0), Sarsa(0), and Q-learning.
 They are fully online and incremental, yet avoid the complexities of  
@@ -137,21 +117,9 @@ It is fully online, incremental algorithm, with states,
 actions, and rewards processed as they occur and then never 
 revisited.
 
-<img src="images/OneStep_AC.png" alt="Grid" width="450"/>
+<img src="images/pub/OneStep_AC.png" alt="Grid" width="450"/>
 
 The implementation is in `agents/OneStepAC`
-
-###### Experiment Results
-
-The following are the results
-for one-step AC agent on `CartPole` environment. The update value
-used for the critic $\alpha^{\mathbf{w}} = 25 \alpha^{\mathbf{\theta}}$.
-
-
-| Gradient t            | Train                                                                      | Eval                                                                      |
-|-----------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------|
-| Normalized Gradient   | <img src="images/OneStepAC_G0_train_normgrad.png" alt="Grid" width="450"/> | <img src="images/OneStepAC_G0_eval_normgrad.png" alt="Grid" width="450"/> |
-| Unnormalized Gradient | <img src="images/OneStepAC_G0_train.png" alt="Grid" width="450"/>          | <img src="images/OneStepAC_G0_eval.png" alt="Grid" width="450"/>          |
 
 
 ## n-Step with Eligibility Traces Actor–Critic
@@ -159,21 +127,11 @@ We can replace the one-step target $G_t$ with $G_{t:t+n}$ or the lambda return
 $G_t^{\lambda}$. Then using the eligibility traces we can incorportate these 
 methods into the algorithm below. 
 
-<img src="images/AC_with_eligibility_traces.png" alt="Grid" width="450"/>
-
-###### Experiment Results
-Like above, these results pertain to the `CartPole` environment, with 
-the same learning rates $\alpha$. The $\lambda$'s used here for both actor 
-and critic were set to 0.5.
+<img src="images/pub/AC_with_eligibility_traces.png" alt="Grid" width="450"/>
 
 
-|                       | Train                                                                                    | Eval                                                                                    |
-|-----------------------|------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
-| Normalized Gradient   | <img src="images/ACWithEligibilityTraces_G0_train_normgrad.png" alt="Grid" width="450"/> | <img src="images/ACWithEligibilityTraces_G0_eval_normgrad.png" alt="Grid" width="450"/> |
-| Unnormalized Gradient | <img src="images/ACWithEligibilityTraces_G0_train.png" alt="Grid" width="450"/>          | <img src="images/ACWithEligibilityTraces_G0_eval.png" alt="Grid" width="450"/>          |
+The implementation is in `agents/ACWithEligibilityTraces`
 
-We can see that the $\lambda$-return with eligibility traces approach yields 
-better results than the one-step AC method.
 
 
 ## Policy Gradient for Continuing Problems
@@ -182,31 +140,218 @@ performance function) in terms of the average rate of reward per step.
 The pseudo-code of which is shown below:
 
 
-<img src="images/AC_with_eligibility_traces_continuing.png" alt="Grid" width="450"/>
+<img src="images/pub/AC_with_eligibility_traces_continuing.png" alt="Grid" width="450"/>
 
 
-###### Experiments
-For this experiment I repurposed the MountainCar environment
-such that a distance from the flag bonus was added to the time negative 
-step (-1). 
+The implementation is in `agents/ACWithEligibilityTracesContinuing`
 
-The modified reward used is as follows:
+## Experiments
+In the following experiments, for each algorithm presented several
+hyperparameters are shown. Some of the hyper-parameters cause simulation
+failures, in which case they are not plotted. While the hyperparameters
+are not perfectly fine-tuned, they should give a starting point in further
+improvements for that particular algorithm. Also, note that some algorithms
+perform better for certain evnironments than others (as it is to be expected).
 
-``` python
-bonus = (1 - abs(pos - 0.5) / 1.8)
-if bonus > 0.9:
-    bonus *= 10
-return reward + bonus
+
+### Environments 
+The gymnasium environments used for experiments are shown in the tables, for
+each algorithm. For the episodic environments 10 training seeds with 10 
+evaluation seeds were used, while 10 training seeds with 5 for evaluation \
+were used for continuing task.
+
+
+#### Reward Shaping
+For the Acrobot environment, this reward shaper was used to help the algorithm
+learn (particularly helpful for the continuing case).
+
+
+```python
+def acrobot_reward_shaper(reward: float, state: np.ndarray, **kwargs) -> float:
+
+    """
+    A reward shaper for Acrobot that provides a dense reward based on height
+    and penalizes excessive velocity to encourage smoother control.
+
+    The state is: [cos(theta1), sin(theta1), cos(theta2), sin(theta2), vel1, vel2]
+    The height of the foot is: -cos(theta1) - cos(theta1 + theta2)
+    """
+   
+    # If the original reward is 0 (or > -1), the goal has been reached. Return a large bonus.
+    if reward > -1.0:
+        return 10.0
+
+    # The state vector components
+    cos_theta1 = state[0]
+    sin_theta1 = state[1]
+    cos_theta2 = state[2]
+    sin_theta2 = state[3]
+    vel1 = state[4]
+    vel2 = state[5]
+
+    # Calculate the height of the foot using the angle sum identity for cosine
+    height_of_foot = -cos_theta1 - (
+                cos_theta1 * cos_theta2 - sin_theta1 * sin_theta2)
+
+    # Penalty for high angular velocity  to encourage the agent to be 
+    # more controlled and stable.
+    velocity_penalty_weight = 0.001
+    velocity_penalty = -velocity_penalty_weight * (vel1 ** 2 + vel2 ** 2)
+
+    # The final reward is the height reward plus the stability penalty
+    return float(height_of_foot + velocity_penalty)
+
 ```
 
-where `pos` is the position of the vehicle along the x-axis.
-12 experiments for each alpha were run. The plot is the expected average reward
-per step (i.e. reward per step averaged over 12 experiments).
+5 training seeds and 10 evaluation seeds were used.
 
-|                       | Train                                                                                                 | 
-|-----------------------|-------------------------------------------------------------------------------------------------------|
-| Normalized Gradient   | <img src="images/ACWithEligibilityTracesContinuing_avg_R_train_normgrad.png" alt="Grid" width="450"/> |
-| Unnormalized Gradient | <img src="images/ACWithEligibilityTracesContinuing_avg_R_train.png" alt="Grid" width="450"/>          |
+
+### Episodic Results
+
+
+#### Performance Evaluation
+
+The following table answer the question: how does each algorithm perform, wrt
+1) pure returns
+2) discounted returns, the algorithm's objective
+3) episode length on hard, i.e. greedy evaluations
+
+
+#### REINFORCE
+
+| Environment | $\bar{R}_{0, h}$                                                                                                       | $\bar{G}_{0, h}$                                                                                          | Average Episode Length                                                                                                |
+|-------------|------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------| 
+| MountainCar | <img src="images/evaluation_metrics/reinforce/MountainCar_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforce/MountainCar_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforce/MountainCar_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| LunarLander | <img src="images/evaluation_metrics/reinforce/LunarLander_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforce/LunarLander_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforce/LunarLander_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| CartPole    | <img src="images/evaluation_metrics/reinforce/CartPole_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/reinforce/CartPole_mean_hard_eval_G0.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/reinforce/CartPole_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>    |
+| Acrobot     | <img src="images/evaluation_metrics/reinforce/Acrobot_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>     | <img src="images/evaluation_metrics/reinforce/Acrobot_mean_hard_eval_G0.png" alt="Grid" width="400"/>     | <img src="images/evaluation_metrics/reinforce/Acrobot_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>     |
+
+
+#### REINFORCE - with Baseline
+
+| Environment | $\bar{R}_{0, h}$                                                                                                               | $\bar{G}_{0, h}$                                                                                                  | Average Episode Length                                                                                                        |
+|-------------|--------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------| 
+| MountainCar | <img src="images/evaluation_metrics/reinforcebaseline/MountainCar_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforcebaseline/MountainCar_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforcebaseline/MountainCar_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| LunarLander | <img src="images/evaluation_metrics/reinforcebaseline/LunarLander_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforcebaseline/LunarLander_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforcebaseline/LunarLander_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| CartPole    | <img src="images/evaluation_metrics/reinforcebaseline/CartPole_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/reinforcebaseline/CartPole_mean_hard_eval_G0.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/reinforcebaseline/CartPole_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>    |
+| Acrobot     | <img src="images/evaluation_metrics/reinforcebaseline/Acrobot_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>     | <img src="images/evaluation_metrics/reinforcebaseline/Acrobot_mean_hard_eval_G0.png" alt="Grid" width="400"/>     | <img src="images/evaluation_metrics/reinforcebaseline/Acrobot_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>     |
+
+
+#### ActorCritic - 1 step
+
+| Environment | $\bar{R}_{0, h}$                                                                                                       | $\bar{G}_{0, h}$                                                                                          | Average Episode Length                                                                                                |
+|-------------|------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------| 
+| MountainCar | <img src="images/evaluation_metrics/onestepac/MountainCar_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/onestepac/MountainCar_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/onestepac/MountainCar_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| LunarLander | <img src="images/evaluation_metrics/onestepac/LunarLander_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/onestepac/LunarLander_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/onestepac/LunarLander_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| CartPole    | <img src="images/evaluation_metrics/onestepac/CartPole_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/onestepac/CartPole_mean_hard_eval_G0.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/onestepac/CartPole_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>    |
+| Acrobot     | <img src="images/evaluation_metrics/onestepac/Acrobot_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>     | <img src="images/evaluation_metrics/onestepac/Acrobot_mean_hard_eval_G0.png" alt="Grid" width="400"/>     | <img src="images/evaluation_metrics/onestepac/Acrobot_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>     |
+
+
+#### ActorCritic with Eligibility Traces
+
+| Environment | $\bar{R}_{0, h}$                                                                                                         | $\bar{G}_{0, h}$                                                                                            | Average Episode Length                                                                                                  |
+|-------------|--------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------| 
+| MountainCar | <img src="images/evaluation_metrics/ACEligTrace/MountainCar_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/ACEligTrace/MountainCar_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/ACEligTrace/MountainCar_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| LunarLander | <img src="images/evaluation_metrics/ACEligTrace/LunarLander_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/ACEligTrace/LunarLander_mean_hard_eval_G0.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/ACEligTrace/LunarLander_mean_hard_eval_episode_length.png" alt="Grid" width="400"/> |
+| CartPole    | <img src="images/evaluation_metrics/ACEligTrace/CartPole_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/ACEligTrace/CartPole_mean_hard_eval_G0.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/ACEligTrace/CartPole_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>    |
+| Acrobot     | <img src="images/evaluation_metrics/ACEligTrace/Acrobot_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>     | <img src="images/evaluation_metrics/ACEligTrace/Acrobot_mean_hard_eval_G0.png" alt="Grid" width="400"/>     | <img src="images/evaluation_metrics/ACEligTrace/Acrobot_mean_hard_eval_episode_length.png" alt="Grid" width="400"/>     |
+
+
+#### Learned Correctness
+Correctness concerns itself with how well does the algorithm learn. 
+In the following table the following questions are addressed:
+* Is the agent learning ? This is measured by the loss specific to each algorithm
+  * REINFORCE with Baseline: average $\delta$ (refer to pseudocode box)
+  * AC: TD-error
+* How does the expected initial state value compare to the actual discounted 
+returns. Are we learning the objective function as expected. Note that here I am
+looking at the _soft_ evaluation $G_{0, f}$ in order to measure the quality of 
+_expectation_ of $V(s_0) \overset \cdot{=} \mathbb{E}[R_0 | s_0]$.
+ _Note_ that here initial value $q_{init}$ indicates the starting levels of the 
+expected values in $V$
+
+
+#### REINFORCE
+
+| Environment | $\bar{G}_{0, f}$ vs $\bar{V}(s_0)$                                                                 | Avg Loss                                                                                                   |
+|-------------|----------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
+| MountainCar | <img src="images/learning/reinforce/MountainCar_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/reinforce/MountainCar_mean_behavioral_loss.png" alt="Grid" width="400"/> |
+| LunarLander | <img src="images/learning/reinforce/LunarLander_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/reinforce/LunarLander_mean_behavioral_loss.png" alt="Grid" width="400"/> |
+| CartPole    | <img src="images/learning/reinforce/CartPole_value_accuracy_JOINT.png" alt="Grid" width="400"/>    | <img src="images/training_metrics/reinforce/CartPole_mean_behavioral_loss.png" alt="Grid" width="400"/>    |
+| Acrobot     | <img src="images/learning/reinforce/Acrobot_value_accuracy_JOINT.png" alt="Grid" width="400"/>     | <img src="images/training_metrics/reinforce/Acrobot_mean_behavioral_loss.png" alt="Grid" width="400"/>     |
+
+
+#### REINFORCE with Baseline
+
+| Environment | $\bar{G}_{0, f}$ vs $\bar{V}(s_0)$                                                                         | Avg Loss                                                                                                           |
+|-------------|------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| MountainCar | <img src="images/learning/reinforcebaseline/MountainCar_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/reinforcebaseline/MountainCar_mean_behavioral_loss.png" alt="Grid" width="400"/> |
+| LunarLander | <img src="images/learning/reinforcebaseline/LunarLander_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/reinforcebaseline/LunarLander_mean_behavioral_loss.png" alt="Grid" width="400"/> |
+| CartPole    | <img src="images/learning/reinforcebaseline/CartPole_value_accuracy_JOINT.png" alt="Grid" width="400"/>    | <img src="images/training_metrics/reinforcebaseline/CartPole_mean_behavioral_loss.png" alt="Grid" width="400"/>    |
+| Acrobot     | <img src="images/learning/reinforcebaseline/Acrobot_value_accuracy_JOINT.png" alt="Grid" width="400"/>     | <img src="images/training_metrics/reinforcebaseline/Acrobot_mean_behavioral_loss.png" alt="Grid" width="400"/>     |
+
+
+#### ActorCritic - 1 step
+
+| Environment | $\bar{G}_{0, f}$ vs $\bar{V}(s_0)$                                                                 | Avg Loss                                                                                                   |
+|-------------|----------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
+| MountainCar | <img src="images/learning/onestepac/MountainCar_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/onestepac/MountainCar_mean_behavioral_loss.png" alt="Grid" width="400"/> |
+| LunarLander | <img src="images/learning/onestepac/LunarLander_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/onestepac/LunarLander_mean_behavioral_loss.png" alt="Grid" width="400"/> |
+| CartPole    | <img src="images/learning/onestepac/CartPole_value_accuracy_JOINT.png" alt="Grid" width="400"/>    | <img src="images/training_metrics/onestepac/CartPole_mean_behavioral_loss.png" alt="Grid" width="400"/>    |
+| Acrobot     | <img src="images/learning/onestepac/Acrobot_value_accuracy_JOINT.png" alt="Grid" width="400"/>     | <img src="images/training_metrics/onestepac/Acrobot_mean_behavioral_loss.png" alt="Grid" width="400"/>     |
+
+
+#### ActorCritic with Eligibility Traces
+
+| Environment | $\bar{G}_{0, f}$ vs $\bar{V}(s_0)$                                                                   | Avg Loss                                                                                                     |
+|-------------|------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| MountainCar | <img src="images/learning/ACEligTrace/MountainCar_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/ACEligTrace/MountainCar_mean_behavioral_loss.png" alt="Grid" width="400"/> |
+| LunarLander | <img src="images/learning/ACEligTrace/LunarLander_value_accuracy_JOINT.png" alt="Grid" width="400"/> | <img src="images/training_metrics/ACEligTrace/LunarLander_mean_behavioral_loss.png" alt="Grid" width="400"/> |
+| CartPole    | <img src="images/learning/ACEligTrace/CartPole_value_accuracy_JOINT.png" alt="Grid" width="400"/>    | <img src="images/training_metrics/ACEligTrace/CartPole_mean_behavioral_loss.png" alt="Grid" width="400"/>    |
+| Acrobot     | <img src="images/learning/ACEligTrace/Acrobot_value_accuracy_JOINT.png" alt="Grid" width="400"/>     | <img src="images/training_metrics/ACEligTrace/Acrobot_mean_behavioral_loss.png" alt="Grid" width="400"/>     |
+
+
+### Continuing Task Results
+
+The concepts of hard and soft evaluation from the episodic case are carried
+over for the continuing task. For the continuing task we are interested 
+in maximizing the reward ratio. The reward the agent is trained on is the shaped
+reward.
+
+* Raw reward is the reward generated by the environment at time $t$: $r_t$
+* Shaped reward is the modified reward to help the agent learn, at time $t$: $g_t = F(r_t, s_t)$
+* Rate of raw reward: $R = \frac{1}{T}\sum_{t=1}^{T}r_t$, where $T \rightarrow \infty$
+* Rate of shaped reward: $G = \frac{1}{T}\sum_{t=1}^{T}g_t$, where $T \rightarrow \infty$
+* Average rate of raw rewards over N trials/seeds: $\bar{R} = \frac{1}{N}\sum_{n}^{N}R^{(n)}$
+* Average rate of shaped rewards over N trials/seeds: $\bar{G} = \frac{1}{N}\sum_{n}^{N}G^{(n)}$
+* Agent estimated rate of shaped rewards $G_{\pi}$
+* Hard eval: $h$
+* Soft eval: $f$
+
+
+#### Performance Evaluation
+
+Here we're interested in the final performance of the agent. While "raw" 
+rewards are the user's metric, it is interesting to note how the agent
+also performs with the shaped reward, as it is the reward the agent maximizes.
+
+
+#### ActorCritic with Eligibility Traces
+
+| Environment | $\bar{R}_h$                                                                                                                     | $\bar{G}_{h}$                                                                                                                       | 
+|-------------|---------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| Acrobot     | <img src="images/evaluation_metrics/ACwEligTraceContinuing/Acrobot_mean_hard_eval_mean_raw_reward.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/ACwEligTraceContinuing/Acrobot_mean_hard_eval_mean_shaped_rewards.png" alt="Grid" width="400"/> |
+
+
+#### Learned Correctness
+Here the learned expected reward is compared against the actual shaped reward.
+
+#### ActorCritic with Eligibility Traces
+
+| Environment | $\bar{G}_h$ vs $\bar{V}_{\pi}$                                                                                                  | 
+|-------------|---------------------------------------------------------------------------------------------------------------------------------|
+| Acrobot     | <img src="images/evaluation_metrics/ACwEligTraceContinuing/Acrobot_mean_hard_eval_mean_raw_reward.png" alt="Grid" width="400"/> |
+
 
 
 ## Policy Parameterization for _Continuous Actions_

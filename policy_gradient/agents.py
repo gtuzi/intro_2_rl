@@ -4,15 +4,22 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.distributed.tensor.parallel import loss_parallel
 from torch.utils.tensorboard import SummaryWriter
 
-from shared.utils import LinearSchedule, SoftPolicy
+from shared.utils import (
+    NoiseSchedule,
+    Experience,
+    NoiseSchedule,
+    SoftPolicy
+)
 
-from approximate_methods.utils import (
+from policy_gradient.utils import (
     DiscreteActionAgent,
     ContinuousActionAgent,
-    NoiseSchedule,
-    Experience)
+    DiscreteActionSoftPolicy, DiscreteActionCriticStateValue,
+    ContinuousActionSoftPolicy, ContinuousActionCriticStateValue
+)
 
 from policy_gradient.nets import (
     DiscreteActionPolicyMLP,
@@ -48,7 +55,7 @@ def log_softmax(logits, temp=1.0):
     return z - lse
 
 
-class Reinforce_LA(DiscreteActionAgent, SoftPolicy):
+class Reinforce_LinearApproximation(DiscreteActionSoftPolicy):
     def __init__(
             self,
             feature_size: int,
@@ -56,7 +63,8 @@ class Reinforce_LA(DiscreteActionAgent, SoftPolicy):
             update_coefficient: Union[float, NoiseSchedule],
             policy_feature_fn: Callable[[Any, ], np.ndarray], # state --> np.ndarray
             discount: Union[float, NoiseSchedule] = 0.9,
-            temp: Union[float, LinearSchedule] = 1.,
+            temp: Union[float, NoiseSchedule] = 1.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
@@ -64,18 +72,19 @@ class Reinforce_LA(DiscreteActionAgent, SoftPolicy):
         if isinstance(update_coefficient, float):
             assert 0. < update_coefficient < 1.
         else:
-            assert isinstance(update_coefficient, LinearSchedule)
+            assert isinstance(update_coefficient, NoiseSchedule)
 
         super().__init__(
-            feature_size=feature_size,
-            action_space_dims=action_space_dims)
+            state_size=feature_size,
+            action_space_dims=action_space_dims,
+            discount=discount,
+            temp=temp,
+            seed=seed
+        )
 
         self.t = 0
         self.update_coefficient = update_coefficient
-        self._writer: Optional[SummaryWriter] = None
         self.buffer = []
-        self.discount = discount
-        self.temp = temp
         self.w = None
         self.policy_feature_fn = policy_feature_fn
         self.init_weights()
@@ -102,7 +111,7 @@ class Reinforce_LA(DiscreteActionAgent, SoftPolicy):
             # Reset noise to starting exploration
             self.temp.initialize()
 
-        if isinstance(self.update_coefficient, LinearSchedule):
+        if isinstance(self.update_coefficient, NoiseSchedule):
             self.update_coefficient.initialize()
 
         self.init_weights()
@@ -116,7 +125,7 @@ class Reinforce_LA(DiscreteActionAgent, SoftPolicy):
         if isinstance(self.temp, NoiseSchedule):
             self.temp.reset()
 
-        if isinstance(self.update_coefficient, LinearSchedule):
+        if isinstance(self.update_coefficient, NoiseSchedule):
             self.update_coefficient.reset()
 
         self.buffer = []
@@ -137,9 +146,9 @@ class Reinforce_LA(DiscreteActionAgent, SoftPolicy):
         if probs.ndim > 1:
             probs = probs.squeeze()
 
-        a = np.random.choice(acts, replace=True, p=probs)
+        a = self.rng.random.choice(acts, replace=True, p=probs)
 
-        if isinstance(self.temp, LinearSchedule):
+        if isinstance(self.temp, NoiseSchedule):
             self.temp.step()
 
         return a, probs[a]
@@ -175,7 +184,7 @@ class Reinforce_LA(DiscreteActionAgent, SoftPolicy):
 
         if isinstance(idc, list):
             # Random tie-breaking
-            return int(np.random.choice(idc)), 1. / len(idc)
+            return int(self.rng.random.choice(idc)), 1. / len(idc)
         else:
             assert isinstance(idc, int)
             return idc, 1.
@@ -230,7 +239,7 @@ class Reinforce_LA(DiscreteActionAgent, SoftPolicy):
             for e, _t in reversed(self.buffer)
         ]
 
-        if isinstance(self.update_coefficient, LinearSchedule):
+        if isinstance(self.update_coefficient, NoiseSchedule):
             alpha = self.update_coefficient.value
             self.update_coefficient.step()
         else:
@@ -247,7 +256,7 @@ class Reinforce_LA(DiscreteActionAgent, SoftPolicy):
                     self.discount ** t) * Gs[t] * self.grad_logpi_w(a, s)
             self.w += weight_update
 
-        if isinstance(self.temp, LinearSchedule):
+        if isinstance(self.temp, NoiseSchedule):
             self.temp.step()
 
 # ======================================================================== #
@@ -317,7 +326,7 @@ def to_tensor_state_action(s, a, device=None):
 ####################################################
 
 
-class Reinforce(DiscreteActionAgent, SoftPolicy):
+class Reinforce(DiscreteActionSoftPolicy):
     def __init__(
             self,
             state_size: int,
@@ -325,8 +334,12 @@ class Reinforce(DiscreteActionAgent, SoftPolicy):
             update_coefficient: Union[float, NoiseSchedule],
             hidden_dims=(32, ),
             discount: Union[float, NoiseSchedule] = 0.9,
-            temp: Union[float, LinearSchedule] = 1.,
+            temp: Union[float, NoiseSchedule] = 1.,
             norm_grad: bool = False,
+            normalize_input: bool = False,
+            norm_threshold: float = 10.,
+            normalize_reward: bool = False,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
@@ -334,44 +347,34 @@ class Reinforce(DiscreteActionAgent, SoftPolicy):
         if isinstance(update_coefficient, float):
             assert 0. < update_coefficient < 1.
         else:
-            assert isinstance(update_coefficient, LinearSchedule)
+            assert isinstance(update_coefficient, NoiseSchedule)
+
+        assert norm_threshold > 0.
 
         super().__init__(
-            feature_size=state_size,
-            action_space_dims=action_space_dims)
+            state_size=state_size,
+            action_space_dims=action_space_dims,
+            discount=discount,
+            temp=temp,
+            seed=seed
+        )
 
         self.t = 0
         self.hidden_dims = hidden_dims
         self.update_coefficient = update_coefficient
-        self._writer: Optional[SummaryWriter] = None
         self.buffer = []
-        self.discount = discount
-        self.temp = temp
         self.policy = None
         self.norm_grad = norm_grad
-
-    @property
-    def writer(self) -> SummaryWriter:
-        return self._writer
-
-    @writer.setter
-    def writer(self, w: SummaryWriter):
-        if w is not None:
-            assert isinstance(w, SummaryWriter)
-        self._writer = w
-
-    @property
-    def temperature(self) -> float:
-        t = self.temp
-        if isinstance(t, LinearSchedule):
-            t = t.value
-        return t
+        self.normalize_input = normalize_input
+        self.norm_threshold = norm_threshold
+        self.normalize_reward = normalize_reward
 
     def init_model(self, *args, **kwargs):
         self.policy = DiscreteActionPolicyMLP(
             in_size=self.feature_size,
             n_actions=self.action_space_dims,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
     def initialize(self, **kwargs):
@@ -379,23 +382,15 @@ class Reinforce(DiscreteActionAgent, SoftPolicy):
             # Reset noise to starting exploration
             self.temp.initialize()
 
-        if isinstance(self.update_coefficient, LinearSchedule):
+        if isinstance(self.update_coefficient, NoiseSchedule):
             self.update_coefficient.initialize()
 
         self.init_model()
-
         self.buffer = []
 
     def reset(self):
         # The agent here is prepared for a new episode
         self.t = 0
-
-        # if isinstance(self.temp, NoiseSchedule):
-        #     self.temp.reset()
-
-        # if isinstance(self.update_coefficient, LinearSchedule):
-        #     self.update_coefficient.reset()
-
         self.buffer = []
 
     def act(self, state, native = True) -> Tuple[int, float]:
@@ -465,19 +460,36 @@ class Reinforce(DiscreteActionAgent, SoftPolicy):
 
     def step(self, experience: Experience, **kwargs):
         self.buffer.append((experience, self.t))
+
+        loss = 0
+        # MC - we learn at the end of the episode
         if experience.done:
-            self._learn()
+            loss = self._learn()
             self.buffer.clear()
-        self.t += 1
+            self.reset()
+        else:
+            self.t += 1
+
+        return loss
 
     def _learn(self):
+
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        else:
+            alpha = self.update_coefficient
 
         T = len(self.buffer)
 
         Gs = np.zeros((T, ))
 
+        R = [e.r for e, _ in self.buffer] if self.normalize_reward else 1.
+        R, sig = (np.mean(R), np.std(R)) if self.normalize_reward else (0., 1.)
+
         def _G_update(i, r, done):
-            Gs[i] = r if done else r + self.discount * Gs[i+1]
+            nr = (r - R)/(sig + 1e-8)
+            Gs[i] = nr if done else nr + self.discount * Gs[i+1]
 
         # Generate G_t's
         _ = [
@@ -485,13 +497,9 @@ class Reinforce(DiscreteActionAgent, SoftPolicy):
             for e, _t in reversed(self.buffer)
         ]
 
-        for experience, t in self.buffer:
-            if isinstance(self.update_coefficient, LinearSchedule):
-                alpha = self.update_coefficient.value
-                self.update_coefficient.step()
-            else:
-                alpha = self.update_coefficient
+        avg_grad_norm = 0.
 
+        for experience, t in self.buffer:
 
             s, a, r, sp, ap, done = (
                 experience.s, experience.a,
@@ -505,89 +513,96 @@ class Reinforce(DiscreteActionAgent, SoftPolicy):
             weights = list(self.policy.parameters())
             grads = torch.autograd.grad(logp, weights, retain_graph=False)
 
+            flat_grads = [g.flatten() for g in grads]
+            gradient_norm = float(torch.norm(torch.cat(flat_grads)))
+            avg_grad_norm += gradient_norm
+
+            do_norm = gradient_norm > self.norm_threshold and self.norm_grad
+            k = self.norm_threshold / gradient_norm if do_norm else 1.
+
             with torch.no_grad():
                 for w, g in zip(weights, grads):
                     update = alpha * (self.discount ** t) * Gs[t]
-                    update *= (
-                        F.normalize(g, p=2, dim=-1)
-                        if self.norm_grad else g
-                    )
+                    update *= g * k
                     w += update
 
-        if isinstance(self.temp, LinearSchedule):
+        if isinstance(self.temp, NoiseSchedule):
             self.temp.step()
 
+        if len(self.buffer) > 0:
+            return avg_grad_norm / len(self.buffer)
+        else:
+            return avg_grad_norm
 
-class ReinforceBaseline(DiscreteActionAgent, SoftPolicy):
+
+class ReinforceBaseline(
+    DiscreteActionSoftPolicy,
+    DiscreteActionCriticStateValue
+):
     def __init__(
             self,
             state_size: int,
             action_space_dims: int,
-            update_coefficient_policy: Union[float, NoiseSchedule],
-            update_coefficient_baseline: Union[float, NoiseSchedule],
+            update_coefficient_actor: Union[float, NoiseSchedule],
+            update_coefficient_critic: Union[float, NoiseSchedule],
             hidden_dims=(32, ),
             discount: Union[float, NoiseSchedule] = 0.9,
-            temp: Union[float, LinearSchedule] = 1.,
+            temp: Union[float, NoiseSchedule] = 1.,
             norm_grad: bool = False,
+            normalize_input: bool = False,
+            norm_threshold: float = 10.,
+            normalize_reward: bool = False,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
 
-        if isinstance(update_coefficient_policy, float):
-            assert 0. < update_coefficient_policy < 1.
+        if isinstance(update_coefficient_actor, float):
+            assert 0. < update_coefficient_actor < 1.
         else:
-            assert isinstance(update_coefficient_policy, LinearSchedule)
+            assert isinstance(update_coefficient_actor, NoiseSchedule)
 
-
-        if isinstance(update_coefficient_baseline, float):
-            assert 0. < update_coefficient_baseline < 1.
+        if isinstance(update_coefficient_critic, float):
+            assert 0. < update_coefficient_critic < 1.
         else:
-            assert isinstance(update_coefficient_baseline, LinearSchedule)
+            assert isinstance(update_coefficient_critic, NoiseSchedule)
+
+        if norm_threshold is not None:
+            assert norm_threshold > 0.
 
         super().__init__(
-            feature_size=state_size,
-            action_space_dims=action_space_dims)
+            state_size=state_size,
+            action_space_dims=action_space_dims,
+            discount=discount,
+            temp=temp,
+            seed=seed
+        )
 
         self.t = 0
         self.hidden_dims = hidden_dims
-        self.update_coefficient_policy = update_coefficient_policy
-        self.update_coefficient_baseline = update_coefficient_baseline
-        self._writer: Optional[SummaryWriter] = None
+        self.update_coefficient_policy = update_coefficient_actor
+        self.update_coefficient_baseline = update_coefficient_critic
         self.buffer = []
-        self.discount = discount
-        self.temp = temp
         self.policy = None
         self.value = None
         self.norm_grad = norm_grad
-
-    @property
-    def writer(self) -> SummaryWriter:
-        return self._writer
-
-    @writer.setter
-    def writer(self, w: SummaryWriter):
-        if w is not None:
-            assert isinstance(w, SummaryWriter)
-        self._writer = w
-
-    @property
-    def temperature(self) -> float:
-        t = self.temp
-        if isinstance(t, LinearSchedule):
-            t = t.value
-        return t
+        self.normalize_input = normalize_input
+        self.norm_threshold = norm_threshold
+        self.normalize_reward = normalize_reward
 
     def init_model(self, *args, **kwargs):
         self.policy = DiscreteActionPolicyMLP(
             in_size=self.feature_size,
             n_actions=self.action_space_dims,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
         # Using policy as feature extractor. One feature per action
         self.value = ValueFunction(
             in_size=self.feature_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
     def initialize(self, **kwargs):
@@ -595,10 +610,10 @@ class ReinforceBaseline(DiscreteActionAgent, SoftPolicy):
             # Reset noise to starting exploration
             self.temp.initialize()
 
-        if isinstance(self.update_coefficient_policy, LinearSchedule):
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
             self.update_coefficient_policy.initialize()
 
-        if isinstance(self.update_coefficient_baseline, LinearSchedule):
+        if isinstance(self.update_coefficient_baseline, NoiseSchedule):
             self.update_coefficient_baseline.initialize()
 
         self.init_model()
@@ -606,15 +621,8 @@ class ReinforceBaseline(DiscreteActionAgent, SoftPolicy):
         self.buffer = []
 
     def reset(self):
-        # The agent here is prepared for a new episode
+        # Preparing for a new episode
         self.t = 0
-
-        # if isinstance(self.temp, NoiseSchedule):
-        #     self.temp.reset()
-
-        # if isinstance(self.update_coefficient, LinearSchedule):
-        #     self.update_coefficient.reset()
-
         self.buffer = []
 
     def act(self, state, native=True) -> Tuple[int, float]:
@@ -682,19 +690,47 @@ class ReinforceBaseline(DiscreteActionAgent, SoftPolicy):
 
         return to_native(e) if native else e
 
+    def state_value(self, s, native=True, **kwargs) -> float:
+        v = self.value(to_tensor(s, dtype=torch.float32))
+        return to_native(v) if native else v
+
     def step(self, experience: Experience, **kwargs):
         self.buffer.append((experience, self.t))
+
+        loss = 0
+        # MC - we learn at the end of the episode
         if experience.done:
-            self._learn()
+            loss = self._learn()
             self.buffer.clear()
-        self.t += 1
+            self.reset()
+        else:
+            self.t += 1
+
+        return loss
 
     def _learn(self):
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
+            alpha_pi = self.update_coefficient_policy.value
+            self.update_coefficient_policy.step()
+        else:
+            alpha_pi = self.update_coefficient_policy
+
+        if isinstance(self.update_coefficient_baseline, NoiseSchedule):
+            alpha_b = self.update_coefficient_baseline.value
+            self.update_coefficient_baseline.step()
+        else:
+            alpha_b = self.update_coefficient_baseline
+
+
+        R = [e.r for e, _ in self.buffer] if self.normalize_reward else 1.
+        R, sig = (np.mean(R), np.std(R)) if self.normalize_reward else (0., 1.)
+
         T = len(self.buffer)
         Gs = np.zeros((T,))
 
         def _G_update(i, r, done):
-            Gs[i] = r if done else r + self.discount * Gs[i + 1]
+            nr = (r - R) / (sig + 1e-8)
+            Gs[i] = nr if done else nr + self.discount * Gs[i + 1]
 
         # Generate G_t's
         _ = [
@@ -702,19 +738,8 @@ class ReinforceBaseline(DiscreteActionAgent, SoftPolicy):
             for e, _t in reversed(self.buffer)
         ]
 
+        loss = 0.
         for experience, t in self.buffer:
-            if isinstance(self.update_coefficient_policy, LinearSchedule):
-                alpha_pi = self.update_coefficient_policy.value
-                self.update_coefficient_policy.step()
-            else:
-                alpha_pi = self.update_coefficient_policy
-
-            if isinstance(self.update_coefficient_baseline, LinearSchedule):
-                alpha_b = self.update_coefficient_baseline.value
-                self.update_coefficient_baseline.step()
-            else:
-                alpha_b = self.update_coefficient_baseline
-
             s, a, r, sp, ap, done = (
                 experience.s, experience.a,
                 experience.r, experience.sp,
@@ -724,15 +749,20 @@ class ReinforceBaseline(DiscreteActionAgent, SoftPolicy):
             # --- Update baseline --- #
             v = self.value(to_tensor(s, dtype=torch.float32))
             delta = Gs[t] - v
+            loss += delta
+
             W = list(self.value.parameters())
             grads_v = torch.autograd.grad(v, W, retain_graph=False)
 
+            flat_grads_v = [g.flatten() for g in grads_v]
+            gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
+
+            do_norm_v = gradient_norm_v > self.norm_threshold and self.norm_grad
+            kv = self.norm_threshold / gradient_norm_v if do_norm_v else 1.
+
             with torch.no_grad():
                 for w, g in zip(W, grads_v):
-                    update = alpha_b * delta * (
-                        F.normalize(g, p=2, dim=-1)
-                        if self.norm_grad else g
-                    )
+                    update = alpha_b * delta * (g * kv)
                     w += update
 
             # --- Update Actor --- #
@@ -741,87 +771,86 @@ class ReinforceBaseline(DiscreteActionAgent, SoftPolicy):
             theta = list(self.policy.parameters())
             grads_pi = torch.autograd.grad(logp, theta, retain_graph=False)
 
+            flat_grads_pi = [g.flatten() for g in grads_pi]
+            gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
+
+            do_norm_pi = gradient_norm_pi > self.norm_threshold and self.norm_grad
+            kpi = self.norm_threshold / gradient_norm_pi if do_norm_pi else 1.
+
             with torch.no_grad():
                 for th, g in zip(theta, grads_pi):
-                    update = alpha_pi * (self.discount ** t) * delta * (
-                        F.normalize(g, p=2, dim=-1)
-                        if self.norm_grad else g
-                    )
+                    update = alpha_pi * (self.discount ** t) * delta * (g * kpi)
                     th += update
 
-        if isinstance(self.temp, LinearSchedule):
+        if isinstance(self.temp, NoiseSchedule):
             self.temp.step()
 
+        return loss / len(self.buffer) if len(self.buffer) > 0 else loss
 
-class OneStepAC(DiscreteActionAgent, SoftPolicy):
+
+class OneStepAC(
+    DiscreteActionSoftPolicy,
+    DiscreteActionCriticStateValue
+):
     def __init__(
             self,
             state_size: int,
             action_space_dims: int,
-            update_coefficient_policy: Union[float, NoiseSchedule],
+            update_coefficient_actor: Union[float, NoiseSchedule],
             update_coefficient_critic: Union[float, NoiseSchedule],
             hidden_dims=(32,),
             discount: Union[float, NoiseSchedule] = 0.9,
-            temp: Union[float, LinearSchedule] = 1.,
+            temp: Union[float, NoiseSchedule] = 1.,
             norm_grad: bool = False,
+            normalize_input: bool = False,
+            norm_threshold: float = 10.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
 
-        if isinstance(update_coefficient_policy, float):
-            assert 0. < update_coefficient_policy < 1.
+        if isinstance(update_coefficient_actor, float):
+            assert 0. < update_coefficient_actor < 1.
         else:
-            assert isinstance(update_coefficient_policy, LinearSchedule)
+            assert isinstance(update_coefficient_actor, NoiseSchedule)
 
         if isinstance(update_coefficient_critic, float):
             assert 0. < update_coefficient_critic < 1.
         else:
-            assert isinstance(update_coefficient_critic, LinearSchedule)
+            assert isinstance(update_coefficient_critic, NoiseSchedule)
 
         super().__init__(
-            feature_size=state_size,
-            action_space_dims=action_space_dims)
+            state_size=state_size,
+            action_space_dims=action_space_dims,
+            discount=discount,
+            temp=temp,
+            seed=seed
+        )
 
         self.t = 0
         self.hidden_dims = hidden_dims
-        self.update_coefficient_policy = update_coefficient_policy
+        self.update_coefficient_policy = update_coefficient_actor
         self.update_coefficient_critic = update_coefficient_critic
-        self._writer: Optional[SummaryWriter] = None
-        self.discount = discount
-        self.temp = temp
         self.policy = None
         self.value = None
         self.norm_grad = norm_grad
+        self.normalize_input = normalize_input
+        self.norm_threshold = norm_threshold
         self.I = 1
-
-    @property
-    def writer(self) -> SummaryWriter:
-        return self._writer
-
-    @writer.setter
-    def writer(self, w: SummaryWriter):
-        if w is not None:
-            assert isinstance(w, SummaryWriter)
-        self._writer = w
-
-    @property
-    def temperature(self) -> float:
-        t = self.temp
-        if isinstance(t, LinearSchedule):
-            t = t.value
-        return t
 
     def init_model(self, *args, **kwargs):
         self.actor = DiscreteActionPolicyMLP(
             in_size=self.feature_size,
             n_actions=self.action_space_dims,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
         # Using policy as feature extractor. One feature per action
         self.critic = ValueFunction(
             in_size=self.feature_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
     def initialize(self, **kwargs):
@@ -829,10 +858,10 @@ class OneStepAC(DiscreteActionAgent, SoftPolicy):
             # Reset noise to starting exploration
             self.temp.initialize()
 
-        if isinstance(self.update_coefficient_policy, LinearSchedule):
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
             self.update_coefficient_policy.initialize()
 
-        if isinstance(self.update_coefficient_critic, LinearSchedule):
+        if isinstance(self.update_coefficient_critic, NoiseSchedule):
             self.update_coefficient_critic.initialize()
 
         self.init_model()
@@ -844,6 +873,11 @@ class OneStepAC(DiscreteActionAgent, SoftPolicy):
         self.t = 0
         self.I = 1
 
+    def get_sa_probability(self, s, a, native=True):
+        s, a = to_tensor_state_action(s, a)
+        p = self.actor.prob_sa(s, a, self.temperature)
+        return to_native(p) if native else p
+
     def logp_sa(self, s, a, native=True):
         res = self.actor.logprob_sa(
             x=to_tensor(s, dtype=torch.float32),
@@ -852,13 +886,33 @@ class OneStepAC(DiscreteActionAgent, SoftPolicy):
         )
         return to_native(res) if native else res
 
-    def entropy(self, s, native=True):
+    def logp(self, s, native=True):
+        res = self.actor.logprob_s(
+            to_tensor(s, dtype=torch.float32),
+            temperature=self.temperature
+        )
+
+        return to_native(res) if native else res
+
+    def prob(self, s, native=True):
+        probs = self.actor.prob_s(
+            to_tensor(s, dtype=torch.float32),
+            temperature=self.temperature
+        )
+
+        return to_native(probs) if native else probs
+
+    def entropy(self, s, native=True, **kwargs):
         e = self.actor.entropy(
             to_tensor(s, torch.float32),
             temperature=self.temperature
         )
 
         return to_native(e) if native else e
+
+    def state_value(self, s,  native=True, **kwargs) -> float:
+        v = self.critic(to_tensor(s, dtype=torch.float32))
+        return to_native(v) if native else v
 
     def act(self, state, native=True) -> Tuple[int, float]:
         with torch.no_grad():
@@ -888,15 +942,14 @@ class OneStepAC(DiscreteActionAgent, SoftPolicy):
 
         return actions, probs
 
-    def step(self, experience: Experience, **kwargs):
-
-        if isinstance(self.update_coefficient_policy, LinearSchedule):
+    def step(self, experience: Experience, **kwargs) -> float:
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
             alpha_actor = self.update_coefficient_policy.value
             self.update_coefficient_policy.step()
         else:
             alpha_actor = self.update_coefficient_policy
 
-        if isinstance(self.update_coefficient_critic, LinearSchedule):
+        if isinstance(self.update_coefficient_critic, NoiseSchedule):
             alpha_critic = self.update_coefficient_critic.value
             self.update_coefficient_critic.step()
         else:
@@ -908,6 +961,9 @@ class OneStepAC(DiscreteActionAgent, SoftPolicy):
             experience.ap, experience.done
         )
 
+        avg_grad_norm_v = 0.
+        avg_grad_norm_pi = 0.
+
         v = self.critic(to_tensor(s))
 
         with torch.no_grad():
@@ -918,14 +974,17 @@ class OneStepAC(DiscreteActionAgent, SoftPolicy):
         W = list(self.critic.parameters())
         grads_v = torch.autograd.grad(v, W, retain_graph=False)
 
+        flat_grads_v = [g.flatten() for g in grads_v]
+        gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
+        avg_grad_norm_v += gradient_norm_v
+
+        do_norm_v = gradient_norm_v > self.norm_threshold and self.norm_grad
+        kv = self.norm_threshold / gradient_norm_v if do_norm_v else 1.
+
         with torch.no_grad():
             for w, g in zip(W, grads_v):
-                update = alpha_critic * delta * (
-                    F.normalize(g, p=2, dim=-1)
-                    if self.norm_grad else g
-                )
+                update = alpha_critic * delta * (g * kv)
                 w += update
-
 
         # --- Update Actor --- #
         logp = self.logp_sa(s, [a], native=False)
@@ -933,99 +992,99 @@ class OneStepAC(DiscreteActionAgent, SoftPolicy):
         theta = list(self.actor.parameters())
         grads_pi = torch.autograd.grad(logp, theta, retain_graph=False)
 
+        flat_grads_pi = [g.flatten() for g in grads_pi]
+        gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
+        avg_grad_norm_pi += gradient_norm_pi
+
+        do_norm_pi = gradient_norm_pi > self.norm_threshold and self.norm_grad
+        kpi = self.norm_threshold / gradient_norm_pi if do_norm_pi else 1.
+
         with torch.no_grad():
             for th, g in zip(theta, grads_pi):
-                update = alpha_actor * self.I * delta * (
-                    F.normalize(g, p=2, dim=-1)
-                    if self.norm_grad else g
-                )
+                update = alpha_actor * self.I * delta * (g * kpi)
                 th += update
 
-        if isinstance(self.temp, LinearSchedule):
+        if isinstance(self.temp, NoiseSchedule):
             self.temp.step()
 
         self.I *= self.discount
         self.t += 1
 
+        return to_native(delta)
 
-class ACWithEligibilityTraces(DiscreteActionAgent, SoftPolicy):
+
+class ACWithEligibilityTraces(
+    DiscreteActionSoftPolicy,
+    DiscreteActionCriticStateValue
+):
     def __init__(
             self,
             state_size: int,
             action_space_dims: int,
-            update_coefficient_policy: Union[float, NoiseSchedule],
-            lam_policy: float,
+            update_coefficient_actor: Union[float, NoiseSchedule],
+            lam_actor: float,
             update_coefficient_critic: Union[float, NoiseSchedule],
             lam_critic: float,
             hidden_dims=(32,),
             discount: Union[float, NoiseSchedule] = 0.9,
-            temp: Union[float, LinearSchedule] = 1.,
+            temp: Union[float, NoiseSchedule] = 1.,
             norm_grad: bool = False,
+            normalize_input: bool = False,
+            norm_threshold: float = 10.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
 
-        if isinstance(update_coefficient_policy, float):
-            assert 0. < update_coefficient_policy < 1.
+        if isinstance(update_coefficient_actor, float):
+            assert 0. < update_coefficient_actor < 1.
         else:
-            assert isinstance(update_coefficient_policy, LinearSchedule)
+            assert isinstance(update_coefficient_actor, NoiseSchedule)
 
         if isinstance(update_coefficient_critic, float):
             assert 0. < update_coefficient_critic < 1.
         else:
-            assert isinstance(update_coefficient_critic, LinearSchedule)
+            assert isinstance(update_coefficient_critic, NoiseSchedule)
 
-        assert 0 <= lam_policy <= 1
+        assert 0 <= lam_actor <= 1
         assert 0 <= lam_critic <= 1
 
         super().__init__(
-            feature_size=state_size,
-            action_space_dims=action_space_dims)
+            state_size=state_size,
+            action_space_dims=action_space_dims,
+            discount=discount,
+            temp=temp,
+            seed=seed
+        )
 
         self.t = 0
         self.hidden_dims = hidden_dims
-        self.update_coefficient_policy = update_coefficient_policy
+        self.update_coefficient_policy = update_coefficient_actor
         self.update_coefficient_critic = update_coefficient_critic
-        self.lam_actor = lam_policy
+        self.lam_actor = lam_actor
         self.lam_critic = lam_critic
-        self._writer: Optional[SummaryWriter] = None
-        self.discount = discount
-        self.temp = temp
         self.policy = None
         self.value = None
         self.norm_grad = norm_grad
+        self.normalize_input = normalize_input
+        self.norm_threshold = norm_threshold
         self.I = 1
         self.z_critic = None
         self.z_actor = None
-
-    @property
-    def writer(self) -> SummaryWriter:
-        return self._writer
-
-    @writer.setter
-    def writer(self, w: SummaryWriter):
-        if w is not None:
-            assert isinstance(w, SummaryWriter)
-        self._writer = w
-
-    @property
-    def temperature(self) -> float:
-        t = self.temp
-        if isinstance(t, LinearSchedule):
-            t = t.value
-        return t
 
     def init_model(self, *args, **kwargs):
         self.actor = DiscreteActionPolicyMLP(
             in_size=self.feature_size,
             n_actions=self.action_space_dims,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
         # Using policy as feature extractor. One feature per action
         self.critic = ValueFunction(
             in_size=self.feature_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
     def initialize(self, **kwargs):
@@ -1033,10 +1092,10 @@ class ACWithEligibilityTraces(DiscreteActionAgent, SoftPolicy):
             # Reset noise to starting exploration
             self.temp.initialize()
 
-        if isinstance(self.update_coefficient_policy, LinearSchedule):
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
             self.update_coefficient_policy.initialize()
 
-        if isinstance(self.update_coefficient_critic, LinearSchedule):
+        if isinstance(self.update_coefficient_critic, NoiseSchedule):
             self.update_coefficient_critic.initialize()
 
         self.init_model()
@@ -1071,6 +1130,31 @@ class ACWithEligibilityTraces(DiscreteActionAgent, SoftPolicy):
             temperature=self.temperature
         )
         return to_native(res) if native else res
+
+    def get_sa_probability(self, s, a, native=True):
+        s, a = to_tensor_state_action(s, a)
+        p = self.actor.prob_sa(s, a, self.temperature)
+        return to_native(p) if native else p
+
+    def logp(self, s, native=True):
+        res = self.actor.logprob_s(
+            to_tensor(s, dtype=torch.float32),
+            temperature=self.temperature
+        )
+
+        return to_native(res) if native else res
+
+    def prob(self, s, native=True):
+        probs = self.actor.prob_s(
+            to_tensor(s, dtype=torch.float32),
+            temperature=self.temperature
+        )
+
+        return to_native(probs) if native else probs
+
+    def state_value(self, s,  native=True, **kwargs) -> float:
+        v = self.critic(to_tensor(s, dtype=torch.float32))
+        return to_native(v) if native else v
 
     def entropy(self, s, native=True):
         e = self.actor.entropy(
@@ -1108,14 +1192,14 @@ class ACWithEligibilityTraces(DiscreteActionAgent, SoftPolicy):
 
         return actions, probs
 
-    def step(self, experience: Experience, **kwargs):
-        if isinstance(self.update_coefficient_policy, LinearSchedule):
+    def step(self, experience: Experience, **kwargs) -> float:
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
             alpha_actor = self.update_coefficient_policy.value
             self.update_coefficient_policy.step()
         else:
             alpha_actor = self.update_coefficient_policy
 
-        if isinstance(self.update_coefficient_critic, LinearSchedule):
+        if isinstance(self.update_coefficient_critic, NoiseSchedule):
             alpha_critic = self.update_coefficient_critic.value
             self.update_coefficient_critic.step()
         else:
@@ -1140,11 +1224,17 @@ class ACWithEligibilityTraces(DiscreteActionAgent, SoftPolicy):
             retain_graph=False
         )
 
+        flat_grads_v = [g.flatten() for g in grads_v]
+        gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
+
+        do_norm_v = gradient_norm_v > self.norm_threshold and self.norm_grad
+        kv = self.norm_threshold / gradient_norm_v if do_norm_v else 1.
+
         with torch.no_grad():
             for i in range(len(self.z_critic)):
                 self.z_critic[i] = (
                         self.discount * self.lam_critic * self.z_critic[i] +
-                        grads_v[i]
+                        (grads_v[i] * kv)
                 )
 
         # --- Update Actor ETs --- #
@@ -1156,11 +1246,17 @@ class ACWithEligibilityTraces(DiscreteActionAgent, SoftPolicy):
             retain_graph=False
         )
 
+        flat_grads_pi = [g.flatten() for g in grads_pi]
+        gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
+
+        do_norm_pi = gradient_norm_pi > self.norm_threshold and self.norm_grad
+        kpi = self.norm_threshold / gradient_norm_pi if do_norm_pi else 1.
+
         with torch.no_grad():
             for i in range(len(self.z_actor)):
                 self.z_actor[i] = (
                         self.discount * self.lam_actor * self.z_actor[i] +
-                        self.I * grads_pi[i]
+                        self.I * (grads_pi[i] * kpi)
                 )
 
         # ---- Update Critic --- #
@@ -1174,96 +1270,95 @@ class ACWithEligibilityTraces(DiscreteActionAgent, SoftPolicy):
                 th += alpha_actor * delta * z
 
 
-        if isinstance(self.temp, LinearSchedule):
+        if isinstance(self.temp, NoiseSchedule):
             self.temp.step()
 
         self.I *= self.discount
         self.t += 1
 
+        return to_native(delta)
 
-class ACWithEligibilityTracesContinuing(DiscreteActionAgent, SoftPolicy):
+
+class ACWithEligibilityTracesContinuing(
+    DiscreteActionSoftPolicy,
+    DiscreteActionCriticStateValue
+):
     def __init__(
             self,
             state_size: int,
             action_space_dims: int,
-            update_coefficient_policy: Union[float, NoiseSchedule],
-            lam_policy: float,
+            update_coefficient_actor: Union[float, NoiseSchedule],
+            lam_actor: float,
             update_coefficient_critic: Union[float, NoiseSchedule],
             lam_critic: float,
             update_coefficient_avg_reward: Union[float, NoiseSchedule],
             hidden_dims=(32,),
-            temp: Union[float, LinearSchedule] = 1.,
+            temp: Union[float, NoiseSchedule] = 1.,
             norm_grad: bool = False,
+            normalize_input: bool = False,
+            norm_threshold: float = 10.,
+            seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
         assert isinstance(action_space_dims, int)
 
-        if isinstance(update_coefficient_policy, float):
-            assert 0. < update_coefficient_policy < 1.
+        if isinstance(update_coefficient_actor, float):
+            assert 0. < update_coefficient_actor < 1.
         else:
-            assert isinstance(update_coefficient_policy, LinearSchedule)
+            assert isinstance(update_coefficient_actor, NoiseSchedule)
 
         if isinstance(update_coefficient_critic, float):
             assert 0. < update_coefficient_critic < 1.
         else:
-            assert isinstance(update_coefficient_critic, LinearSchedule)
+            assert isinstance(update_coefficient_critic, NoiseSchedule)
 
         if isinstance(update_coefficient_avg_reward, float):
             assert 0. < update_coefficient_avg_reward < 1.
         else:
-            assert isinstance(update_coefficient_avg_reward, LinearSchedule)
+            assert isinstance(update_coefficient_avg_reward, NoiseSchedule)
 
-        assert 0 <= lam_policy <= 1
+        assert 0 <= lam_actor <= 1
         assert 0 <= lam_critic <= 1
 
         super().__init__(
-            feature_size=state_size,
-            action_space_dims=action_space_dims)
+            state_size=state_size,
+            action_space_dims=action_space_dims,
+            discount=0,
+            temp=temp,
+            seed=seed
+        )
 
         self.t = 0
         self.hidden_dims = hidden_dims
-        self.update_coefficient_policy = update_coefficient_policy
+        self.update_coefficient_policy = update_coefficient_actor
         self.update_coefficient_critic = update_coefficient_critic
         self.update_coefficient_avg_reward = update_coefficient_avg_reward
-        self.lam_actor = lam_policy
+        self.lam_actor = lam_actor
         self.lam_critic = lam_critic
         self._writer: Optional[SummaryWriter] = None
         self.temp = temp
         self.policy = None
         self.value = None
         self.norm_grad = norm_grad
+        self.normalize_input = normalize_input
+        self.norm_threshold = norm_threshold
         self.z_critic = None
         self.z_actor = None
-        self.R_bar = 0
-
-    @property
-    def writer(self) -> SummaryWriter:
-        return self._writer
-
-    @writer.setter
-    def writer(self, w: SummaryWriter):
-        if w is not None:
-            assert isinstance(w, SummaryWriter)
-        self._writer = w
-
-    @property
-    def temperature(self) -> float:
-        t = self.temp
-        if isinstance(t, LinearSchedule):
-            t = t.value
-        return t
+        self.R_bar = 0.
 
     def init_model(self, *args, **kwargs):
         self.actor = DiscreteActionPolicyMLP(
             in_size=self.feature_size,
             n_actions=self.action_space_dims,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input,
         )
 
         # Using policy as feature extractor. One feature per action
         self.critic = ValueFunction(
             in_size=self.feature_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input,
         )
 
     def initialize(self, **kwargs):
@@ -1271,13 +1366,13 @@ class ACWithEligibilityTracesContinuing(DiscreteActionAgent, SoftPolicy):
             # Reset noise to starting exploration
             self.temp.initialize()
 
-        if isinstance(self.update_coefficient_policy, LinearSchedule):
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
             self.update_coefficient_policy.initialize()
 
-        if isinstance(self.update_coefficient_critic, LinearSchedule):
+        if isinstance(self.update_coefficient_critic, NoiseSchedule):
             self.update_coefficient_critic.initialize()
 
-        if isinstance(self.update_coefficient_avg_reward, LinearSchedule):
+        if isinstance(self.update_coefficient_avg_reward, NoiseSchedule):
             self.update_coefficient_avg_reward.initialize()
 
         self.init_model()
@@ -1316,6 +1411,31 @@ class ACWithEligibilityTracesContinuing(DiscreteActionAgent, SoftPolicy):
         )
         return to_native(res) if native else res
 
+    def get_sa_probability(self, s, a, native=True):
+        s, a = to_tensor_state_action(s, a)
+        p = self.actor.prob_sa(s, a, self.temperature)
+        return to_native(p) if native else p
+
+    def logp(self, s, native=True):
+        res = self.actor.logprob_s(
+            to_tensor(s, dtype=torch.float32),
+            temperature=self.temperature
+        )
+
+        return to_native(res) if native else res
+
+    def prob(self, s, native=True):
+        probs = self.actor.prob_s(
+            to_tensor(s, dtype=torch.float32),
+            temperature=self.temperature
+        )
+
+        return to_native(probs) if native else probs
+
+    def state_value(self, s,  native=True, **kwargs) -> float:
+        v = self.critic(to_tensor(s, dtype=torch.float32))
+        return to_native(v) if native else v
+
     def entropy(self, s, native=True):
         e = self.actor.entropy(
             to_tensor(s, torch.float32),
@@ -1354,23 +1474,26 @@ class ACWithEligibilityTracesContinuing(DiscreteActionAgent, SoftPolicy):
 
     def step(self, experience: Experience, **kwargs):
 
-        if isinstance(self.update_coefficient_policy, LinearSchedule):
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
             alpha_actor = self.update_coefficient_policy.value
             self.update_coefficient_policy.step()
         else:
             alpha_actor = self.update_coefficient_policy
 
-        if isinstance(self.update_coefficient_critic, LinearSchedule):
+        if isinstance(self.update_coefficient_critic, NoiseSchedule):
             alpha_critic = self.update_coefficient_critic.value
             self.update_coefficient_critic.step()
         else:
             alpha_critic = self.update_coefficient_critic
 
-        if isinstance(self.update_coefficient_avg_reward, LinearSchedule):
+        if isinstance(self.update_coefficient_avg_reward, NoiseSchedule):
             alpha_reward = self.update_coefficient_avg_reward.value
             self.update_coefficient_avg_reward.step()
         else:
             alpha_reward = self.update_coefficient_avg_reward
+
+        avg_grad_norm_v = 0.
+        avg_grad_norm_pi = 0.
 
         s, a, r, sp, ap = (
             experience.s, experience.a,
@@ -1393,10 +1516,17 @@ class ACWithEligibilityTracesContinuing(DiscreteActionAgent, SoftPolicy):
             retain_graph=False
         )
 
+        flat_grads_v = [g.flatten() for g in grads_v]
+        gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
+        avg_grad_norm_v += gradient_norm_v
+
+        do_norm_v = gradient_norm_v > self.norm_threshold and self.norm_grad
+        kv = self.norm_threshold / gradient_norm_v if do_norm_v else 1.
+
         with torch.no_grad():
             for i in range(len(self.z_critic)):
                 self.z_critic[i] = (
-                        self.lam_critic * self.z_critic[i] + grads_v[i]
+                        self.lam_critic * self.z_critic[i] + (grads_v[i] * kv)
                 )
 
         # --- Update Actor ETs --- #
@@ -1408,14 +1538,17 @@ class ACWithEligibilityTracesContinuing(DiscreteActionAgent, SoftPolicy):
             retain_graph=False
         )
 
-        # print(f'Pi grad: {float(torch.concat([g.reshape(-1) for g in grads_pi]).norm()) :.2e} \n')
-        # print(f'V grad: {float(torch.concat([g.reshape(-1) for g in grads_v]).norm()) :.2e} \n')
-        # print(f'R_bar: {float(self.R_bar): .2e}\n')
+        flat_grads_pi = [g.flatten() for g in grads_pi]
+        gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
+        avg_grad_norm_pi += gradient_norm_pi
+
+        do_norm_pi = gradient_norm_pi > self.norm_threshold and self.norm_grad
+        kpi = self.norm_threshold / gradient_norm_pi if do_norm_pi else 1.
 
         with torch.no_grad():
             for i in range(len(self.z_actor)):
                 self.z_actor[i] = (
-                        self.lam_actor * self.z_actor[i] + grads_pi[i]
+                        self.lam_actor * self.z_actor[i] + (grads_pi[i] * kpi)
                 )
 
         # ---- Update Critic --- #
@@ -1429,25 +1562,36 @@ class ACWithEligibilityTracesContinuing(DiscreteActionAgent, SoftPolicy):
                 th += alpha_actor * delta * z
 
 
-        if isinstance(self.temp, LinearSchedule):
+        if isinstance(self.temp, NoiseSchedule):
             self.temp.step()
 
         self.t += 1
 
+        return dict(
+            estimated_avg_reward=float(self.R_bar.detach().cpu()),
+            td_error=to_native(delta),
+            agent_loss = 0.5 * (avg_grad_norm_v + avg_grad_norm_pi)
+        )
 
 
 ####################################################
 ############## Continuous Action ###################
 ####################################################
 
-class ReinforceContinuousAction(ContinuousActionAgent, SoftPolicy):
+
+class ReinforceContinuousAction(ContinuousActionSoftPolicy):
     def __init__(
             self,
             state_size: int,
             action_size: int,
             update_coefficient: Union[float, NoiseSchedule],
             hidden_dims=(32, ),
-            discount: Union[float, NoiseSchedule] = 0.9
+            discount: Union[float, NoiseSchedule] = 0.9,
+            norm_grad: bool = False,
+            normalize_input: bool = False,
+            norm_threshold: float = 10.,
+            normalize_reward: bool = False,
+            seed: Optional[int] = None
     ):
         assert isinstance(action_size, int)
         assert 0 < action_size
@@ -1455,11 +1599,14 @@ class ReinforceContinuousAction(ContinuousActionAgent, SoftPolicy):
         if isinstance(update_coefficient, float):
             assert 0. < update_coefficient < 1.
         else:
-            assert isinstance(update_coefficient, LinearSchedule)
+            assert isinstance(update_coefficient, NoiseSchedule)
 
         super().__init__(
-            feature_size=state_size,
-            action_size=action_size)
+            state_size=state_size,
+            action_size=action_size,
+            discount=discount,
+            seed=seed
+        )
 
         self.t = 0
         self.hidden_dims = hidden_dims
@@ -1468,32 +1615,27 @@ class ReinforceContinuousAction(ContinuousActionAgent, SoftPolicy):
         self.buffer = []
         self.discount = discount
         self.policy: Optional[GaussianPolicy] = None
-
-    @property
-    def writer(self) -> SummaryWriter:
-        return self._writer
-
-    @writer.setter
-    def writer(self, w: SummaryWriter):
-        if w is not None:
-            assert isinstance(w, SummaryWriter)
-        self._writer = w
+        self.normalize_reward = normalize_reward
+        self.norm_grad = norm_grad
+        self.normalize_input = normalize_input
+        self.norm_threshold = norm_threshold
 
     def init_model(self, *args, **kwargs):
         self.policy = GaussianPolicy(
             in_size=self.feature_size,
             action_size=self.action_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
         self.optimizer = optim.SGD(
             self.policy.parameters(),
-            lr=1e-3
+            lr=1e-3  # This will be overriden during learning
         )
 
     def initialize(self, **kwargs):
 
-        if isinstance(self.update_coefficient, LinearSchedule):
+        if isinstance(self.update_coefficient, NoiseSchedule):
             self.update_coefficient.initialize()
 
         self.init_model()
@@ -1505,8 +1647,11 @@ class ReinforceContinuousAction(ContinuousActionAgent, SoftPolicy):
         self.t = 0
         self.buffer = []
 
-    def act(self, state, native = True) -> Tuple[
-        Union[Tuple, torch.Tensor], Union[Tuple, torch.Tensor]]:
+    def act(
+            self,
+            state,
+            native = True
+    ) -> Tuple[Union[Tuple, torch.Tensor], Union[Tuple, torch.Tensor]]:
 
         if isinstance(state, np.ndarray):
             pass
@@ -1575,78 +1720,23 @@ class ReinforceContinuousAction(ContinuousActionAgent, SoftPolicy):
             self.buffer.clear()
         self.t += 1
 
-    def __learn(self):
-
-        T = len(self.buffer)
-
-        Gs = np.zeros((T, ))
-
-        def _G_update(i, r, done):
-            Gs[i] = r if done else r + self.discount * Gs[i+1]
-
-        # Generate G_t's
-        _ = [
-            _G_update(_t, e.r, e.done)
-            for e, _t in reversed(self.buffer)
-        ]
-
-        Gs = Gs - np.mean(Gs)
-
-        for experience, t in self.buffer:
-            if isinstance(self.update_coefficient, LinearSchedule):
-                alpha = self.update_coefficient.value
-                self.update_coefficient.step()
-            else:
-                alpha = self.update_coefficient
-
-            s, a, r, sp, ap, done = (
-                experience.s, experience.a,
-                experience.r, experience.sp,
-                experience.ap, experience.done
-            )
-
-            logp = self.logp_sa(
-                to_tensor(s, dtype=torch.float32),
-                to_tensor(a, dtype=torch.float32),
-                native=False
-            )
-
-
-            # with torch.no_grad():
-            #     res = self.policy.forward(to_tensor(s))
-            # gnrm = torch.concat([g.reshape(-1) for g in grads]).norm()
-            # wnrm = torch.concat([w.reshape(-1) for w in weights]).norm()
-            # print(f'{float(gnrm): .2e}', f'{float(wnrm): .2e}', f'mu: {float(res[0]):.2e} ' f'sig: {float(res[1]):.2e}' '\n')
-
-            locW = list(self.policy.loc.parameters())
-            scaleW = list(self.policy.scale.parameters())
-
-            locgrads = torch.autograd.grad(logp, locW, retain_graph=True)
-            scalegrads = torch.autograd.grad(logp, scaleW, retain_graph=False)
-
-            with torch.no_grad():
-                for w, g in zip(locW, locgrads):
-                    update = alpha * (self.discount ** t) * Gs[t]
-                    update *= (
-                        F.normalize(g, p=2, dim=-1)
-                        if self.norm_grad else g
-                    )
-                    w += update
-
-                for w, g in zip(scaleW, scalegrads):
-                    update = alpha * (self.discount ** t) * Gs[t]
-                    update *= (
-                        F.normalize(g, p=2, dim=-1)
-                        if self.norm_grad else g
-                    )
-                    w += update
-
     def _learn(self):
+
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            alpha = self.update_coefficient.value
+            self.update_coefficient.step()
+        else:
+            alpha = self.update_coefficient
+
         T = len(self.buffer)
         Gs = np.zeros((T, ))
 
+        R = [e.r for e, _ in self.buffer] if self.normalize_reward else 1.
+        R, sig = (np.mean(R), np.std(R)) if self.normalize_reward else (0., 1.)
+
         def _G_update(i, r, done):
-            Gs[i] = r if done else r + self.discount * Gs[i+1]
+            nr = (r - R)/(sig + 1e-8)
+            Gs[i] = nr if done else nr + self.discount * Gs[i+1]
 
         # Generate G_t's
         _ = [
@@ -1656,12 +1746,9 @@ class ReinforceContinuousAction(ContinuousActionAgent, SoftPolicy):
 
         Gs = Gs - np.mean(Gs)
 
+        total_grad_norm = 0.
+
         for experience, t in self.buffer:
-            if isinstance(self.update_coefficient, LinearSchedule):
-                alpha = self.update_coefficient.value
-                self.update_coefficient.step()
-            else:
-                alpha = self.update_coefficient
 
             for g in self.optimizer.param_groups:
                 g['lr'] = alpha
@@ -1684,13 +1771,30 @@ class ReinforceContinuousAction(ContinuousActionAgent, SoftPolicy):
             self.optimizer.zero_grad()
             loss.backward()
 
+            all_grads = torch.cat([
+                p.grad.flatten()
+                for p in self.policy.parameters()
+                if p.grad is not None
+            ])
+
+            total_grad_norm += float(torch.norm(all_grads))
+
             # Clip the gradients to a max norm
-            # torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=0.5)
+            if self.norm_grad:
+                torch.nn.utils.clip_grad_norm_(
+                    self.policy.parameters(),
+                    max_norm=self.norm_threshold
+                )
 
             self.optimizer.step()  # PyTorch applies the update w += -lr * w.grad
 
+        return total_grad_norm / len(self.buffer)
 
-class ReinforceBaselineContinuousAction(ContinuousActionAgent, SoftPolicy):
+
+class ReinforceBaselineContinuousAction(
+    ContinuousActionSoftPolicy,
+    ContinuousActionCriticStateValue
+):
     def __init__(
             self,
             state_size: int,
@@ -1698,7 +1802,12 @@ class ReinforceBaselineContinuousAction(ContinuousActionAgent, SoftPolicy):
             update_coefficient_policy: Union[float, NoiseSchedule],
             update_coefficient_baseline: Union[float, NoiseSchedule],
             hidden_dims=(32, ),
-            discount: Union[float, NoiseSchedule] = 0.9
+            discount: Union[float, NoiseSchedule] = 0.9,
+            norm_grad: bool = False,
+            normalize_input: bool = False,
+            norm_threshold: float = 10.,
+            normalize_reward: bool = False,
+            seed: Optional[int] = None
     ):
         assert isinstance(action_size, int)
         assert 0 < action_size
@@ -1706,16 +1815,19 @@ class ReinforceBaselineContinuousAction(ContinuousActionAgent, SoftPolicy):
         if isinstance(update_coefficient_policy, float):
             assert 0. < update_coefficient_policy < 1.
         else:
-            assert isinstance(update_coefficient_policy, LinearSchedule)
+            assert isinstance(update_coefficient_policy, NoiseSchedule)
 
         if isinstance(update_coefficient_baseline, float):
             assert 0. < update_coefficient_baseline < 1.
         else:
-            assert isinstance(update_coefficient_baseline, LinearSchedule)
+            assert isinstance(update_coefficient_baseline, NoiseSchedule)
 
         super().__init__(
-            feature_size=state_size,
-            action_size=action_size)
+            state_size=state_size,
+            action_size=action_size,
+            discount=discount,
+            seed=seed
+        )
 
         self.t = 0
         self.hidden_dims = hidden_dims
@@ -1723,18 +1835,11 @@ class ReinforceBaselineContinuousAction(ContinuousActionAgent, SoftPolicy):
         self.update_coefficient_baseline = update_coefficient_baseline
         self._writer: Optional[SummaryWriter] = None
         self.buffer = []
-        self.discount = discount
         self.policy: Optional[GaussianPolicy] = None
-
-    @property
-    def writer(self) -> SummaryWriter:
-        return self._writer
-
-    @writer.setter
-    def writer(self, w: SummaryWriter):
-        if w is not None:
-            assert isinstance(w, SummaryWriter)
-        self._writer = w
+        self.normalize_reward = normalize_reward
+        self.norm_grad = norm_grad
+        self.normalize_input = normalize_input
+        self.norm_threshold = norm_threshold
 
     def init_model(self, *args, **kwargs):
         self.policy = GaussianPolicy(
@@ -1759,13 +1864,12 @@ class ReinforceBaselineContinuousAction(ContinuousActionAgent, SoftPolicy):
             lr=1e-3
         )
 
-
     def initialize(self, **kwargs):
 
-        if isinstance(self.update_coefficient_policy, LinearSchedule):
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
             self.update_coefficient_policy.initialize()
 
-        if isinstance(self.update_coefficient_baseline, LinearSchedule):
+        if isinstance(self.update_coefficient_baseline, NoiseSchedule):
             self.update_coefficient_baseline.initialize()
 
         self.init_model()
@@ -1839,6 +1943,14 @@ class ReinforceBaselineContinuousAction(ContinuousActionAgent, SoftPolicy):
         e = self.policy.entropy(to_tensor(s, torch.float32))
         return to_native(e) if native else e
 
+    def state_value(self, s, native = True, **kwargs) -> float:
+        # V(s)
+        v = self.baseline(
+            to_tensor(s, dtype=torch.float32)
+        )
+
+        return to_native(v) if native else v.detach().cpu()
+
     def step(self, experience: Experience, **kwargs):
         self.buffer.append((experience, self.t))
         if experience.done:
@@ -1847,11 +1959,28 @@ class ReinforceBaselineContinuousAction(ContinuousActionAgent, SoftPolicy):
         self.t += 1
 
     def _learn(self):
+        if isinstance(self.update_coefficient_policy, NoiseSchedule):
+            alpha_policy = self.update_coefficient_policy.value
+            self.update_coefficient_policy.step()
+        else:
+            alpha_policy = self.update_coefficient_policy
+
+        if isinstance(self.update_coefficient_baseline, NoiseSchedule):
+            alpha_baseline = self.update_coefficient_baseline.value
+            self.update_coefficient_baseline.step()
+        else:
+            alpha_baseline = self.update_coefficient_baseline
+
         T = len(self.buffer)
         Gs = np.zeros((T, ))
 
+        R = [e.r for e, _ in self.buffer] if self.normalize_reward else 1.
+        R, sig = (np.mean(R), np.std(R)) if self.normalize_reward else (0., 1.)
+
         def _G_update(i, r, done):
-            Gs[i] = r if done else r + self.discount * Gs[i+1]
+            nr = (r - R) / (sig + 1e-8)
+            Gs[i] = nr if done else nr + self.discount * Gs[i + 1]
+
 
         # Generate G_t's
         _ = [
@@ -1862,18 +1991,6 @@ class ReinforceBaselineContinuousAction(ContinuousActionAgent, SoftPolicy):
         Gs = Gs - np.mean(Gs)
 
         for experience, t in self.buffer:
-            if isinstance(self.update_coefficient_policy, LinearSchedule):
-                alpha_policy = self.update_coefficient_policy.value
-                self.update_coefficient_policy.step()
-            else:
-                alpha_policy = self.update_coefficient_policy
-
-            if isinstance(self.update_coefficient_baseline, LinearSchedule):
-                alpha_baseline = self.update_coefficient_baseline.value
-                self.update_coefficient_baseline.step()
-            else:
-                alpha_baseline = self.update_coefficient_baseline
-
             for g in self.policy_optimizer.param_groups:
                 g['lr'] = alpha_policy
 
@@ -1917,7 +2034,10 @@ class ReinforceBaselineContinuousAction(ContinuousActionAgent, SoftPolicy):
             self.policy_optimizer.step()  # PyTorch applies the update w += -lr * w.grad
 
 
-class ACWithEligibilityTracesContinuousAction(ContinuousActionAgent, SoftPolicy):
+class ACWithEligibilityTracesContinuousAction(
+    ContinuousActionSoftPolicy,
+    ContinuousActionCriticStateValue
+):
     def __init__(
             self,
             state_size: int,
@@ -1937,12 +2057,12 @@ class ACWithEligibilityTracesContinuousAction(ContinuousActionAgent, SoftPolicy)
         if isinstance(update_coefficient_actor, float):
             assert 0. < update_coefficient_actor < 1.
         else:
-            assert isinstance(update_coefficient_actor, LinearSchedule)
+            assert isinstance(update_coefficient_actor, NoiseSchedule)
 
         if isinstance(update_coefficient_critic, float):
             assert 0. < update_coefficient_critic < 1.
         else:
-            assert isinstance(update_coefficient_critic, LinearSchedule)
+            assert isinstance(update_coefficient_critic, NoiseSchedule)
 
         super().__init__(
             feature_size=state_size,
@@ -2019,10 +2139,10 @@ class ACWithEligibilityTracesContinuousAction(ContinuousActionAgent, SoftPolicy)
         )
 
     def initialize(self, **kwargs):
-        if isinstance(self.update_coefficient_actor, LinearSchedule):
+        if isinstance(self.update_coefficient_actor, NoiseSchedule):
             self.update_coefficient_actor.initialize()
 
-        if isinstance(self.update_coefficient_critic, LinearSchedule):
+        if isinstance(self.update_coefficient_critic, NoiseSchedule):
             self.update_coefficient_critic.initialize()
 
         self.init_model()
@@ -2109,7 +2229,7 @@ class ACWithEligibilityTracesContinuousAction(ContinuousActionAgent, SoftPolicy)
     def step(self, experience: Experience, **kwargs):
 
         def _get_alpha(u):
-            if isinstance(u, LinearSchedule):
+            if isinstance(u, NoiseSchedule):
                 a = u.value
                 u.step()
             else:
@@ -2187,7 +2307,10 @@ class ACWithEligibilityTracesContinuousAction(ContinuousActionAgent, SoftPolicy)
         self.t += 1
 
 
-class ACWithEligibilityTracesContinuousActionContinuingTask(ContinuousActionAgent, SoftPolicy):
+class ACWithEligibilityTracesContinuousActionContinuingTask(
+    ContinuousActionSoftPolicy,
+    ContinuousActionCriticStateValue
+):
     def __init__(
             self,
             state_size: int,
@@ -2207,17 +2330,17 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(ContinuousActionAgen
         if isinstance(update_coefficient_actor, float):
             assert 0. < update_coefficient_actor < 1.
         else:
-            assert isinstance(update_coefficient_actor, LinearSchedule)
+            assert isinstance(update_coefficient_actor, NoiseSchedule)
 
         if isinstance(update_coefficient_critic, float):
             assert 0. < update_coefficient_critic < 1.
         else:
-            assert isinstance(update_coefficient_critic, LinearSchedule)
+            assert isinstance(update_coefficient_critic, NoiseSchedule)
 
         if isinstance(update_coefficient_avg_reward, float):
             assert 0. < update_coefficient_avg_reward < 1.
         else:
-            assert isinstance(update_coefficient_avg_reward, LinearSchedule)
+            assert isinstance(update_coefficient_avg_reward, NoiseSchedule)
 
         super().__init__(
             feature_size=state_size,
@@ -2295,10 +2418,10 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(ContinuousActionAgen
         )
 
     def initialize(self, **kwargs):
-        if isinstance(self.update_coefficient_actor, LinearSchedule):
+        if isinstance(self.update_coefficient_actor, NoiseSchedule):
             self.update_coefficient_actor.initialize()
 
-        if isinstance(self.update_coefficient_critic, LinearSchedule):
+        if isinstance(self.update_coefficient_critic, NoiseSchedule):
             self.update_coefficient_critic.initialize()
 
         self.init_model()
@@ -2386,7 +2509,7 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(ContinuousActionAgen
     def step(self, experience: Experience, **kwargs):
 
         def _get_alpha(u):
-            if isinstance(u, LinearSchedule):
+            if isinstance(u, NoiseSchedule):
                 a = u.value
                 u.step()
             else:

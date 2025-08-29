@@ -483,8 +483,9 @@ def train_single_seed(
     env.reset(seed=seed)
     env.action_space.seed(seed)
 
+    # ----- Construct Agents ------ #
+    # Behavioral agent
     bkwargs = behavioral_agent_kwargs.copy()
-
     if issubclass(behavioral_agent_class, QEpsGreedyAgent):
         bkwargs['seed'] = seed
 
@@ -502,9 +503,9 @@ def train_single_seed(
         else:
             assert 'update_coefficient' in bkwargs, \
                 'Provide update_coefficient for behavioral agent'
-
     behavioral_agent = behavioral_agent_class(**bkwargs)
 
+    # Target agent
     target_agent = None
     if target_agent_class:
         tkwargs = target_agent_kwargs.copy()
@@ -560,6 +561,7 @@ def train_single_seed(
                 "evaluation_results": None
             }
             G0 = 0.
+            S0 = 0.
             action, p = behavioral_agent.act(state)
 
             for t in range(T):

@@ -15,10 +15,11 @@ class MCOnPolicyFirstVisitGLIE(QEpsGreedyAgent):
             self,
             obs_space_dims: int,
             action_space_dims: int,
+            update_coefficient: Union[float, NoiseSchedule],
             discount: float = 0.9,
             eps: Union[float, NoiseSchedule] = 0.01,
-            qval_init: float = 0.,
-            step_size: Optional[float] = None
+            q_init: float = 0.,
+            seed: Optional[int] = None
     ):
 
         self.t = 0
@@ -32,13 +33,18 @@ class MCOnPolicyFirstVisitGLIE(QEpsGreedyAgent):
             obs_space_dims=obs_space_dims,
             action_space_dims=action_space_dims,
             discount=discount,
-            eps=eps
+            eps=eps,
+            seed=seed
         )
 
-        self.step_size = step_size
-        self.qval_init = qval_init
+        self.update_coefficient = update_coefficient
+        self.qval_init = q_init
+        self.trajectory = []
 
     def initialize(self):
+        self.t = 0
+        self.trajectory = []
+
         if isinstance(self.eps, NoiseSchedule):
             # Reset noise to starting exploration
             self.eps.initialize()
@@ -47,42 +53,69 @@ class MCOnPolicyFirstVisitGLIE(QEpsGreedyAgent):
         self.Q = defaultdict(lambda: [self.qval_init] * self.action_space_dims)
         self.num_visits = defaultdict(lambda: 0)
 
-    def step(self, trajectory: List[Experience]):
+    def reset(self):
+        self.t = 0
+        self.trajectory = []
+
+    def step(self, e: Experience, **kwargs) -> float:
+        self.trajectory.append(e)
+
+        loss = 0
+        if e.done:
+            loss = self._update()
+            self.reset()
+        else:
+            self.t += 1
+
+        return loss
+
+    def _update(self) -> float:
         """
             Update
         :param trajectory:
         :return:
         """
-        self.t += 1
 
         # Needed for first visit determination
-        trajectory_sa = [(exp.s, exp.a) for exp in trajectory]
+
+        if isinstance(self.update_coefficient, NoiseSchedule):
+            self.update_coefficient.step()
+            alpha = self.update_coefficient.value
+        elif self.update_coefficient is None:
+            alpha = None
+        else:
+            alpha = self.update_coefficient
+
+        trajectory_sa = [(exp.s, exp.a) for exp in self.trajectory]
 
         G = 0
 
-        for ti, experience in enumerate(reversed(trajectory)):
+        for ti, experience in enumerate(reversed(self.trajectory)):
             s, a, r = experience.s, experience.a, experience.r
             G = r + self.discount * G
+
+            loss = 0.
 
             # First visit
             if not (s, a) in trajectory_sa[:-(ti + 1)]:
                 self.num_visits[(s, a)] += 1
 
+                _error = G - self.Q[s][a]
+
                 # Moving average
-                if self.step_size is None:
-                    self.Q[s][a] += (1. / self.num_visits[(s, a)]) * (
-                                G - self.Q[s][a])
+                if alpha is None:
+                    self.Q[s][a] += (1. / self.num_visits[(s, a)]) * _error
                 else:
                     # Constant-alpha method
-                    self.Q[s][a] += self.step_size * (G - self.Q[s][a])
+                    self.Q[s][a] += alpha * _error
 
+                loss += _error
+
+        # We've evaluated this policy, now improve
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
-    def reset(self):
-        self.t = 0
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
+        return loss
 
 
 class MCOffPolicy(QEpsGreedyAgent):
@@ -99,9 +132,11 @@ class MCOffPolicy(QEpsGreedyAgent):
             self,
             obs_space_dims: int,
             action_space_dims: int,
+            update_coefficient: Union[float, NoiseSchedule] = None, #unused
             discount: float = 0.9,
             eps: Union[float, NoiseSchedule] = 0.01,
-            qval_init: float = 0.
+            q_init: float = 0.,
+            seed: Optional[int] = None
     ):
         self.t = 0
         assert 0 < action_space_dims
@@ -114,12 +149,17 @@ class MCOffPolicy(QEpsGreedyAgent):
             obs_space_dims=obs_space_dims,
             action_space_dims=action_space_dims,
             discount=discount,
-            eps=eps
+            eps=eps,
+            seed=seed
         )
 
-        self.qval_init = qval_init
+        self.qval_init = q_init
+        self.trajectory = []
 
     def initialize(self):
+        self.t = 0
+        self.trajectory = []
+
         if isinstance(self.eps, NoiseSchedule):
             # Reset noise to starting exploration
             self.eps.initialize()
@@ -127,26 +167,48 @@ class MCOffPolicy(QEpsGreedyAgent):
         self.Q = defaultdict(lambda: [self.qval_init] * self.action_space_dims)
         self.C = defaultdict(lambda: [0.] * self.action_space_dims)
 
-    def step(self, trajectory: List[Experience]):
+    def reset(self):
+        self.t = 0
+        self.trajectory = []
+
+    def step(self, e: Experience, **kwargs) -> float:
+
+        self.trajectory.append(e)
+
+        loss = 0
+        if e.done:
+            loss = self._update()
+            self.reset()
+        else:
+            self.t += 1
+
+        return loss
+
+    def _update(self) -> float:
         """
             Update agent (ie learn). This is the actual implementation
             of the Algo in sect 5.7 Sutton book.
         :param trajectory:
         :return:
         """
-        self.t += 1
 
         G = 0
         W = 1.
-        for ti, experience in enumerate(reversed(trajectory)):
+        loss = 0.
+
+        for ti, experience in enumerate(reversed(self.trajectory)):
             s, a, r, p = experience.s, experience.a, experience.r, experience.p
 
             # Monte Carlo: use the actual return (G) as target
             #              E[G(t) | S(t), a(t)]
             G = r + self.discount * G
             self.C[s][a] += W
+
+            err = G - self.Q[s][a]
+            loss += err
+
             # Moving average
-            self.Q[s][a] += (W / self.C[s][a]) * (G - self.Q[s][a])
+            self.Q[s][a] += (W / self.C[s][a]) * err
 
             # For soft policy case, this will be > 0.
             # For deterministic policy (eps = 0), this will be 1.
@@ -160,10 +222,9 @@ class MCOffPolicy(QEpsGreedyAgent):
             assert 0 < p <= 1.
             W *= p_tgt / p
 
+        # We've evaluated this policy, now improve
         if isinstance(self.eps, NoiseSchedule):
             self.eps.step()
 
-    def reset(self):
-        self.t = 0
-        if isinstance(self.eps, NoiseSchedule):
-            self.eps.reset()
+        return loss
+

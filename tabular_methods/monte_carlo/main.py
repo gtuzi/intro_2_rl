@@ -1,436 +1,748 @@
-import os
-import random
-from typing import List, Callable
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-from copy import deepcopy
-
-import numpy as np
-from scipy.stats import randint
 import gymnasium as gym
 from gymnasium import Env
+from scipy.stats import randint
 
-from agents import MCOnPolicyFirstVisitGLIE, MCOffPolicy
-
-from tabular_methods.utils import (
+from shared.utils import (
     LinearSchedule,
-    Experience,
-    DiscreteActionAgent,
-    DiscreteActionRandomAgent
+    CosineDecaySchedule,
+    ExponentialSchedule
 )
 
 
-def plot(
-        rewards_over_seeds_over_agent: List,
-        legend: List[str],
-        title: str = 'Algo',
-        save: bool = True
-):
+from tabular_methods.train import (
+    parallel_train,
+    preprocess_for_distribution_plots,
+    preprocess_for_training_plots,
+    preprocess_for_evaluation_plots,
+    print_health_report,
+    sequential_train
+)
 
-    _ = plt.figure()
 
-    for rewards_over_seeds_over_agent in rewards_over_seeds_over_agent:
-        rewards_over_seeds_np = np.array(rewards_over_seeds_over_agent)
-        rewards_over_seeds_np = np.mean(rewards_over_seeds_np, axis=0)
-        plt.plot(np.cumsum(rewards_over_seeds_np))
+from tabular_methods.plot import (
+    plot_training_metrics,
+    plot_evaluation_metrics,
+    plot_value_accuracy,
+    plot_action_distribution,
+    buil_high_contrast_palette
+)
 
-    plt.legend(legend)
-    plt.xlabel('Episodes')
-    plt.ylabel('Mean(Sum(r))')
-    plt.title(title)
+from agents import MCOnPolicyFirstVisitGLIE, MCOffPolicy
+from tabular_methods.utils import DiscreteActionRandomAgent
 
-    if save:
-        save_dir = 'images/results'
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
+global ENV_NAME
 
-        fname = f'{save_dir}/{title}'
-        fname = fname.replace(' ', '')
-        fname = fname.replace(":", "_")
-        fname = fname.replace("-", "_")
-        fname = fname.replace(".", "_")
-        fname = fname.replace("\n", "_")
-        fname += '.png'
-        plt.savefig(fname) if save else None
+
+def build_env(name: str, **kwargs) -> Env:
+    render = kwargs.pop('render', False)
+
+    if 'FrozenLake' in name:
+        is_slippery = kwargs.pop('is_slippery', False)
+
+        env = gym.make(
+            'FrozenLake-v1',
+            render_mode="human" if render else None,
+            desc=None,
+            map_name="4x4",
+            is_slippery=is_slippery,
+            **kwargs
+        )
+    elif 'Taxi' in name:
+        env = gym.make(
+            'Taxi-v3',
+            render_mode="human" if render else None,
+            **kwargs
+        )
+    elif 'CliffWalking' in name:
+        env = gym.make(
+            "CliffWalking-v0",
+            render_mode = "human" if render else None,
+            **kwargs
+        )
     else:
-        plt.show()
-
-
-def build_env(render: bool = False) -> Env:
-    env = gym.make(
-        'FrozenLake-v1',
-        render_mode="human" if render else None,
-        desc=None,
-        map_name="4x4",
-        is_slippery=False)
+        raise NotImplementedError
 
     return env
 
 
-def evaluate_agent(
-        env: Env,
-        agent: DiscreteActionAgent,
-        T: int = 30,
-        num_episodes: int = 10,
-        reward_shaper: Callable = lambda reward, done, t: reward
+def reward_shaper(reward: float, done: bool, t: int):
+    return reward
+
+
+def build_linear_sched(start, steps, end = 0.0):
+    return LinearSchedule(start, end=end, steps=steps)
+
+
+def build_cosine_sched(start, steps, end = 0.0):
+    return CosineDecaySchedule(start, final_value=end, decay_steps=steps)
+
+
+def build_exponential_sched(start, steps, end = 0.0):
+    return ExponentialSchedule(start, end=end, steps=steps)
+
+
+def env_builder(**kwargs) -> Env:
+    return build_env(ENV_NAME, render=False, **kwargs)
+
+
+def run_on_policy(
+        num_train_seeds: int = 10,
+        eval_num_episodes=50,
 ):
-    rewards_over_episodes = []
+    global ENV_NAME
 
-    for _ in tqdm(range(num_episodes), desc=f'Eval'
-                  ):
-        rewards_over_time = []
+    seeds = list(range(num_train_seeds))
+    num_parallel_workers = min(10, len(seeds))
+    env_kwargs = { }
 
-        # Noise state reset (not exploration level)
-        agent.reset()
+    if ENV_NAME == 'FrozenLake' or ENV_NAME == 'FrozenLake-Slippery':
+        if ENV_NAME.lower() == 'FrozenLake-Slippery'.lower():
+            env_kwargs['is_slippery'] = True
+        else:
+            env_kwargs['is_slippery'] = False
 
-        # gymnasium v26 requires users to set seed while resetting the
-        # environment
-        state, info = env.reset()
+        num_episodes = 500
+        T = 50
 
-        for t in range(T):
-            action, p = agent.get_greedy_action(state)
+        eps_steps = num_episodes # eps.step() at end of episode
+        eps_schedule_builder = build_linear_sched
 
-            next_state, reward, terminated, truncated, info = env.step(action)
+        alpha_start = 0.3
+        alpha_end = 0.01
+        alpha_steps = num_episodes
 
-            done = terminated or truncated or (t + 1 == T)
+        update_coefficient_builder = build_linear_sched  # alpha / lr
 
-            reward = reward_shaper(reward=reward, done=done, t=t)
+    elif ENV_NAME == 'CliffWalking':
+        num_episodes = 5000
+        T = 20
 
-            rewards_over_time.append(reward)
+        eps_steps = num_episodes # eps.step() at end of episode
+        eps_schedule_builder = build_linear_sched
 
-            if done:
-                break
-            else:
-                state = next_state
+        alpha_start = 0.5
+        alpha_end = 0.01
+        alpha_steps = num_episodes
+        update_coefficient_builder = build_linear_sched  # alpha / lr
 
-        rewards_over_episodes.append(sum(rewards_over_time))
+    elif ENV_NAME == 'Taxi':
+        num_episodes = 5000
+        T = 50
 
-    return rewards_over_episodes
+        eps_steps = num_episodes # eps.step() at end of episode
+        eps_schedule_builder = build_linear_sched
 
+        alpha_start = 1.0
+        alpha_end = 0.2
+        alpha_steps = num_episodes
+        update_coefficient_builder = build_linear_sched  # alpha / lr
 
-def run_env(
-        env: Env,
-        behavioral_agent: DiscreteActionAgent,
-        target_agent: DiscreteActionAgent = None,
-        reward_shaper: Callable = lambda reward, done, t: reward,
-        T: int = 30,
-        num_episodes: int = 10,
-        eval_num_episodes: int = 10,
-        evaluate_frequency: int = 50,
-        train_seeds=(1, 2, 3, 4)
-):
+    else:
+        raise NotImplementedError
 
-    wrapped_env = gym.wrappers.RecordEpisodeStatistics(
-        env, 50)  # Records episode-reward
+    evaluate_frequency = max(1, int(0.01 * num_episodes * T))
+    env = env_builder()
+    gamma = 0.99
 
-    rewards_over_seeds = []
-    eval_rewards_over_seeds = []
+    agent_kwargs = dict(
+        action_space_dims=int(env.action_space.n),
+        obs_space_dims=int(env.observation_space.n),
+        discount=gamma,
+        eps_schedule_builder=eps_schedule_builder,
+        update_coefficient_builder=update_coefficient_builder,
+        update_coefficient_kwargs={
+            "start": alpha_start,
+            "steps": alpha_steps,
+            "end"  : alpha_end
+        }
+    )
 
-    for seed_i, seed in enumerate(train_seeds):
-        random.seed(seed)
-        np.random.seed(seed)
+    processed_training_results = {}
+    processed_evaluation_results = {}
+    processed_distribution_results = {}
 
-        rewards_over_episodes = []
-        eval_rewards_over_episodes = []
+    for q_init in [-1, 1]:
+        for eps in [0.1, 0.05]:
 
-        behavioral_agent.initialize()  # Unlearn
+            for agent_name, agent_class in [
+                ('MC: $1_{st}$-visit', MCOnPolicyFirstVisitGLIE),
+            ]:
+                akwargs = agent_kwargs.copy()
 
-        if target_agent is not None:
-            target_agent.initialize()
+                agent_name += ', $q_0$: ' + f'{q_init}'
+                agent_name += ', $\\varepsilon$: ' + f'{eps}'
 
-        for episode in tqdm(
-                range(num_episodes),
-                desc=f'Episodes for seed_{seed_i}'
-        ):
-            trajectory = []
-            rewards_over_time = []
-
-            # Noise state reset (not exploration level)
-            behavioral_agent.reset()
-
-            # gymnasium v26 requires users to set seed while resetting the
-            # environment
-            state, info = wrapped_env.reset(seed=seed)
-
-            for t in range(T):
-                action, p = behavioral_agent.act(state)
-                next_state, reward, terminated, truncated, info = \
-                    wrapped_env.step(action)
-
-                done = terminated or truncated or (t + 1 == T)
-
-                reward = reward_shaper(reward=reward, done=done, t=t)
-
-                rewards_over_time.append(reward)
-
-                trajectory.append(
-                    Experience(
-                        s=state,
-                        a=action,
-                        r=reward,
-                        sp=next_state,
-                        p=p,
-                        done=int(done))
+                akwargs.update(
+                    dict(
+                        eps_schedule_kwargs={
+                            "start": eps,
+                            "steps": eps_steps,
+                            "end"  : 0.001 * eps
+                        },
+                        q_init=q_init
+                    )
                 )
 
-                if done:
-                    break
-                else:
-                    state = next_state
-
-            # The environment terminates on positive reward
-            # Opt 1: final reward of the episode
-            # rewards_over_episodes.append(rewards_over_time[-1])
-
-            # Opt 2: sum of rewards in episode (for cases where there's
-            # always a reward)
-            rewards_over_episodes.append(sum(rewards_over_time))
-
-            # MC agents take the whole trajectory of the episode
-            behavioral_agent.step(trajectory)
-
-            # Target agent only learns
-            if target_agent is not None:
-                target_agent.step(deepcopy(trajectory))
-
-            if (episode % evaluate_frequency == 0) and (eval_num_episodes > 0):
-                eval_agent = behavioral_agent
-                if target_agent is not None:
-                    eval_agent = target_agent
-
-                eval_rewards_over_episodes += evaluate_agent(
-                    env,
-                    agent=eval_agent,
+                results = parallel_train(
+                    env_builder= lambda: env_builder(**env_kwargs),
+                    behavioral_agent_class=agent_class,
+                    behavioral_agent_kwargs=akwargs,
                     T=T,
-                    num_episodes=eval_num_episodes,
-                    reward_shaper=reward_shaper
+                    num_episodes=num_episodes,
+                    reward_shaper=reward_shaper,
+                    train_seeds=seeds,
+                    do_eval=True,
+                    eval_num_episodes=eval_num_episodes,
+                    evaluate_frequency=evaluate_frequency,
+                    parallel_eval=True,
+                    soft_eval=True,
+                    hard_eval=True,
+                    num_parallel_workers=num_parallel_workers,
                 )
 
-        rewards_over_seeds.append(rewards_over_episodes)
-        eval_rewards_over_seeds.append(eval_rewards_over_episodes)
+                processed_training_results.update({
+                    agent_name: preprocess_for_training_plots(
+                        results, agent_name)
+                })
 
-    print(
-        "\nAverage Total Rewards / Seed: Train = {0:.2f}, Eval = {1:.2f}".format(
-            np.sum(np.array(rewards_over_seeds)) / len(train_seeds),
-            np.sum(np.array(eval_rewards_over_seeds)) / len(train_seeds)
-        ),
+                processed_evaluation_results.update({
+                    agent_name: preprocess_for_evaluation_plots(
+                        results, agent_name)
+                })
+
+                processed_distribution_results.update({
+                    agent_name: preprocess_for_distribution_plots(
+                        results, agent_name)
+                })
+
+    # region Present
+
+    # ------- Health Report --------- #
+    print_health_report(
+        training_results=processed_training_results,
+        evaluation_results=processed_evaluation_results,
+        distribution_results=processed_distribution_results
     )
 
-    return rewards_over_seeds, eval_rewards_over_seeds
+    # --- Plotting --- #
+    all_algorithm_names = list(processed_distribution_results.keys())
+    palette = buil_high_contrast_palette(n_colors=len(all_algorithm_names))
+
+    color_map = {
+        name: color for name, color in zip(
+            list(processed_distribution_results.keys()),
+            palette
+        )
+    }
+
+    plot_training_metrics(
+        results=processed_training_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/training_metrics/on_policy',
+    )
+
+    plot_evaluation_metrics(
+        results=processed_evaluation_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/evaluation_metrics/on_policy',
+    )
+
+    plot_value_accuracy(
+        results=processed_evaluation_results,
+        metrics_to_compare=['V0', 'soft_G0'],
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/learning/on_policy',
+    )
+
+    plot_action_distribution(
+        results=processed_distribution_results,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/behaviors/on_policy',
+    )
+
+    #endregion
 
 
+def run_off_policy_uniform_behavioral(
+        num_train_seeds: int = 10,
+        eval_num_episodes=50,
+):
+    global ENV_NAME
 
-def off_policy_experiments(num_episodes, T):
+    seeds = list(range(num_train_seeds))
+    num_parallel_workers = min(10, len(seeds))
+    env_kwargs = {}
 
-    """
-        Use U[num_actions] as behavior agent
-        Vary the eps across Offpolicy agents
-    """
+    if ENV_NAME == 'FrozenLake' or ENV_NAME == 'FrozenLake-Slippery':
+        if ENV_NAME.lower() == 'FrozenLake-Slippery'.lower():
+            env_kwargs['is_slippery'] = True
+        else:
+            env_kwargs['is_slippery'] = False
 
-    train_returns_over_seeds_over_over_agent = []
-    eval_returns_over_seeds_over_over_agent = []
-    legend = []
+        num_episodes = 500
+        T = 50
 
-    def build_eps_sched(start, end=0.0):
-        return LinearSchedule(start, end=end, steps=num_episodes)
+        # --- Target Agent Parameters
+        t_eps_steps = num_episodes
+        t_eps_schedule_builder = build_linear_sched
+        t_alpha_start = 1e-1
+        t_alpha_end = 1e-5
+        t_alpha_steps = num_episodes
+        t_update_coefficient_builder = build_linear_sched
 
-    env = build_env()
+    elif ENV_NAME == 'CliffWalking':
+        num_episodes = 5000
+        T = 20
 
-    random_agent = DiscreteActionRandomAgent(
+        # --- Target Agent Params --- #
+        t_eps_steps = num_episodes
+        t_eps_schedule_builder = build_linear_sched
+
+        t_alpha_start = 0.3
+        t_alpha_end = 0.01
+        t_alpha_steps = num_episodes
+        t_update_coefficient_builder = build_linear_sched
+
+    elif ENV_NAME == 'Taxi':
+        num_episodes = 5000
+        T = 50
+
+        # --- Target Agent Params --- #
+        t_eps_steps = num_episodes
+        t_eps_schedule_builder = build_linear_sched
+        t_alpha_start = 1e-1
+        t_alpha_end = 1e-3
+        t_alpha_steps = num_episodes
+        t_update_coefficient_builder = build_linear_sched
+    else:
+        raise NotImplementedError
+
+    # The smaller, the more frequent the evalutation,
+    # pegged to global train steps
+    evaluate_frequency = max(1, int(0.01 * num_episodes * T))
+    env = env_builder()
+
+    gamma = 0.99
+
+    # ---- Setup Behavioral Agent ----- #
+    behavioral_akwargs = dict(
         action_space_dims=int(env.action_space.n),
         obs_space_dims=int(env.observation_space.n),
         distribution=randint,
-        distribution_args=dict(low=0, high=int(env.action_space.n))
+        distribution_args=dict(
+            low=0,
+            high=int(env.action_space.n)
+        )
     )
 
-    behavior_agent = random_agent
+    behavioral_class = DiscreteActionRandomAgent
 
-    for q_init in [-1, 0., 1]:
-        for eps in [0.1, 0.2]:
-            agent_off_policy = MCOffPolicy(
-                action_space_dims=int(env.action_space.n),
-                obs_space_dims=int(env.observation_space.n),
-                discount=0.99,
-                eps=build_eps_sched(eps, eps),
-                qval_init=q_init
-            )
-
-            train_returns_over_seeds, eval_returns_over_seeds = run_env(
-                env=env,
-                behavioral_agent=behavior_agent,
-                target_agent=agent_off_policy,
-                T=T,
-                num_episodes=num_episodes
-            )
-
-            train_returns_over_seeds_over_over_agent.append(
-                train_returns_over_seeds)
-            eval_returns_over_seeds_over_over_agent.append(
-                eval_returns_over_seeds)
-            legend.append(r'$\epsilon = {}$, q_init = {}'.format(eps, q_init))
-
-    plot(
-        eval_returns_over_seeds_over_over_agent,
-        legend=legend,
-        title=f'MCOffPolicy-Eval-Target'
-    )
-
-
-def on_policy_experiments_averaged_step_size(num_episodes, T, seeds):
-    """
-        Step size is averaged over (s,a) visits
-    """
-
-    train_returns_over_seeds_over_over_agent = []
-    eval_returns_over_seeds_over_over_agent = []
-    legend = []
-    env = build_env()
-
-    rand_agent = DiscreteActionRandomAgent(
+    # ----- Setup Target Agent ----- #
+    target_agent_kwargs = dict(
         action_space_dims=int(env.action_space.n),
         obs_space_dims=int(env.observation_space.n),
-        distribution=randint,
-        distribution_args=dict(low=0, high=int(env.action_space.n))
+        discount=gamma,
+        eps_schedule_builder=t_eps_schedule_builder,
+        update_coefficient_builder=t_update_coefficient_builder,
+        update_coefficient_kwargs={
+            "start": t_alpha_start,
+            "steps": t_alpha_steps,
+            "end"  : t_alpha_end
+        }
     )
 
-    train_returns_over_seeds, eval_returns_over_seeds = run_env(
-        env,
-        rand_agent,
-        T=T,
-        num_episodes=num_episodes,
-        train_seeds=seeds)
+    processed_training_results = {}
+    processed_evaluation_results = {}
+    processed_distribution_results = {}
 
-    train_returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    eval_returns_over_seeds_over_over_agent.append(eval_returns_over_seeds)
-    legend.append('Uniform Random')
+    for q_init in [-1, 1]:
+        for eps in [0.1, 0.05]:
+            for agent_name, target_class in [
+                ('MC-OffPolicy:', MCOffPolicy)]:
 
-    def build_eps_sched(start):
-        return LinearSchedule(start, end=0.0, steps=num_episodes)
+                agent_name += ', $q_0$: ' + f'{q_init}'
+                agent_name += ', $\\varepsilon$: ' + f'{eps}'
 
-    step_size = None
+                behaviora_kwargs = behavioral_akwargs.copy()
+                targeta_akwargs = target_agent_kwargs.copy()
 
-    for q_init in [-1, 0, 1]:
-        for eps in [0.05, 0.1]:
-            agent = MCOnPolicyFirstVisitGLIE(
-                action_space_dims=int(env.action_space.n),
-                obs_space_dims=int(env.observation_space.n),
-                discount=0.99,
-                eps=build_eps_sched(eps),
-                qval_init=q_init,
-                step_size=step_size)
+                targeta_akwargs.update(
+                    dict(
+                        eps_schedule_kwargs={
+                            "start": eps,
+                            "steps": t_eps_steps,
+                            "end"  : 0.001 * eps
+                        },
+                        q_init=q_init
+                    )
+                )
 
-            train_returns_over_seeds, eval_returns_over_seeds = run_env(
-                env,
-                agent,
-                T=T,
-                num_episodes=num_episodes,
-                train_seeds=seeds)
+                results = parallel_train(
+                    env_builder=lambda: env_builder(**env_kwargs),
+                    behavioral_agent_class=behavioral_class,
+                    behavioral_agent_kwargs=behaviora_kwargs,
+                    target_agent_class=target_class,
+                    target_agent_kwargs=targeta_akwargs,
+                    T=T,
+                    num_episodes=num_episodes,
+                    reward_shaper=reward_shaper,
+                    train_seeds=seeds,
+                    eval_num_episodes=eval_num_episodes,
+                    evaluate_frequency=evaluate_frequency,
+                    do_eval=True,
+                    parallel_eval=True,
+                    soft_eval=True,
+                    hard_eval=True,
+                    num_parallel_workers=num_parallel_workers,
+                )
 
-            train_returns_over_seeds_over_over_agent.append(
-                train_returns_over_seeds)
+                # region post-process
+                processed_training_results.update({
+                    agent_name: preprocess_for_training_plots(
+                        results, agent_name)
+                })
 
-            eval_returns_over_seeds_over_over_agent.append(
-                eval_returns_over_seeds)
-            legend.append(r'$\epsilon = {}$, q_init = {}'.format(eps, q_init))
+                processed_evaluation_results.update({
+                    agent_name: preprocess_for_evaluation_plots(
+                        results, agent_name)
+                })
 
-    plot(
-        train_returns_over_seeds_over_over_agent,
-        legend=legend,
-        title=f'MCOnPolicyFirstVisit - Avg. Step Size\nTrain'
+                processed_distribution_results.update({
+                    agent_name: preprocess_for_distribution_plots(
+                        results, agent_name)
+                })
+
+                # endregion
+
+    # region  Present
+
+    # ----------- Health Status ----------- #
+    print_health_report(
+        training_results=processed_training_results,
+        evaluation_results=processed_evaluation_results,
+        distribution_results=processed_distribution_results
     )
 
-    plot(
-        eval_returns_over_seeds_over_over_agent,
-        legend=legend,
-        title=f'MCOnPolicyFirstVisit - Avg. Step Size\nEval'
+    # --- Plotting --- #
+    all_algorithm_names = list(processed_distribution_results.keys())
+    palette = buil_high_contrast_palette(
+        n_colors=len(all_algorithm_names))
+
+    color_map = {
+        name: color for name, color in zip(
+            list(processed_distribution_results.keys()),
+            palette
+        )
+    }
+
+    plot_training_metrics(
+        results=processed_training_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/training_metrics/off_policy_uniform_behavioral',
     )
 
+    plot_evaluation_metrics(
+        results=processed_evaluation_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/evaluation_metrics/off_policy_uniform_behavioral',
+    )
 
-def on_policy_experiments_fixed_step_size(num_episodes, T, seeds):
-    train_returns_over_seeds_over_over_agent = []
-    eval_returns_over_seeds_over_over_agent = []
-    legend = []
-    env = build_env()
+    plot_value_accuracy(
+        results=processed_evaluation_results,
+        metrics_to_compare=['V0', 'soft_G0'],
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/learning/off_policy_uniform_behavioral',
+    )
 
-    rand_agent = DiscreteActionRandomAgent(
+    plot_action_distribution(
+        results=processed_distribution_results,
+        eval_types_to_plot=['soft', 'hard'],
+        file_root=f'{ENV_NAME}',
+        save_dir='images/behaviors/off_policy_uniform_behavioral',
+    )
+
+    # endregion
+
+
+def run_off_policy_greedy_behavioral(
+        num_train_seeds: int = 10,
+        eval_num_episodes=50,
+):
+    global ENV_NAME
+
+    seeds = list(range(num_train_seeds))
+    num_parallel_workers = min(10, len(seeds))
+    env_kwargs = {}
+
+    if ENV_NAME == 'FrozenLake' or ENV_NAME == 'FrozenLake-Slippery':
+        if ENV_NAME.lower() == 'FrozenLake-Slippery'.lower():
+            env_kwargs['is_slippery'] = True
+        else:
+            env_kwargs['is_slippery'] = False
+
+        num_episodes = 500
+        T = 50
+
+        # --- Behavioral Agent Params
+        b_q_init = 1.0
+        b_epsilon_start = 1.0
+        b_epsilon_end = 0.2
+        b_eps_steps = num_episodes
+        b_eps_schedule_builder = build_linear_sched
+        b_alpha_start = 0.3
+        b_alpha_end = 0.1
+        b_alpha_steps = num_episodes
+        b_update_coefficient_builder = build_linear_sched
+
+        # --- Target Agent Parameters
+        t_eps_steps = num_episodes
+        t_eps_schedule_builder = build_linear_sched
+        t_alpha_start = 1e-1
+        t_alpha_end = 1e-5
+        t_alpha_steps = num_episodes
+        t_update_coefficient_builder = build_linear_sched
+
+    elif ENV_NAME == 'CliffWalking':
+        num_episodes = 5000
+        T = 20
+
+        # -- Behavioral Agent Params --- #
+        b_q_init = 0.
+        b_epsilon_start = 1.0
+        b_epsilon_end = 0.2
+        b_eps_steps = num_episodes
+        b_eps_schedule_builder = build_linear_sched
+        b_alpha_start = 0.3
+        b_alpha_end = 0.01
+        b_alpha_steps = num_episodes
+        b_update_coefficient_builder = build_linear_sched
+
+        # --- Target Agent Params --- #
+        t_eps_steps = num_episodes
+        t_eps_schedule_builder = build_linear_sched
+
+        t_alpha_start = 0.3
+        t_alpha_end = 0.01
+        t_alpha_steps = num_episodes
+        t_update_coefficient_builder = build_linear_sched
+
+    elif ENV_NAME == 'Taxi':
+        num_episodes = 5000
+        T = 50
+
+        # --- Behavioral Agent Params --- #
+        b_q_init = 0.
+        b_epsilon_start = 1.0
+        b_epsilon_end = 0.2
+        b_eps_steps = num_episodes
+        b_eps_schedule_builder = build_linear_sched
+        b_alpha_start = 0.1
+        b_alpha_end = 0.001
+        b_alpha_steps = num_episodes * T
+        b_update_coefficient_builder = build_linear_sched
+
+        # --- Target Agent Params --- #
+        t_eps_steps = num_episodes
+        t_eps_schedule_builder = build_linear_sched
+        t_alpha_start = 1e-1
+        t_alpha_end = 1e-3
+        t_alpha_steps = num_episodes
+        t_update_coefficient_builder = build_linear_sched
+
+    else:
+        raise NotImplementedError
+
+    # the smaller, the more frequent
+    evaluate_frequency = max(1, int(0.01 * num_episodes * T))
+    env = env_builder()
+
+    gamma = 0.99
+
+    # ---- Setup Behavioral Agent ----- #
+    behavioral_agent_kwargs = dict(
         action_space_dims=int(env.action_space.n),
         obs_space_dims=int(env.observation_space.n),
-        distribution=randint,
-        distribution_args=dict(low=0, high=int(env.action_space.n))
+        discount=gamma,
+        q_init=b_q_init,
+        eps_schedule_builder=b_eps_schedule_builder,
+        eps_schedule_kwargs={
+            "start": b_epsilon_start,
+            "steps": b_eps_steps,
+            "end"  : b_epsilon_end
+        },
+        update_coefficient_builder=b_update_coefficient_builder,
+        update_coefficient_kwargs={
+            "start": b_alpha_start,
+            "steps": b_alpha_steps,
+            "end"  : b_alpha_end
+        }
     )
 
-    train_returns_over_seeds, eval_returns_over_seeds = run_env(
-        env,
-        rand_agent,
-        T=T,
-        num_episodes=num_episodes,
-        train_seeds=seeds)
+    behavioral_class = MCOnPolicyFirstVisitGLIE
 
-    train_returns_over_seeds_over_over_agent.append(train_returns_over_seeds)
-    eval_returns_over_seeds_over_over_agent.append(eval_returns_over_seeds)
-    legend.append('Uniform Random')
-
-    def build_eps_sched(start):
-        return LinearSchedule(start, end=0.0, steps=num_episodes)
-
-    q_init = 0
-
-    for step_size in [0.05, 0.1, 0.2, 0.3]:
-        for eps in [0.1]:
-            agent = MCOnPolicyFirstVisitGLIE(
-                action_space_dims=int(env.action_space.n),
-                obs_space_dims=int(env.observation_space.n),
-                discount=0.99,
-                eps=build_eps_sched(eps),
-                qval_init=q_init,
-                step_size=step_size)
-
-            train_returns_over_seeds, eval_returns_over_seeds = run_env(
-                env,
-                agent,
-                T=T,
-                num_episodes=num_episodes,
-                train_seeds=seeds)
-
-            train_returns_over_seeds_over_over_agent.append(
-                train_returns_over_seeds)
-
-            eval_returns_over_seeds_over_over_agent.append(
-                eval_returns_over_seeds)
-            legend.append(r'$\epsilon = {}$, step_size = {}'.format(eps, step_size))
-
-    plot(
-        train_returns_over_seeds_over_over_agent,
-        legend=legend,
-        title=f'MCOnPolicyFirstVisit - Fixed Step Size\nTrain'
+    # ----- Setup Target Agent ----- #
+    target_agent_kwargs = dict(
+        action_space_dims=int(env.action_space.n),
+        obs_space_dims=int(env.observation_space.n),
+        discount=gamma,
+        eps_schedule_builder=t_eps_schedule_builder,
+        update_coefficient_builder=t_update_coefficient_builder,
+        update_coefficient_kwargs={
+            "start": t_alpha_start,
+            "steps": t_alpha_steps,
+            "end"  : t_alpha_end
+        }
     )
 
-    plot(
-        eval_returns_over_seeds_over_over_agent,
-        legend=legend,
-        title=f'MCOnPolicyFirstVisit - Fixed Step Size\nEval'
+    processed_training_results = {}
+    processed_evaluation_results = {}
+    processed_distribution_results = {}
+
+    for q_init in [-1, 1]:
+        for eps in [0.1, 0.05]:
+            for agent_name, target_class in [
+                ('MC-OffPolicy:', MCOffPolicy)]:
+
+                agent_name += ', $q_0$: ' + f'{q_init}'
+                agent_name += ', $\\varepsilon$: ' + f'{eps}'
+
+                behaviora_kwargs = behavioral_agent_kwargs.copy()
+                targeta_akwargs = target_agent_kwargs.copy()
+
+                targeta_akwargs.update(
+                    dict(
+                        eps_schedule_kwargs={
+                            "start": eps,
+                            "steps": t_eps_steps,
+                            "end"  : 0.001 * eps
+                        },
+                        q_init=q_init
+                    )
+                )
+
+                results = parallel_train(
+                    env_builder=lambda: env_builder(**env_kwargs),
+                    behavioral_agent_class=behavioral_class,
+                    behavioral_agent_kwargs=behaviora_kwargs,
+                    target_agent_class=target_class,
+                    target_agent_kwargs=targeta_akwargs,
+                    T=T,
+                    num_episodes=num_episodes,
+                    reward_shaper=reward_shaper,
+                    train_seeds=seeds,
+                    eval_num_episodes=eval_num_episodes,
+                    evaluate_frequency=evaluate_frequency,
+                    do_eval=True,
+                    parallel_eval=True,
+                    soft_eval=True,
+                    hard_eval=True,
+                    num_parallel_workers=num_parallel_workers,
+                )
+
+                # region post-process
+                processed_training_results.update({
+                    agent_name: preprocess_for_training_plots(
+                        results, agent_name)
+                })
+
+                processed_evaluation_results.update({
+                    agent_name: preprocess_for_evaluation_plots(
+                        results, agent_name)
+                })
+
+                processed_distribution_results.update({
+                    agent_name: preprocess_for_distribution_plots(
+                        results, agent_name)
+                })
+
+                # endregion
+
+    # region  Present
+
+    # ----------- Health Status ----------- #
+    print_health_report(
+        training_results=processed_training_results,
+        evaluation_results=processed_evaluation_results,
+        distribution_results=processed_distribution_results
     )
+
+    # --- Plotting --- #
+    all_algorithm_names = list(processed_distribution_results.keys())
+    palette = buil_high_contrast_palette(
+        n_colors=len(all_algorithm_names))
+
+    color_map = {
+        name: color for name, color in zip(
+            list(processed_distribution_results.keys()),
+            palette
+        )
+    }
+
+    plot_training_metrics(
+        results=processed_training_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/training_metrics/off_policy_greedy_behavioral',
+    )
+
+    plot_evaluation_metrics(
+        results=processed_evaluation_results,
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/evaluation_metrics/off_policy_greedy_behavioral',
+    )
+
+    plot_value_accuracy(
+        results=processed_evaluation_results,
+        metrics_to_compare=['V0', 'soft_G0'],
+        color_map=color_map,
+        file_root=f'{ENV_NAME}',
+        save_dir='images/learning/off_policy_greedy_behavioral',
+    )
+
+    plot_action_distribution(
+        results=processed_distribution_results,
+        eval_types_to_plot=['soft', 'hard'],
+        file_root=f'{ENV_NAME}',
+        save_dir='images/behaviors/off_policy_greedy_behavioral',
+    )
+
+    # endregion
 
 
 if __name__ == '__main__':
-    num_episodes = 3000
-    T = 30
-    seeds = tuple(range(5))
+    global ENV_NAME
 
-    off_policy_experiments(
-        num_episodes=num_episodes,
-        T=T
-    )
+    num_train_seeds=10
+    eval_num_episodes=100
 
-    num_episodes = 300
-    on_policy_experiments_averaged_step_size(
-        num_episodes=num_episodes,
-        T=T,
-        seeds=seeds)
+    for env_name in [
+                'FrozenLake',
+                'FrozenLake-Slippery',
+                'CliffWalking',
+                # 'Taxi'
+    ]:
+        ENV_NAME = env_name
 
-    on_policy_experiments_fixed_step_size(
-        num_episodes=num_episodes,
-        T=T,
-        seeds=seeds)
+        run_on_policy(
+            num_train_seeds=num_train_seeds,
+            eval_num_episodes=eval_num_episodes
+        )
+
+        run_off_policy_uniform_behavioral(
+            num_train_seeds=num_train_seeds,
+            eval_num_episodes=eval_num_episodes
+        )
+
+        run_off_policy_greedy_behavioral(
+            num_train_seeds=num_train_seeds,
+            eval_num_episodes=eval_num_episodes
+        )
 
     exit(0)

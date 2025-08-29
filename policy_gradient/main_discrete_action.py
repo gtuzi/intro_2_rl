@@ -29,7 +29,7 @@ from approximate_methods.utils import (
 )
 
 from policy_gradient.agents import (
-    Reinforce_LA,
+    Reinforce_LinearApproximation,
     Reinforce,
     ReinforceBaseline,
     OneStepAC,
@@ -444,7 +444,7 @@ def run_one_experiment(
 
     env = build_env()
 
-    if model == 'Reinforce_LA':
+    if model == 'Reinforce_LinearApproximation':
         do_eval = True
         target_agent = None
 
@@ -464,7 +464,7 @@ def run_one_experiment(
             max_size, num_tiles, num_tilings, x0_low, x1_low, x0_high, x1_high)
 
         feature_fn = lambda _s: _feature_fn(_s, -1)
-        agent = Reinforce_LA(
+        agent = Reinforce_LinearApproximation(
             feature_size=max_size,
             action_space_dims=int(env.action_space.n),
             update_coefficient=alpha_builder(alpha),
@@ -497,8 +497,8 @@ def run_one_experiment(
         agent = ReinforceBaseline(
             state_size=state_size,
             action_space_dims=action_size,
-            update_coefficient_policy=alpha_builder(alpha),
-            update_coefficient_baseline=alpha_builder(1.2 * alpha),
+            update_coefficient_actor=alpha_builder(alpha),
+            update_coefficient_critic=alpha_builder(1.2 * alpha),
             hidden_dims=(h, ),
             discount=0.99,
             norm_grad=NORM_GRAD
@@ -515,7 +515,7 @@ def run_one_experiment(
         agent = OneStepAC(
             state_size=state_size,
             action_space_dims=action_size,
-            update_coefficient_policy=alpha_builder(alpha),
+            update_coefficient_actor=alpha_builder(alpha),
             update_coefficient_critic=alpha_builder(25 * alpha),
             hidden_dims=(h,),
             discount=0.99,
@@ -532,7 +532,7 @@ def run_one_experiment(
         agent = ACWithEligibilityTraces(
             state_size=state_size,
             action_space_dims=action_size,
-            update_coefficient_policy=alpha_builder(alpha),
+            update_coefficient_actor=alpha_builder(alpha),
             lam_policy= 0.5,
             update_coefficient_critic=alpha_builder(25 * alpha),
             lam_critic=0.5,
@@ -708,8 +708,8 @@ def experiments_parallel(
         )
 
     # ACWithEligibilityTracesContinuing
-    if model == 'Reinforce_LA':
-        title = 'Reinforce_LA: $\sum_t R_t$'
+    if model == 'Reinforce_LinearApproximation':
+        title = 'Reinforce_LinearApproximation: $\sum_t R_t$'
     elif model == 'Reinforce':
         title = 'Reinforce: $\mathbb{E}[\sum_t R_t]$'
     elif model == 'ReinforceBaseline':
@@ -758,7 +758,7 @@ def experiments_parallel(
                 filename=f'{model}_G0_eval{ng_str}.png'
             )
 
-def reinforce_la(
+def reinforce_linearapproximation(
         num_episodes,
         T,
         reward_shaper: Callable,
@@ -791,7 +791,7 @@ def reinforce_la(
 
     for ia, alpha in enumerate(alphas):
 
-        agent = Reinforce_LA(
+        agent = Reinforce_LinearApproximation(
             feature_size=max_size,
             action_space_dims=int(env.unwrapped.action_space.n),
             update_coefficient=alpha_builder(alpha),
@@ -824,7 +824,7 @@ def reinforce_la(
         eval_sum_of_rewards_per_episode[ia] = np.mean(eval_sum_rewards)
 
         print(
-            f"\nReinforce_LA: Done α={alpha:.3e}, "
+            f"\nReinforce_LinearApproximation: Done α={alpha:.3e}, "
             f" steps/episode: {steps_per_episode[ia]:.4f}, "
             f"sum(r)/episode: {sum_of_rewards_per_episode[ia]:.4f}"
             f" eval steps/episode: {eval_steps_per_episode[ia]:.4f}, "
@@ -941,8 +941,8 @@ def reinforce_baseline(
             agent = ReinforceBaseline(
                 state_size=state_size,
                 action_space_dims=action_size,
-                update_coefficient_policy=alpha_builder(alpha),
-                update_coefficient_baseline=alpha_builder(1.2 * alpha),
+                update_coefficient_actor=alpha_builder(alpha),
+                update_coefficient_critic=alpha_builder(1.2 * alpha),
                 hidden_dims=(h, ),
                 discount=0.99
             )
@@ -1025,7 +1025,7 @@ def one_step_ac(
             agent = OneStepAC(
                 state_size=state_size,
                 action_space_dims=action_size,
-                update_coefficient_policy=alpha_builder(alpha),
+                update_coefficient_actor=alpha_builder(alpha),
                 update_coefficient_critic=alpha_builder(1.2 * alpha),
                 hidden_dims=(h, ),
                 discount=0.99,
@@ -1110,7 +1110,7 @@ def ac_with_eligibility_traces(
             agent = ACWithEligibilityTraces(
                 state_size=state_size,
                 action_space_dims=action_size,
-                update_coefficient_policy=alpha_builder(alpha),
+                update_coefficient_actor=alpha_builder(alpha),
                 lam_policy=0.5,
                 update_coefficient_critic=alpha_builder(25 * alpha),
                 lam_critic=0.5,
