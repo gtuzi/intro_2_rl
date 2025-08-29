@@ -5,21 +5,16 @@ Monte Carlo methods require only experience—sample sequences of states, action
 
 
 ## Table of Contents
-- [Background and Explanations](#Background and Explanations)
+- [Background and Explanations](#background-and-explanations)
 - [Implemented Algorithms](#Implemented-Algorithms)
-- [On-Policy, First Visit](#On-Policy-First-Visit)
-- [Off-Policy MC Control with Importance Sampling](#Off-Policy MC Control with Importance Sampling)
+- [On-Policy, First Visit](#on-policy-first-visit)
+- [Off-Policy MC Control with Importance Sampling](#off-policy-mc-control-with-importance-sampling)
 - [Environments and Agent Parameter Setup](#environments-and-agent-parameter-setup)
 - [Metrics and Other Definitions](#metrics-and-other-definitions)
 - [Results](#results)
   - [Performance Evaluation](#performance-evaluation)
   - [Learned Correctness](#learned-correctness)
 - [Execution](#Execution)
-
-
-## Implemented Algorithms
-- [x] On-policy first-visit MC control (5.4): `agents/MCOnPolicyFirstVisitGLIE`
-- [x] Off-Policy MC control for estimating optimal $\pi_*$ (5.7): `agents/MCOffPolicy`
 
 
 ## Background and Explanations
@@ -31,6 +26,11 @@ Topics covered in the notebook:
 * __On-Policy First Visit__
 * __Off-policy Prediction via Importance Sampling__
 * __Off-Policy MC Control__
+
+
+## Implemented Algorithms
+- [x] On-policy first-visit MC control (5.4): `agents/MCOnPolicyFirstVisitGLIE`
+- [x] Off-Policy MC control for estimating optimal $\pi_*$ (5.7): `agents/MCOffPolicy`
 
 
 ## On-Policy First Visit
