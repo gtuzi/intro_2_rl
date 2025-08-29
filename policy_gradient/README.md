@@ -174,21 +174,26 @@ learn continuous action selection. Implemented continuous action algorithms:
 * `agents/ReinforceBaselineContinuousAction`
 * `agents/ACWithEligibilityTracesContinuousAction`
 
+---
 
 ## Experiments
 In the following experiments, for each algorithm presented several
-hyperparameters are shown. Some of the hyper-parameters cause simulation
+hyperparameters are shown. Some of the hyperparameters cause simulation
 failures, in which case they are not plotted. While the hyperparameters
 are not perfectly fine-tuned, they should give a starting point in further
 improvements for that particular algorithm. Also, note that some algorithms
-perform better for certain evnironments than others (as it is to be expected).
+perform better for certain evnironments than others (as it is to be expected). 
+For the episodic environments 10 training seeds with 10 evaluation seeds
+were used, while 10 training seeds with 5 for evaluation were used for 
+continuing task.
 
 
 ### Environments 
 The gymnasium environments used for experiments are shown in the tables, for
-each algorithm. For the episodic environments 10 training seeds with 10 
-evaluation seeds were used, while 10 training seeds with 5 for evaluation \
-were used for continuing task.
+each algorithm. For the continuous task case, the episodic environment was 
+repurposed to run indefinitively by intercepting when the terminal state was
+reached, but then the environment was reset. This is to be kept in mind when 
+interpreting the results for this task (jumps).
 
 
 #### Reward Shaping
@@ -232,8 +237,6 @@ def acrobot_reward_shaper(reward: float, state: np.ndarray, **kwargs) -> float:
     return float(height_of_foot + velocity_penalty)
 
 ```
-
-5 training seeds and 10 evaluation seeds were used.
 
 
 ### Episodic Results
@@ -384,9 +387,6 @@ Here the learned expected reward is compared against the actual shaped reward.
 | Environment | $\bar{G}_h$ vs $\bar{V}_{\pi}$                                                                                                  | 
 |-------------|---------------------------------------------------------------------------------------------------------------------------------|
 | Acrobot     | <img src="images/evaluation_metrics/ACwEligTraceContinuing/Acrobot_mean_hard_eval_mean_raw_reward.png" alt="Grid" width="400"/> |
-
-
-
 
 
 ### Continuous Action Results
