@@ -1,4 +1,4 @@
-from typing import Union, Callable, Any, Optional, Tuple
+from typing import Union, Callable, Any, Optional, Tuple, List
 from functools import partial
 import numpy as np
 import torch
@@ -335,9 +335,9 @@ class Reinforce(DiscreteActionSoftPolicy):
             hidden_dims=(32, ),
             discount: Union[float, NoiseSchedule] = 0.9,
             temp: Union[float, NoiseSchedule] = 1.,
-            norm_grad: bool = False,
+            normalize_grad: bool = False,
             normalize_input: bool = False,
-            norm_threshold: float = 10.,
+            grad_norm_threshold: float = 10.,
             normalize_reward: bool = False,
             seed: Optional[int] = None
     ):
@@ -349,7 +349,7 @@ class Reinforce(DiscreteActionSoftPolicy):
         else:
             assert isinstance(update_coefficient, NoiseSchedule)
 
-        assert norm_threshold > 0.
+        assert grad_norm_threshold > 0.
 
         super().__init__(
             state_size=state_size,
@@ -364,9 +364,9 @@ class Reinforce(DiscreteActionSoftPolicy):
         self.update_coefficient = update_coefficient
         self.buffer = []
         self.policy = None
-        self.norm_grad = norm_grad
+        self.normalize_grad = normalize_grad
         self.normalize_input = normalize_input
-        self.norm_threshold = norm_threshold
+        self.grad_norm_threshold = grad_norm_threshold
         self.normalize_reward = normalize_reward
 
     def init_model(self, *args, **kwargs):
@@ -517,8 +517,8 @@ class Reinforce(DiscreteActionSoftPolicy):
             gradient_norm = float(torch.norm(torch.cat(flat_grads)))
             avg_grad_norm += gradient_norm
 
-            do_norm = gradient_norm > self.norm_threshold and self.norm_grad
-            k = self.norm_threshold / gradient_norm if do_norm else 1.
+            do_norm = gradient_norm > self.grad_norm_threshold and self.normalize_grad
+            k = self.grad_norm_threshold / gradient_norm if do_norm else 1.
 
             with torch.no_grad():
                 for w, g in zip(weights, grads):
@@ -548,9 +548,9 @@ class ReinforceBaseline(
             hidden_dims=(32, ),
             discount: Union[float, NoiseSchedule] = 0.9,
             temp: Union[float, NoiseSchedule] = 1.,
-            norm_grad: bool = False,
+            normalize_grad: bool = False,
             normalize_input: bool = False,
-            norm_threshold: float = 10.,
+            grad_norm_threshold: float = 10.,
             normalize_reward: bool = False,
             seed: Optional[int] = None
     ):
@@ -567,8 +567,8 @@ class ReinforceBaseline(
         else:
             assert isinstance(update_coefficient_critic, NoiseSchedule)
 
-        if norm_threshold is not None:
-            assert norm_threshold > 0.
+        if grad_norm_threshold is not None:
+            assert grad_norm_threshold > 0.
 
         super().__init__(
             state_size=state_size,
@@ -585,9 +585,9 @@ class ReinforceBaseline(
         self.buffer = []
         self.policy = None
         self.value = None
-        self.norm_grad = norm_grad
+        self.normalize_grad = normalize_grad
         self.normalize_input = normalize_input
-        self.norm_threshold = norm_threshold
+        self.grad_norm_threshold = grad_norm_threshold
         self.normalize_reward = normalize_reward
 
     def init_model(self, *args, **kwargs):
@@ -757,8 +757,8 @@ class ReinforceBaseline(
             flat_grads_v = [g.flatten() for g in grads_v]
             gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
 
-            do_norm_v = gradient_norm_v > self.norm_threshold and self.norm_grad
-            kv = self.norm_threshold / gradient_norm_v if do_norm_v else 1.
+            do_norm_v = gradient_norm_v > self.grad_norm_threshold and self.normalize_grad
+            kv = self.grad_norm_threshold / gradient_norm_v if do_norm_v else 1.
 
             with torch.no_grad():
                 for w, g in zip(W, grads_v):
@@ -774,8 +774,8 @@ class ReinforceBaseline(
             flat_grads_pi = [g.flatten() for g in grads_pi]
             gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
 
-            do_norm_pi = gradient_norm_pi > self.norm_threshold and self.norm_grad
-            kpi = self.norm_threshold / gradient_norm_pi if do_norm_pi else 1.
+            do_norm_pi = gradient_norm_pi > self.grad_norm_threshold and self.normalize_grad
+            kpi = self.grad_norm_threshold / gradient_norm_pi if do_norm_pi else 1.
 
             with torch.no_grad():
                 for th, g in zip(theta, grads_pi):
@@ -801,9 +801,9 @@ class OneStepAC(
             hidden_dims=(32,),
             discount: Union[float, NoiseSchedule] = 0.9,
             temp: Union[float, NoiseSchedule] = 1.,
-            norm_grad: bool = False,
+            normalize_grad: bool = False,
             normalize_input: bool = False,
-            norm_threshold: float = 10.,
+            grad_norm_threshold: float = 10.,
             seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
@@ -833,9 +833,9 @@ class OneStepAC(
         self.update_coefficient_critic = update_coefficient_critic
         self.policy = None
         self.value = None
-        self.norm_grad = norm_grad
+        self.normalize_grad = normalize_grad
         self.normalize_input = normalize_input
-        self.norm_threshold = norm_threshold
+        self.grad_norm_threshold = grad_norm_threshold
         self.I = 1
 
     def init_model(self, *args, **kwargs):
@@ -978,8 +978,8 @@ class OneStepAC(
         gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
         avg_grad_norm_v += gradient_norm_v
 
-        do_norm_v = gradient_norm_v > self.norm_threshold and self.norm_grad
-        kv = self.norm_threshold / gradient_norm_v if do_norm_v else 1.
+        do_norm_v = gradient_norm_v > self.grad_norm_threshold and self.normalize_grad
+        kv = self.grad_norm_threshold / gradient_norm_v if do_norm_v else 1.
 
         with torch.no_grad():
             for w, g in zip(W, grads_v):
@@ -996,8 +996,8 @@ class OneStepAC(
         gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
         avg_grad_norm_pi += gradient_norm_pi
 
-        do_norm_pi = gradient_norm_pi > self.norm_threshold and self.norm_grad
-        kpi = self.norm_threshold / gradient_norm_pi if do_norm_pi else 1.
+        do_norm_pi = gradient_norm_pi > self.grad_norm_threshold and self.normalize_grad
+        kpi = self.grad_norm_threshold / gradient_norm_pi if do_norm_pi else 1.
 
         with torch.no_grad():
             for th, g in zip(theta, grads_pi):
@@ -1028,9 +1028,9 @@ class ACWithEligibilityTraces(
             hidden_dims=(32,),
             discount: Union[float, NoiseSchedule] = 0.9,
             temp: Union[float, NoiseSchedule] = 1.,
-            norm_grad: bool = False,
+            normalize_grad: bool = False,
             normalize_input: bool = False,
-            norm_threshold: float = 10.,
+            grad_norm_threshold: float = 10.,
             seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
@@ -1065,9 +1065,9 @@ class ACWithEligibilityTraces(
         self.lam_critic = lam_critic
         self.policy = None
         self.value = None
-        self.norm_grad = norm_grad
+        self.normalize_grad = normalize_grad
         self.normalize_input = normalize_input
-        self.norm_threshold = norm_threshold
+        self.grad_norm_threshold = grad_norm_threshold
         self.I = 1
         self.z_critic = None
         self.z_actor = None
@@ -1227,8 +1227,8 @@ class ACWithEligibilityTraces(
         flat_grads_v = [g.flatten() for g in grads_v]
         gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
 
-        do_norm_v = gradient_norm_v > self.norm_threshold and self.norm_grad
-        kv = self.norm_threshold / gradient_norm_v if do_norm_v else 1.
+        do_norm_v = gradient_norm_v > self.grad_norm_threshold and self.normalize_grad
+        kv = self.grad_norm_threshold / gradient_norm_v if do_norm_v else 1.
 
         with torch.no_grad():
             for i in range(len(self.z_critic)):
@@ -1248,9 +1248,8 @@ class ACWithEligibilityTraces(
 
         flat_grads_pi = [g.flatten() for g in grads_pi]
         gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
-
-        do_norm_pi = gradient_norm_pi > self.norm_threshold and self.norm_grad
-        kpi = self.norm_threshold / gradient_norm_pi if do_norm_pi else 1.
+        do_norm_pi = gradient_norm_pi > self.grad_norm_threshold and self.normalize_grad
+        kpi = self.grad_norm_threshold / gradient_norm_pi if do_norm_pi else 1.
 
         with torch.no_grad():
             for i in range(len(self.z_actor)):
@@ -1294,9 +1293,9 @@ class ACWithEligibilityTracesContinuing(
             update_coefficient_avg_reward: Union[float, NoiseSchedule],
             hidden_dims=(32,),
             temp: Union[float, NoiseSchedule] = 1.,
-            norm_grad: bool = False,
+            normalize_grad: bool = False,
             normalize_input: bool = False,
-            norm_threshold: float = 10.,
+            grad_norm_threshold: float = 10.,
             seed: Optional[int] = None
     ):
         assert 0 < action_space_dims
@@ -1339,9 +1338,9 @@ class ACWithEligibilityTracesContinuing(
         self.temp = temp
         self.policy = None
         self.value = None
-        self.norm_grad = norm_grad
+        self.normalize_grad = normalize_grad
         self.normalize_input = normalize_input
-        self.norm_threshold = norm_threshold
+        self.grad_norm_threshold = grad_norm_threshold
         self.z_critic = None
         self.z_actor = None
         self.R_bar = 0.
@@ -1520,8 +1519,8 @@ class ACWithEligibilityTracesContinuing(
         gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
         avg_grad_norm_v += gradient_norm_v
 
-        do_norm_v = gradient_norm_v > self.norm_threshold and self.norm_grad
-        kv = self.norm_threshold / gradient_norm_v if do_norm_v else 1.
+        do_norm_v = gradient_norm_v > self.grad_norm_threshold and self.normalize_grad
+        kv = self.grad_norm_threshold / gradient_norm_v if do_norm_v else 1.
 
         with torch.no_grad():
             for i in range(len(self.z_critic)):
@@ -1542,8 +1541,8 @@ class ACWithEligibilityTracesContinuing(
         gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
         avg_grad_norm_pi += gradient_norm_pi
 
-        do_norm_pi = gradient_norm_pi > self.norm_threshold and self.norm_grad
-        kpi = self.norm_threshold / gradient_norm_pi if do_norm_pi else 1.
+        do_norm_pi = gradient_norm_pi > self.grad_norm_threshold and self.normalize_grad
+        kpi = self.grad_norm_threshold / gradient_norm_pi if do_norm_pi else 1.
 
         with torch.no_grad():
             for i in range(len(self.z_actor)):
@@ -1574,6 +1573,8 @@ class ACWithEligibilityTracesContinuing(
         )
 
 
+
+
 ####################################################
 ############## Continuous Action ###################
 ####################################################
@@ -1585,11 +1586,13 @@ class ReinforceContinuousAction(ContinuousActionSoftPolicy):
             state_size: int,
             action_size: int,
             update_coefficient: Union[float, NoiseSchedule],
+            action_mins: Optional[Union[Tuple[float, ...], List[float]]] = None,
+            action_maxs: Optional[Union[Tuple[float, ...], List[float]]] = None,
             hidden_dims=(32, ),
             discount: Union[float, NoiseSchedule] = 0.9,
-            norm_grad: bool = False,
+            normalize_grad: bool = False,
             normalize_input: bool = False,
-            norm_threshold: float = 10.,
+            grad_norm_threshold: float = 10.,
             normalize_reward: bool = False,
             seed: Optional[int] = None
     ):
@@ -1604,6 +1607,8 @@ class ReinforceContinuousAction(ContinuousActionSoftPolicy):
         super().__init__(
             state_size=state_size,
             action_size=action_size,
+            action_mins=action_mins,
+            action_maxs=action_maxs,
             discount=discount,
             seed=seed
         )
@@ -1616,17 +1621,21 @@ class ReinforceContinuousAction(ContinuousActionSoftPolicy):
         self.discount = discount
         self.policy: Optional[GaussianPolicy] = None
         self.normalize_reward = normalize_reward
-        self.norm_grad = norm_grad
+        self.normalize_grad = normalize_grad
         self.normalize_input = normalize_input
-        self.norm_threshold = norm_threshold
+        self.grad_norm_threshold = grad_norm_threshold
 
     def init_model(self, *args, **kwargs):
         self.policy = GaussianPolicy(
             in_size=self.feature_size,
             action_size=self.action_size,
+            action_mins=self.action_mins,
+            action_maxs=self.action_maxs,
             hidden_dims=self.hidden_dims,
             normalize_input=self.normalize_input
         )
+
+        self.policy = torch.compile(self.policy)
 
         self.optimizer = optim.SGD(
             self.policy.parameters(),
@@ -1715,10 +1724,17 @@ class ReinforceContinuousAction(ContinuousActionSoftPolicy):
 
     def step(self, experience: Experience, **kwargs):
         self.buffer.append((experience, self.t))
+
+        loss = 0
+        # MC - we learn at the end of the episode
         if experience.done:
-            self._learn()
+            loss = self._learn()
             self.buffer.clear()
-        self.t += 1
+            self.reset()
+        else:
+            self.t += 1
+
+        return loss
 
     def _learn(self):
 
@@ -1744,7 +1760,7 @@ class ReinforceContinuousAction(ContinuousActionSoftPolicy):
             for e, _t in reversed(self.buffer)
         ]
 
-        Gs = Gs - np.mean(Gs)
+        # Gs = Gs - np.mean(Gs)
 
         total_grad_norm = 0.
 
@@ -1777,13 +1793,15 @@ class ReinforceContinuousAction(ContinuousActionSoftPolicy):
                 if p.grad is not None
             ])
 
-            total_grad_norm += float(torch.norm(all_grads))
+            grad_norm = float(torch.norm(all_grads))
 
-            # Clip the gradients to a max norm
-            if self.norm_grad:
+            total_grad_norm += grad_norm
+
+            # Normalize the gradients to a max norm
+            if self.normalize_grad:
                 torch.nn.utils.clip_grad_norm_(
                     self.policy.parameters(),
-                    max_norm=self.norm_threshold
+                    max_norm=self.grad_norm_threshold
                 )
 
             self.optimizer.step()  # PyTorch applies the update w += -lr * w.grad
@@ -1799,60 +1817,71 @@ class ReinforceBaselineContinuousAction(
             self,
             state_size: int,
             action_size: int,
-            update_coefficient_policy: Union[float, NoiseSchedule],
-            update_coefficient_baseline: Union[float, NoiseSchedule],
+            update_coefficient_actor: Union[float, NoiseSchedule],
+            update_coefficient_critic: Union[float, NoiseSchedule],
+            action_mins: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
+            action_maxs: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
             hidden_dims=(32, ),
             discount: Union[float, NoiseSchedule] = 0.9,
-            norm_grad: bool = False,
+            normalize_grad: bool = False,
             normalize_input: bool = False,
-            norm_threshold: float = 10.,
+            grad_norm_threshold: float = 10.,
             normalize_reward: bool = False,
             seed: Optional[int] = None
     ):
         assert isinstance(action_size, int)
         assert 0 < action_size
 
-        if isinstance(update_coefficient_policy, float):
-            assert 0. < update_coefficient_policy < 1.
+        if isinstance(update_coefficient_actor, float):
+            assert 0. < update_coefficient_actor < 1.
         else:
-            assert isinstance(update_coefficient_policy, NoiseSchedule)
+            assert isinstance(update_coefficient_actor, NoiseSchedule)
 
-        if isinstance(update_coefficient_baseline, float):
-            assert 0. < update_coefficient_baseline < 1.
+        if isinstance(update_coefficient_critic, float):
+            assert 0. < update_coefficient_critic < 1.
         else:
-            assert isinstance(update_coefficient_baseline, NoiseSchedule)
+            assert isinstance(update_coefficient_critic, NoiseSchedule)
 
         super().__init__(
             state_size=state_size,
             action_size=action_size,
+            action_mins=action_mins,
+            action_maxs=action_maxs,
             discount=discount,
             seed=seed
         )
 
         self.t = 0
         self.hidden_dims = hidden_dims
-        self.update_coefficient_policy = update_coefficient_policy
-        self.update_coefficient_baseline = update_coefficient_baseline
+        self.update_coefficient_policy = update_coefficient_actor
+        self.update_coefficient_baseline = update_coefficient_critic
         self._writer: Optional[SummaryWriter] = None
         self.buffer = []
         self.policy: Optional[GaussianPolicy] = None
         self.normalize_reward = normalize_reward
-        self.norm_grad = norm_grad
+        self.normalize_grad = normalize_grad
         self.normalize_input = normalize_input
-        self.norm_threshold = norm_threshold
+        self.grad_norm_threshold = grad_norm_threshold
 
     def init_model(self, *args, **kwargs):
         self.policy = GaussianPolicy(
             in_size=self.feature_size,
             action_size=self.action_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
         # Using policy as feature extractor. One feature per action
         self.baseline = ValueFunction(
             in_size=self.feature_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
+
+        self.policy = torch.compile(self.policy)
+        self.baseline = torch.compile(self.baseline)
 
         self.policy_optimizer = optim.SGD(
             self.policy.parameters(),
@@ -1953,10 +1982,17 @@ class ReinforceBaselineContinuousAction(
 
     def step(self, experience: Experience, **kwargs):
         self.buffer.append((experience, self.t))
+
+        loss = 0
+        # MC - we learn at the end of the episode
         if experience.done:
-            self._learn()
+            loss = self._learn()
             self.buffer.clear()
-        self.t += 1
+            self.reset()
+        else:
+            self.t += 1
+
+        return loss
 
     def _learn(self):
         if isinstance(self.update_coefficient_policy, NoiseSchedule):
@@ -1981,14 +2017,13 @@ class ReinforceBaselineContinuousAction(
             nr = (r - R) / (sig + 1e-8)
             Gs[i] = nr if done else nr + self.discount * Gs[i + 1]
 
-
         # Generate G_t's
         _ = [
             _G_update(_t, e.r, e.done)
             for e, _t in reversed(self.buffer)
         ]
 
-        Gs = Gs - np.mean(Gs)
+        avg_loss = 0.
 
         for experience, t in self.buffer:
             for g in self.policy_optimizer.param_groups:
@@ -2016,6 +2051,13 @@ class ReinforceBaselineContinuousAction(
 
             self.baseline_optimizer.zero_grad()
             baseline_loss.backward()
+
+            if self.normalize_grad:
+                torch.nn.utils.clip_grad_norm_(
+                    self.baseline.parameters(),
+                    max_norm=self.grad_norm_threshold
+                )
+
             self.baseline_optimizer.step()
 
             logp = self.logp_sa(
@@ -2030,8 +2072,19 @@ class ReinforceBaselineContinuousAction(
             policy_loss = -logp * delta * (self.discount ** t)
             self.policy_optimizer.zero_grad()
             policy_loss.backward()
-            # torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=0.5)
-            self.policy_optimizer.step()  # PyTorch applies the update w += -lr * w.grad
+
+            if self.normalize_grad:
+                torch.nn.utils.clip_grad_norm_(
+                    self.policy.parameters(),
+                    max_norm=self.grad_norm_threshold
+                )
+
+            # PyTorch applies the update w += -lr * w.grad
+            self.policy_optimizer.step()
+
+            avg_loss += delta
+
+        return float(avg_loss) / len(self.buffer)
 
 
 class ACWithEligibilityTracesContinuousAction(
@@ -2046,10 +2099,16 @@ class ACWithEligibilityTracesContinuousAction(
             lam_actor: float,
             update_coefficient_critic: Union[float, NoiseSchedule],
             lam_critic: float,
+            action_mins: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
+            action_maxs: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
             hidden_dims=(32, ),
             discount: Union[float, NoiseSchedule] = 0.9,
-            norm_grad: bool = False,
-            device: Optional[Union[str, torch.device]] = None
+            normalize_grad: bool = False,
+            normalize_input: bool = False,
+            grad_norm_threshold: float = 10.,
+            seed: Optional[int] = None
     ):
         assert isinstance(action_size, int)
         assert 0 < action_size
@@ -2065,44 +2124,33 @@ class ACWithEligibilityTracesContinuousAction(
             assert isinstance(update_coefficient_critic, NoiseSchedule)
 
         super().__init__(
-            feature_size=state_size,
-            action_size=action_size)
+            state_size=state_size,
+            action_size=action_size,
+            action_mins=action_mins,
+            action_maxs=action_maxs,
+            discount=discount,
+            seed=seed
+        )
 
         self.t = 0
         self.hidden_dims = hidden_dims
         self.update_coefficient_actor = update_coefficient_actor
         self.update_coefficient_critic = update_coefficient_critic
-        self._writer: Optional[SummaryWriter] = None
-        self.discount = discount
         self.policy: Optional[GaussianPolicy] = None
-        self.norm_grad = norm_grad
         self.lam_actor = lam_actor
         self.lam_critic = lam_critic
         self.I = 1
-        self.device = device
 
-        if device is not None:
-            self.to_tensor = partial(to_tensor, device=device)
-            self.to_tensor_state_action = partial(to_tensor_state_action, device=device)
-        else:
-            self.to_tensor = to_tensor
-            self.to_tensor_state_action = to_tensor_state_action
-
-    @property
-    def writer(self) -> SummaryWriter:
-        return self._writer
-
-    @writer.setter
-    def writer(self, w: SummaryWriter):
-        if w is not None:
-            assert isinstance(w, SummaryWriter)
-        self._writer = w
+        self.normalize_grad = normalize_grad
+        self.normalize_input = normalize_input
+        self.grad_norm_threshold = grad_norm_threshold
 
     def init_model(self, *args, **kwargs):
         self.actor = GaussianPolicy(
             in_size=self.feature_size,
             action_size=self.action_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
         self.actor = torch.compile(self.actor)
@@ -2110,33 +2158,21 @@ class ACWithEligibilityTracesContinuousAction(
         # Using policy as feature extractor. One feature per action
         self.critic = ValueFunction(
             in_size=self.feature_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
         self.critic = torch.compile(self.critic)
-
-        if self.device is not None:
-            self.actor.to(self.device)
-            self.critic.to(self.device)
 
         self.z_actor = [
             torch.zeros_like(p).to(p.device)
             for p in self.actor.parameters()
         ]
+
         self.z_critic = [
             torch.zeros_like(p).to(p.device)
             for p in self.critic.parameters()
         ]
-
-        self.actor_optimizer = optim.SGD(
-            self.actor.parameters(),
-            lr=1e-3
-        )
-
-        self.critic_optimizer = optim.SGD(
-            self.critic.parameters(),
-            lr=1e-3
-        )
 
     def initialize(self, **kwargs):
         if isinstance(self.update_coefficient_actor, NoiseSchedule):
@@ -2164,7 +2200,8 @@ class ACWithEligibilityTracesContinuousAction(
             for p in self.critic.parameters()
         ]
 
-    def act(self, state, native = True) -> Tuple[Union[Tuple, torch.Tensor], Union[Tuple, torch.Tensor]]:
+    def act(self, state, native = True) -> Tuple[
+        Union[Tuple, torch.Tensor], Union[Tuple, torch.Tensor]]:
 
         if isinstance(state, np.ndarray):
             pass
@@ -2180,7 +2217,7 @@ class ACWithEligibilityTracesContinuousAction(
 
         with torch.no_grad():
             actions, probs = self.actor.sample(
-                self.to_tensor(state, dtype=torch.float32),
+                to_tensor(state, dtype=torch.float32),
                 differentiable=False)
 
         if native:
@@ -2192,7 +2229,7 @@ class ACWithEligibilityTracesContinuousAction(
         return actions, probs
 
     def get_sa_probability(self, s, a, native = True):
-        s, a = self.to_tensor_state_action(s, a)
+        s, a = to_tensor_state_action(s, a)
         p = self.actor.prob_sa(s, a)
         return to_native(p) if native else p
 
@@ -2200,7 +2237,8 @@ class ACWithEligibilityTracesContinuousAction(
         a, p = None, None
 
         with torch.no_grad():
-            a, p = self.actor.greedy_action(self.to_tensor(s, dtype=torch.float32))
+            a, p = self.actor.greedy_action(
+                to_tensor(s, dtype=torch.float32))
 
         if native:
             a = to_native(a)
@@ -2216,14 +2254,22 @@ class ACWithEligibilityTracesContinuousAction(
         return self.actor.pd(s)
 
     def logp_sa(self, s, a, native=True):
+        # If we have multiple actions - which are assumed to be
+        # independent, the joint probability over a = [..., ai, ...] is
+        # the log(prod_i(p(ai | s)))
         res = self.actor.logprob_sa(
-            s=self.to_tensor(s, dtype=torch.float32),
-            a=self.to_tensor(a, dtype=torch.float32)
-        )
+            s=to_tensor(s, dtype=torch.float32),
+            a=to_tensor(a, dtype=torch.float32)
+        ).sum()
+
         return to_native(res) if native else res
 
+    def state_value(self, s, native=True):
+        v = self.critic(to_tensor(s))
+        return to_native(v) if native else v
+
     def entropy(self, s, native = True):
-        e = self.actor.entropy(self.to_tensor(s, torch.float32))
+        e = self.actor.entropy(to_tensor(s, torch.float32))
         return to_native(e) if native else e
 
     def step(self, experience: Experience, **kwargs):
@@ -2245,10 +2291,10 @@ class ACWithEligibilityTracesContinuousAction(
             experience.ap, experience.done
         )
 
-        v = self.critic(self.to_tensor(s))
+        v = self.critic(to_tensor(s))
 
         with torch.no_grad():
-            vp = self.critic(self.to_tensor(sp)) * (1 - done)
+            vp = self.critic(to_tensor(sp)) * (1 - done)
             delta = (r + self.discount * vp) - v
 
         # --- Update Critic ETs --- #
@@ -2258,11 +2304,16 @@ class ACWithEligibilityTracesContinuousAction(
             retain_graph=False
         )
 
+        flat_grads_v = [g.flatten() for g in grads_v]
+        gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
+        do_norm_v = gradient_norm_v > self.grad_norm_threshold and self.normalize_grad
+        kv = self.grad_norm_threshold / gradient_norm_v if do_norm_v else 1.
+
         with torch.no_grad():
             for i in range(len(self.z_critic)):
                 self.z_critic[i].data.copy_(
                         self.discount * self.lam_critic * self.z_critic[i] +
-                        grads_v[i]
+                        (kv * grads_v[i])
                 )
 
         # --- Update Actor ETs --- #
@@ -2274,37 +2325,32 @@ class ACWithEligibilityTracesContinuousAction(
             retain_graph=False
         )
 
+        flat_grads_pi = [g.flatten() for g in grads_pi]
+        gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
+        do_norm_pi = gradient_norm_pi > self.grad_norm_threshold and self.normalize_grad
+        kpi = self.grad_norm_threshold / gradient_norm_pi if do_norm_pi else 1.
+
         with torch.no_grad():
             for i in range(len(self.z_actor)):
                 self.z_actor[i].data.copy_(
                         self.discount * self.lam_actor * self.z_actor[i] +
-                        self.I * grads_pi[i]
+                        self.I * (kpi * grads_pi[i])
                 )
 
         # ---- Update Critic --- #
-        for g in self.critic_optimizer.param_groups:
-            g['lr'] = alpha_critic
-
-        # self.critic_optimizer.zero_grad()
-        for z, w in zip(self.z_critic, self.critic.parameters()):
-            if w.grad is None:
-                w.grad = torch.zeros_like(z)
-            w.grad.data.copy_(-delta * z) # -grad because optimizer subtracts
-        self.critic_optimizer.step()
+        with torch.no_grad():
+            for z, w in zip(self.z_critic, self.critic.parameters()):
+                w += alpha_critic * delta * z
 
         # ---- Update Actor ---- #
-        for g in self.actor_optimizer.param_groups:
-            g['lr'] = alpha_actor
-
-        # self.actor_optimizer.zero_grad()
-        for z, th in zip(self.z_actor, self.actor.parameters()):
-            if th.grad is None:
-                th.grad = torch.zeros_like(z)
-            th.grad.data.copy_(-delta * z) # -grad because optimizer subtracts
-        self.actor_optimizer.step()
+        with torch.no_grad():
+            for z, th in zip(self.z_actor, self.actor.parameters()):
+                th += alpha_actor * delta * z
 
         self.I *= self.discount
         self.t += 1
+
+        return float(delta.detach().cpu())
 
 
 class ACWithEligibilityTracesContinuousActionContinuingTask(
@@ -2320,9 +2366,15 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
             update_coefficient_critic: Union[float, NoiseSchedule],
             lam_critic: float,
             update_coefficient_avg_reward: Union[float, NoiseSchedule],
+            action_mins: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
+            action_maxs: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
             hidden_dims=(32,),
-            norm_grad: bool = False,
-            device: Optional[Union[str, torch.device]] = None
+            normalize_grad: bool = False,
+            normalize_input: bool = False,
+            grad_norm_threshold: float = 10.,
+            seed: Optional[int] = None
     ):
         assert isinstance(action_size, int)
         assert 0 < action_size
@@ -2343,45 +2395,33 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
             assert isinstance(update_coefficient_avg_reward, NoiseSchedule)
 
         super().__init__(
-            feature_size=state_size,
-            action_size=action_size)
+            state_size=state_size,
+            action_size=action_size,
+            action_mins=action_mins,
+            action_maxs=action_maxs,
+            discount=0,
+            seed=seed
+        )
 
         self.t = 0
         self.hidden_dims = hidden_dims
         self.update_coefficient_actor = update_coefficient_actor
         self.update_coefficient_critic = update_coefficient_critic
         self.update_coefficient_avg_reward = update_coefficient_avg_reward
-        self._writer: Optional[SummaryWriter] = None
         self.policy: Optional[GaussianPolicy] = None
-        self.norm_grad = norm_grad
+        self.normalize_grad = normalize_grad
+        self.normalize_input = normalize_input
+        self.grad_norm_threshold = grad_norm_threshold
         self.lam_actor = lam_actor
         self.lam_critic = lam_critic
-        self.device = device
         self.R_bar = 0
-
-        if device is not None:
-            self.to_tensor = partial(to_tensor, device=device)
-            self.to_tensor_state_action = partial(
-                to_tensor_state_action, device=device)
-        else:
-            self.to_tensor = to_tensor
-            self.to_tensor_state_action = to_tensor_state_action
-
-    @property
-    def writer(self) -> SummaryWriter:
-        return self._writer
-
-    @writer.setter
-    def writer(self, w: SummaryWriter):
-        if w is not None:
-            assert isinstance(w, SummaryWriter)
-        self._writer = w
 
     def init_model(self, *args, **kwargs):
         self.actor = GaussianPolicy(
             in_size=self.feature_size,
             action_size=self.action_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
         self.actor = torch.compile(self.actor)
@@ -2389,33 +2429,21 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
         # Using policy as feature extractor. One feature per action
         self.critic = ValueFunction(
             in_size=self.feature_size,
-            hidden_dims=self.hidden_dims
+            hidden_dims=self.hidden_dims,
+            normalize_input=self.normalize_input
         )
 
         self.critic = torch.compile(self.critic)
-
-        if self.device is not None:
-            self.actor.to(self.device)
-            self.critic.to(self.device)
 
         self.z_actor = [
             torch.zeros_like(p).to(p.device)
             for p in self.actor.parameters()
         ]
+
         self.z_critic = [
             torch.zeros_like(p).to(p.device)
             for p in self.critic.parameters()
         ]
-
-        self.actor_optimizer = optim.SGD(
-            self.actor.parameters(),
-            lr=1e-3
-        )
-
-        self.critic_optimizer = optim.SGD(
-            self.critic.parameters(),
-            lr=1e-3
-        )
 
     def initialize(self, **kwargs):
         if isinstance(self.update_coefficient_actor, NoiseSchedule):
@@ -2459,7 +2487,7 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
 
         with torch.no_grad():
             actions, probs = self.actor.sample(
-                self.to_tensor(state, dtype=torch.float32),
+                to_tensor(state, dtype=torch.float32),
                 differentiable=False)
 
         if native:
@@ -2471,7 +2499,7 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
         return actions, probs
 
     def get_sa_probability(self, s, a, native=True):
-        s, a = self.to_tensor_state_action(s, a)
+        s, a = to_tensor_state_action(s, a)
         p = self.actor.prob_sa(s, a)
         return to_native(p) if native else p
 
@@ -2480,7 +2508,7 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
 
         with torch.no_grad():
             a, p = self.actor.greedy_action(
-                self.to_tensor(s, dtype=torch.float32))
+                to_tensor(s, dtype=torch.float32))
 
         if native:
             a = to_native(a)
@@ -2497,13 +2525,17 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
 
     def logp_sa(self, s, a, native=True):
         res = self.actor.logprob_sa(
-            s=self.to_tensor(s, dtype=torch.float32),
-            a=self.to_tensor(a, dtype=torch.float32)
+            s=to_tensor(s, dtype=torch.float32),
+            a=to_tensor(a, dtype=torch.float32)
         )
         return to_native(res) if native else res
 
+    def state_value(self, s, native=True):
+        v = self.critic(to_tensor(s))
+        return to_native(v) if native else v
+
     def entropy(self, s, native=True):
-        e = self.actor.entropy(self.to_tensor(s, torch.float32))
+        e = self.actor.entropy(to_tensor(s, torch.float32))
         return to_native(e) if native else e
 
     def step(self, experience: Experience, **kwargs):
@@ -2526,14 +2558,13 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
             experience.ap
         )
 
-        v = self.critic(self.to_tensor(s))
+        v = self.critic(to_tensor(s))
 
         with torch.no_grad():
-            vp = self.critic(self.to_tensor(sp))
-            delta = (r - self.R_bar * vp) - v
+            vp = self.critic(to_tensor(sp))
+            delta = (r - self.R_bar + vp) - v
 
-
-        self.R_bar += alpha_r * float(delta)
+        self.R_bar += alpha_r * delta
 
         # --- Update Critic ETs --- #
         grads_v = torch.autograd.grad(
@@ -2542,10 +2573,15 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
             retain_graph=False
         )
 
+        flat_grads_v = [g.flatten() for g in grads_v]
+        gradient_norm_v = float(torch.norm(torch.cat(flat_grads_v)))
+        do_norm_v = gradient_norm_v > self.grad_norm_threshold and self.normalize_grad
+        kv = self.grad_norm_threshold / gradient_norm_v if do_norm_v else 1.
+
         with torch.no_grad():
             for i in range(len(self.z_critic)):
                 self.z_critic[i].data.copy_(
-                        self.lam_critic * self.z_critic[i] + grads_v[i]
+                        self.lam_critic * self.z_critic[i] + (kv * grads_v[i])
                 )
 
         # --- Update Actor ETs --- #
@@ -2557,33 +2593,32 @@ class ACWithEligibilityTracesContinuousActionContinuingTask(
             retain_graph=False
         )
 
+        flat_grads_pi = [g.flatten() for g in grads_pi]
+        gradient_norm_pi = float(torch.norm(torch.cat(flat_grads_pi)))
+        do_norm_pi = gradient_norm_pi > self.grad_norm_threshold and self.normalize_grad
+        kpi = self.grad_norm_threshold / gradient_norm_pi if do_norm_pi else 1.
+
         with torch.no_grad():
             for i in range(len(self.z_actor)):
                 self.z_actor[i].data.copy_(
-                        self.lam_actor * self.z_actor[i] + grads_pi[i]
+                        self.lam_actor * self.z_actor[i] + (kpi * grads_pi[i])
                 )
 
         # ---- Update Critic --- #
-        for g in self.critic_optimizer.param_groups:
-            g['lr'] = alpha_critic
-
-        # self.critic_optimizer.zero_grad()
-        for z, w in zip(self.z_critic, self.critic.parameters()):
-            if w.grad is None:
-                w.grad = torch.zeros_like(z)
-            w.grad.data.copy_(-delta * z) # -grad because optimizer subtracts
-        self.critic_optimizer.step()
+        with torch.no_grad():
+            for z, w in zip(self.z_critic, self.critic.parameters()):
+                w += alpha_critic * delta * z
 
         # ---- Update Actor ---- #
-        for g in self.actor_optimizer.param_groups:
-            g['lr'] = alpha_actor
-
-        # self.actor_optimizer.zero_grad()
-        for z, th in zip(self.z_actor, self.actor.parameters()):
-            if th.grad is None:
-                th.grad = torch.zeros_like(z)
-            th.grad.data.copy_(-delta * z) # -grad because optimizer subtracts
-        self.actor_optimizer.step()
+        with torch.no_grad():
+            for z, th in zip(self.z_actor, self.actor.parameters()):
+                th += alpha_actor * delta * z
 
         self.t += 1
+
+        return dict(
+            estimated_avg_reward=float(self.R_bar.detach().cpu()),
+            td_error=to_native(delta),
+            agent_loss=0.5 * (gradient_norm_v + gradient_norm_pi)
+        )
 

@@ -59,12 +59,10 @@ def build_env(name: str, **kwargs) -> Env:
             render_mode="human" if render else None
         )
     elif 'LunarLander' in name:
-        continuous = kwargs.pop('continuous', False)
         enable_wind = kwargs.pop('enable_wind', False)
-
         env = gym.make(
             "LunarLander-v3",
-            continuous=continuous,
+            continuous=False,
             enable_wind=enable_wind,
             render_mode="human" if render else None
         )
@@ -186,9 +184,9 @@ def reinforce(
             "end"  : temp_end
         },
         hidden_dims=h,
-        norm_grad=True,
+        normalize_grad=True,
         normalize_input=False,
-        norm_threshold=1.,
+        grad_norm_threshold=1.,
         update_coefficient_builder=update_coefficient_builder,
     )
 
@@ -343,9 +341,9 @@ def reinforce_with_baseline(
             "end"  : temp_end
         },
         hidden_dims=h,
-        norm_grad=True,
+        normalize_grad=True,
         normalize_input=False,
-        norm_threshold=1.,
+        grad_norm_threshold=1.,
         update_coefficient_actor_builder=update_coefficient_builder,
         update_coefficient_critic_builder=update_coefficient_builder,
     )
@@ -509,8 +507,8 @@ def one_step_ac(
         },
         hidden_dims=h,
         normalize_input=False,
-        norm_grad=True,
-        norm_threshold=1.,
+        normalize_grad=True,
+        grad_norm_threshold=1.,
         update_coefficient_actor_builder=update_coefficient_builder,
         update_coefficient_critic_builder=update_coefficient_builder,
     )
@@ -667,8 +665,8 @@ def ac_with_eligibility_traces(
         },
         hidden_dims=h,
         normalize_input=False,
-        norm_grad=True,
-        norm_threshold=1.,
+        normalize_grad=True,
+        grad_norm_threshold=1.,
         update_coefficient_actor_builder=update_coefficient_builder,
         update_coefficient_critic_builder=update_coefficient_builder,
     )

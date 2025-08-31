@@ -177,8 +177,8 @@ def ac_with_eligibility_traces(
         },
         hidden_dims=h,
         normalize_input=False,
-        norm_grad=False,
-        norm_threshold=1.,
+        normalize_grad=False,
+        grad_norm_threshold=1.,
         update_coefficient_actor_builder=build_linear_sched,
         update_coefficient_critic_builder=build_linear_sched,
         update_coefficient_avg_reward_builder=build_linear_sched,
@@ -333,6 +333,7 @@ if __name__ == '__main__':
     experiment_fns = [ac_with_eligibility_traces]
 
     for env in ['Acrobot']:
+
         ENV_NAME = env
 
         (
@@ -350,7 +351,7 @@ if __name__ == '__main__':
                 evaluate_frequency=evaluate_frequency
             )
 
-            exit(0)
+    exit(0)
 
 
 

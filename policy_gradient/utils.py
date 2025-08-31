@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Union, Optional
+from typing import Tuple, Union, Optional, List
 import numpy as np
 
 import torch
@@ -103,10 +103,16 @@ class ContinuousActionAgent:
     def __init__(
             self,
             feature_size: int,
-            action_size: int
+            action_size: int,
+            action_mins: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
+            action_maxs: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
     ):
         self.feature_size = feature_size
         self.action_size = action_size
+        self.action_mins = action_mins
+        self.action_maxs = action_maxs
 
     def act(self, s) -> Tuple[int, float]:
         """ Return the action and probability """
@@ -128,11 +134,18 @@ class ContinuousActionSoftPolicy(ContinuousActionAgent, SoftPolicy):
             state_size: int,
             action_size: int,
             discount: float,
+            action_mins: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
+            action_maxs: Optional[
+                Union[Tuple[float, ...], List[float]]] = None,
             seed: Optional[int] = None
     ):
         super().__init__(
             feature_size=state_size,
-            action_size=action_size)
+            action_size=action_size,
+            action_mins=action_mins,
+            action_maxs=action_maxs
+        )
 
         self.discount = discount
         self.rng = np.random.default_rng(seed)

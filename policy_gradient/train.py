@@ -1076,7 +1076,6 @@ def evaluate_single_seed_continuing(
 
     raw_rewards = []
     shaped_rewards = []
-    action_counts = Counter()
 
     for t in range(eval_max_steps):
         action, _ = (
@@ -1084,7 +1083,6 @@ def evaluate_single_seed_continuing(
             if greedy_eval
             else agent.act(state)
         )
-        action_counts.update([action])
 
         next_state, raw_reward, terminated, truncated, info = env.step(action)
         raw_rewards.append(raw_reward)
@@ -1112,8 +1110,7 @@ def evaluate_single_seed_continuing(
         "total_steps"        : len(raw_rewards),
         "mean_raw_reward"    : np.mean(raw_rewards) if raw_rewards else 0,
         "mean_shaped_rewards": np.mean(
-            shaped_rewards) if shaped_rewards else 0,
-        "action_distribution": dict(action_counts),
+            shaped_rewards) if shaped_rewards else 0
     }
 
 
@@ -1428,6 +1425,7 @@ def sequential_train_continuing(
         except Exception as e:
             print(f"\n!!!!!! ERROR: Continuing training failed for seed {seed} !!!!!!")
             print(f"Exception: {e}\n")
+            # raise e
             import traceback
             traceback.print_exc()
             continue

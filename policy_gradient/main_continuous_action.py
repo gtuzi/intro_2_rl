@@ -446,8 +446,8 @@ def run_one_experiment(
         agent = ReinforceBaselineContinuousAction(
             state_size=state_size,
             action_size=action_size[0],
-            update_coefficient_baseline=alpha_builder(2 * alpha), # offset the loss division by 2
-            update_coefficient_policy=alpha_builder(alpha),
+            update_coefficient_critic=alpha_builder(2 * alpha), # offset the loss division by 2
+            update_coefficient_actor=alpha_builder(alpha),
             hidden_dims=(h,),
             discount=0.99
         )
@@ -780,8 +780,8 @@ def reinforce_baseline(
         agent = ReinforceBaselineContinuousAction(
             state_size=state_size,
             action_size=action_size[0],
-            update_coefficient_baseline=alpha_builder(2 * alpha),
-            update_coefficient_policy=alpha_builder(alpha),
+            update_coefficient_critic=alpha_builder(2 * alpha),
+            update_coefficient_actor=alpha_builder(alpha),
             hidden_dims=(h, ),
             discount=0.99
         )

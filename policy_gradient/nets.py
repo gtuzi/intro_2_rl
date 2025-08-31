@@ -1,11 +1,19 @@
 from typing import Union, List, Tuple, Optional
+
+import numpy as np
 import torch
 from torch import nn
 
 import torch.nn.init as init
 import torch.nn.functional as F
 from torch.distributions import (
-    Categorical, Normal)
+    Categorical,
+    Normal,
+    TanhTransform,
+    AffineTransform,
+    ComposeTransform,
+    TransformedDistribution
+)
 
 
 Tensor = torch.Tensor
@@ -188,7 +196,7 @@ class DiscreteActionPolicyMLP(nn.Module):
 
     def prob_sa(self, x: Tensor, a: Tensor, temperature: float = 1.):
         """
-            a values $\in$ [0, num_actions)
+            a values in [0, num_actions)
         """
         ps = self.prob_s(x, temperature)
         if a.ndim == 1:
@@ -274,21 +282,6 @@ class ContinuousActionPolicy(nn.Module):
         self.scale = None
         self._build_net()
 
-    # def _build_net(self, backbone=None):
-    #     if backbone is None:
-    #         self.net = Backbone(
-    #             in_size=self.in_size,
-    #             hidden_dims=self.hidden_dims,
-    #             out_size=self.in_size,
-    #             normalize_input=self.normalize_input
-    #         )
-    #     else:
-    #         assert backbone.out_size == self.action_size
-    #         self.net = backbone
-    #
-    #     self.loc = nn.Linear(self.in_size, self.action_size)
-    #     self.scale = nn.Linear(self.in_size, self.action_size)
-
     def _build_net(self, backbone=None):
         if backbone is None:
 
@@ -327,7 +320,7 @@ class ContinuousActionPolicy(nn.Module):
         return self.pd(s).log_prob(a)
 
     def entropy(self, s: Tensor):
-        return self.pd(s).entropy()
+        raise NotImplementedError
 
     def sample(self, s: Tensor, differentiable=False):
         pd = self.pd(s)
@@ -343,11 +336,74 @@ class ContinuousActionPolicy(nn.Module):
 
 
 class GaussianPolicy(ContinuousActionPolicy):
+
+    def __init__(
+            self,
+            in_size: int,
+            action_size: int,
+            action_mins: Tuple[float, ...] = None,
+            action_maxs: Tuple[float, ...] = None,
+            hidden_dims: Optional[Union[int, List, Tuple]] = None,
+            normalize_input: bool = False
+    ):
+        super(GaussianPolicy, self).__init__(
+            in_size=in_size,
+            action_size=action_size,
+            hidden_dims=hidden_dims,
+            normalize_input=normalize_input
+        )
+
+        self.action_mins = action_mins
+        self.action_maxs = action_maxs
+
+        if (self.action_mins is not None) or (self.action_maxs is not None):
+            assert self.action_mins is not None
+            assert self.action_maxs is not None
+            assert len(self.action_mins) == len(self.action_maxs)
+
+            scales = [
+                (mx - mi) / 2
+                for mi, mx in zip(self.action_mins, self.action_maxs)
+            ]
+
+            biases = [
+                (mx + mi) / 2
+                for mi, mx in zip(self.action_mins, self.action_maxs)
+            ]
+
+            # Calculate the scale and shift needed to
+            # map [-1, 1] to [low, high]
+            self.action_scale = torch.tensor(scales, dtype=torch.float32)
+            self.action_bias = torch.tensor(biases, dtype=torch.float32)
+
+
     def pd(self, s: Tensor):
         res = self.forward(s)
         mu, sig = res[..., :self.action_size], res[..., self.action_size:]
         pd = Normal(mu, sig)
-        return pd
+
+        if (self.action_mins is not None) and (self.action_maxs is not None):
+
+            transforms = [
+                # First, squash the output to the [-1, 1] range
+                TanhTransform(cache_size=1),
+                # Second, apply scaling and shifting to match the environment's action space
+                AffineTransform(
+                    loc=self.action_bias,
+                    scale=self.action_scale,
+                    cache_size=1)
+            ]
+
+            return TransformedDistribution(pd, transforms)
+        else:
+            return pd
+
+    def entropy(self, s: Tensor):
+        """Returns the entropy of the base (pre-squashed) distribution."""
+        res = self.forward(s)
+        mu, sig = res[..., :self.action_size], res[..., self.action_size:]
+        pd = Normal(mu, sig)
+        return pd.entropy()
 
     def greedy_action(self, s: Tensor):
         return self.mean(s)
@@ -356,15 +412,35 @@ class GaussianPolicy(ContinuousActionPolicy):
         res = self.forward(s)
         mu, sig = res[..., :self.action_size], res[..., self.action_size:]
         pd = Normal(mu, sig)
-        return mu, torch.exp(pd.log_prob(mu))
+
+        if (self.action_mins is not None) and (self.action_maxs is not None):
+
+            # Transform and shift accordingly
+            greedy_action = torch.tanh(
+                mu) * self.action_scale + self.action_bias
+
+            # The probability of the greedy action is not a well-defined
+            return greedy_action, None
+        else:
+            return mu, torch.exp(pd.log_prob(mu))
 
     def sigma(self, s: Tensor):
         res = self.forward(s)
-        sig = res[..., self.action_size:]
-        return sig
+        # Return the sigma of the base distribution
+        # regardless of transformations
+        return res[..., self.action_size:]
 
     def forward(self, x: Tensor):
         mu = self.loc(x)
-        sig = torch.exp(self.scale(x))
+        # Technically exp() is needed here. But it's unstable to learn with
+        # as it can swing pretty wildly, if the outputs of self.scale vary
+        # a lot, causing wild swings accross gradients.
+        sig = F.softplus(self.scale(x)) + 1e-6
+
+        assert not torch.isnan(mu).all()
+        assert not torch.isinf(mu).all()
+        assert not torch.isinf(sig).all()
+        assert not torch.isnan(sig).all()
+
         return torch.cat([mu, sig], dim=-1)
 

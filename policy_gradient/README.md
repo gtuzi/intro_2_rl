@@ -17,8 +17,10 @@
 - [Experiments](#experiments)
   - [Environments](#environments-)
   - [Reward Shaping](#reward-shaping)
-  - [Episodic Results](#episodic-results)
-  - [Continuing Task Results](#continuing-task-results)
+  - [Discrete-Action, Episodic Results](#discrete-action---episodic-results)
+  - [Discrete Action, Continuing Task Results](#discrete-action---continuing-task-results)
+  - [Continuous Action, Episodic Results](#continuous-action---episodic-results)
+  - [Continuous Action, Continuing Task Results](#continuous-action---continuing-task-results)
 
 
 ## Introduction
@@ -47,8 +49,8 @@ critic the state or (most often) action value function.
 - [x] Actor Critic with Eligibility Traces, Continuing Task: `agents/ACWithEligibilityTracesContinuing`
 - [x] REINFORCE for Continuous Action: `agents/ReinforceContinuousAction`
 - [x] REINFORCE with Baseline for Continuous Action: `agents/ReinforceBaselineContinuousAction`
-- [x] Actor Critic with Eligibility Traces for Continuous Action: `agents/ACWithEligibilityTracesContinuousAction`
-- [x] Actor Critic with Eligibility Traces for Continuous Action, Continuous Task: `agents/ACWithEligibilityTracesContinuousActionContinuingTask`
+- [x] Actor-Critic with Eligibility Traces for Continuous Action: `agents/ACWithEligibilityTracesContinuousAction`
+- [x] Actor-Critic with Eligibility Traces for Continuous Action, Continuing Task: `agents/ACWithEligibilityTracesContinuousActionContinuingTask`
 
 
 ## Explanations, Development, and Experimental Details
@@ -239,7 +241,7 @@ def acrobot_reward_shaper(reward: float, state: np.ndarray, **kwargs) -> float:
 ```
 
 
-### Episodic Results
+### Discrete Action - Episodic Results
 
 #### Performance Evaluation
 
@@ -347,7 +349,7 @@ expected values in $V$
 | Acrobot     | <img src="images/learning/ACEligTrace/Acrobot_value_accuracy_JOINT.png" alt="Grid" width="400"/>     | <img src="images/training_metrics/ACEligTrace/Acrobot_mean_behavioral_loss.png" alt="Grid" width="400"/>     |
 
 
-### Continuing Task Results
+### Discrete Action - Continuing Task Results
 
 The concepts of hard and soft evaluation from the episodic case are carried
 over for the continuing task. For the continuing task we are interested 
@@ -389,18 +391,50 @@ Here the learned expected reward is compared against the actual shaped reward.
 | Acrobot     | <img src="images/evaluation_metrics/ACwEligTraceContinuing/Acrobot_mean_hard_eval_mean_raw_reward.png" alt="Grid" width="400"/> |
 
 
-### Continuous Action Results
+### Continuous Action - Episodic Results
 
 The following algorithms were adopted for continuous action policies. The 
-environment used here was the continuous action [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car_continuous/)
+environments used here are the continuous action [MountainCar](https://gymnasium.farama.org/environments/classic_control/mountain_car_continuous/)
+and [Pendulum](https://gymnasium.farama.org/environments/classic_control/pendulum/)
 
 
-| Algorithm                              | TBD | 
-|----------------------------------------|-----|
-| Episodic: REINFORCE                    |     |
-| Episodic: REINFORCE with Baseline      |     |
-| Episodic: AC with Eligibility Traces   |     |
-| Continuing: AC with Eligibility Traces |     |
+#### REINFORCE
 
-For the REINFORCE algorithms, the return was mean-centered, as it significantly
-improved learning.
+| Environment | $\bar{R}_{0, h}$                                                                                                                         | $\bar{G}_{0, h}$                                                                                                            | 
+|-------------|------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------| 
+| MountainCar | <img src="images/evaluation_metrics/reinforce_continuous_action/MountainCar_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforce_continuous_action/MountainCar_mean_hard_eval_G0.png" alt="Grid" width="400"/> |
+| Pendulum    | <img src="images/evaluation_metrics/reinforce_continuous_action/Pendulum_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/reinforce_continuous_action/Pendulum_mean_hard_eval_G0.png" alt="Grid" width="400"/>    |
+
+
+#### REINFORCE with Baseline
+
+| Environment | $\bar{R}_{0, h}$                                                                                                                                 | $\bar{G}_{0, h}$                                                                                                                    | 
+|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------| 
+| MountainCar | <img src="images/evaluation_metrics/reinforcebaseline_continuous_action/MountainCar_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/reinforcebaseline_continuous_action/MountainCar_mean_hard_eval_G0.png" alt="Grid" width="400"/> |
+| Pendulum    | <img src="images/evaluation_metrics/reinforcebaseline_continuous_action/Pendulum_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/reinforcebaseline_continuous_action/Pendulum_mean_hard_eval_G0.png" alt="Grid" width="400"/>    |
+
+
+#### ActorCritic with Eligibility Traces
+
+| Environment | $\bar{R}_{0, h}$                                                                                                                                 | $\bar{G}_{0, h}$                                                                                                                    | 
+|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------| 
+| MountainCar | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action/MountainCar_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action/MountainCar_mean_hard_eval_G0.png" alt="Grid" width="400"/> |
+| Pendulum    | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action/Pendulum_mean_hard_eval_sum_raw_rewards.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action/Pendulum_mean_hard_eval_G0.png" alt="Grid" width="400"/>    |
+
+
+
+#### Continuous Action - Continuing Task Results
+
+#### ActorCritic with Eligibility Traces
+
+| Environment | $\bar{R}_h$                                                                                                                                            | $\bar{G}_{h}$                                                                                                                                              | 
+|-------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| MountainCar | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action_continuing/MountainCar_mean_hard_eval_mean_raw_reward.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action_continuing/MountainCar_mean_hard_eval_mean_shaped_rewards.png" alt="Grid" width="400"/> |
+| Pendulum    | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action_continuing/Pendulum_mean_hard_eval_mean_raw_reward.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action_continuing/Pendulum_mean_hard_eval_mean_shaped_rewards.png" alt="Grid" width="400"/>    |
+
+
+## Run Simulations
+* Discrete-action, episodic: `main_discrete_action_episodic.py`
+* Discrete-action, continuing task: `main_discrete_action_continuing.py`
+* Continuous-action, episodic: `main_continuous_action_episodic.py`
+* Continuous-action, continuing task: `main_continuous_action_continuing.py`
