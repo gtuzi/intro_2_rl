@@ -423,7 +423,7 @@ and [Pendulum](https://gymnasium.farama.org/environments/classic_control/pendulu
 
 
 
-#### Continuous Action - Continuing Task Results
+### Continuous Action - Continuing Task Results
 
 #### ActorCritic with Eligibility Traces
 
@@ -432,6 +432,8 @@ and [Pendulum](https://gymnasium.farama.org/environments/classic_control/pendulu
 | MountainCar | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action_continuing/MountainCar_mean_hard_eval_mean_raw_reward.png" alt="Grid" width="400"/> | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action_continuing/MountainCar_mean_hard_eval_mean_shaped_rewards.png" alt="Grid" width="400"/> |
 | Pendulum    | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action_continuing/Pendulum_mean_hard_eval_mean_raw_reward.png" alt="Grid" width="400"/>    | <img src="images/evaluation_metrics/ACwEligTrace_continuous_action_continuing/Pendulum_mean_hard_eval_mean_shaped_rewards.png" alt="Grid" width="400"/>    |
 
+
+---
 
 ## Run Simulations
 * Discrete-action, episodic: `main_discrete_action_episodic.py`

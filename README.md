@@ -46,89 +46,96 @@ across environments.
 ```
 intro_2_rl/
 │
-├── README.md                       # Project documentation
+├── README.md                                       # Project documentation
 │
-├── LICENSE.md                      # Project license (MIT)
+├── LICENSE.md                                      # Project license (MIT)
 │
-├── bandits/                        # The multi-armed bandit setting
-│   ├── eps_greedy_main.py          # Epsilon greedy methods experiments
-│   ├── gradient_main.py            # Gradient methods experiments
-│   ├── ucb_main.py                 # UCB1 methods experiments
-│   ├── addt'l_alg'os_main.py       # S-max exploration, Bernoully-Greedy, Thompson Sampling
-│   ├── utils.py                    # Utilities
-│   ├── non-assoc'_val'_funct's.py  # Non-associative setting action value functions
-│   ├── non-assoc'_policies.py      # Policies for the non-associative setting
-│   ├── summary.ipynb               # Theoretical development (better equation rendering).
+├── bandits/                                        # The multi-armed bandit setting
+│   ├── eps_greedy_main.py                          # Epsilon greedy methods experiments
+│   ├── gradient_main.py                            # Gradient methods experiments
+│   ├── ucb_main.py                                 # UCB1 methods experiments
+│   ├── addt'l_alg'os_main.py                       # S-max exploration, Bernoully-Greedy, Thompson Sampling
+│   ├── utils.py                                    # Utilities
+│   ├── non-assoc'_val'_funct's.py                  # Non-associative setting action value functions
+│   ├── non-assoc'_policies.py                      # Policies for the non-associative setting
+│   ├── summary.ipynb                               # Theoretical development (better equation rendering).
 │   │
 │   ├── tools/
-│   │   ├── random_walks.py         # Random walks
-│   │   └── moving_averages.py      # Average estimators
+│   │   ├── random_walks.py                         # Random walks
+│   │   └── moving_averages.py                      # Average estimators
 │   │
 │   └── environments/
-│       ├── binary_reward_testbed.py# k-armed bandits generating success/failure rewards
-│       └── cont'_reward_testbed.py # k-armed bandits generating continuous value rewards
+│       ├── binary_reward_testbed.py                # k-armed bandits generating success/failure rewards
+│       └── cont'_reward_testbed.py                 # k-armed bandits generating continuous value rewards
 │
 │
-├── tabular_methods/                # Tabular methods directory
-│   ├── monte_carlo/                # Source code for Monte Carlo (MC) methods
-│   │   ├── agents.py               # Algorithms from: Ch.5
-│   │   ├── main.py                 # Main execution script.
-│   │   ├── summary.ipynb           # Theoretical development (better rendering).
-│   │   └── README.md               # Detailed information
+├── tabular_methods/                                # Tabular methods directory
+│   ├── monte_carlo/                                # Source code for Monte Carlo (MC) methods
+│   │   ├── agents.py                               # Algorithms from: Ch.5
+│   │   ├── main.py                                 # Main script for running experiments.
+│   │   ├── summary.ipynb                           # Theoretical development (better rendering).
+│   │   └── README.md                               # Detailed information
 │   │
-│   ├── td/                         # Source code for Temporal Difference (TD) & nStep bootstrapping methods
-│   │   ├── agents.py               # Algorithms from: Ch.6,7
-│   │   ├── main.py                 # Main execution script
-│   │   ├── summary.ipynb           # Theoretical development (better rendering).
-│   │   └── README.md               # Detailed information
+│   ├── td/                                         # Source code for Temporal Difference (TD) & nStep bootstrapping methods
+│   │   ├── agents.py                               # Algorithms from: Ch.6,7
+│   │   ├── main.py                                 # Main script for running experiments.
+│   │   ├── summary.ipynb                           # Theoretical development (better rendering).
+│   │   └── README.md                               # Detailed information
 │   │
-│   ├── planning/                   # Source code for Planning and Learning methods
-│   │   ├── agents.py               # Algorithms from: Ch.8
-│   │   ├── main.py                 # Main execution script
-│   │   ├── envMaze.py              # DynaMaze environment
-│   │   ├── rl_glue.py              # Imported library for DynaMaze environment
-│   │   └── README.md               # Main landing page. Overview
+│   ├── planning/                                   # Source code for Planning and Learning methods
+│   │   ├── agents.py                               # Algorithms from: Ch.8
+│   │   ├── main.py                                 # Main execution script
+│   │   ├── envMaze.py                              # DynaMaze environment
+│   │   ├── rl_glue.py                              # Imported library for DynaMaze environment
+│   │   └── README.md                               # Main landing page. Overview
 │   │
-│   └── utils.py                    # Base agents, utilities
+│   ├── train.py                                    # Train and evaluation loops for tabular learning methods
+│   ├── plot.py                                     # Plotting results of tabular learning
+│   └── utils.py                                    # Base agents, utilities
 │
 │
-├── approximate_methods/            # Approximate methods directory
-│   ├── off_policy/                 # Source code for off_policy methods (initial implementation. Needs debugging)
-│   │   ├── bairds.py               # Bairds counterexample, implemented examples. 
-│   │   └── summary.ipynb           # Theoretical development.
+├── approximate_methods/                            # Approximate methods directory
+│   ├── off_policy/                                 # Source code for off_policy methods (initial implementation. Needs debugging)
+│   │   ├── bairds.py                               # Bairds counterexample, implemented examples. 
+│   │   └── summary.ipynb                           # Theoretical development.
 │   │
-│   ├── on_policy/                  # Source code for on_policy methods
-│   │   ├── agents.py               # Algorithms from: Ch. 10
-│   │   ├── main.py                 # Main execution script.
-│   │   ├── summary.ipynb           # Theoretical development (better rendering).
-│   │   └── README.md               # Main landing page. Overview
+│   ├── on_policy/                                  # Source code for on_policy methods
+│   │   ├── agents.py                               # Algorithms from: Ch. 10
+│   │   ├── main.py                                 # Main execution script.
+│   │   ├── summary.ipynb                           # Theoretical development (better rendering).
+│   │   └── README.md                               # Main landing page. Overview
 │   │
-│   ├── eligibility_traces/         # Source code for on_policy methods
-│   │   ├── algorithms.py           # Algorithms shown in the random walk examples
-│   │   ├── random_walk_mrp.py      # Random walk environment.
-│   │   ├── examples.py             # Random walk examples runner.
-│   │   ├── agents.py               # Implementation of agents (eg. Sarsa).
-│   │   ├── main.py                 # Main running script of agents.
-│   │   ├── summary.ipynb           # Theoretical development (better rendering).
-│   │   └── README.md               # Main landing page. Overview
+│   ├── eligibility_traces/                         # Source code for on_policy methods
+│   │   ├── algorithms.py                           # Algorithms shown in the random walk examples
+│   │   ├── random_walk_mrp.py                      # Random walk environment.
+│   │   ├── examples.py                             # Random walk examples runner.
+│   │   ├── agents.py                               # Implementation of agents (eg. Sarsa).
+│   │   ├── main.py                                 # Main running script of agents.
+│   │   ├── summary.ipynb                           # Theoretical development (better rendering).
+│   │   └── README.md                               # Main landing page. Overview
 │   │
-│   ├── tiles3.py                   # Source code for tile-coding
-│   └── utils.py                    # Utilities
+│   ├── tiles3.py                                   # Source code for tile-coding
+│   └── utils.py                                    # Utilities
 │
 │
-├── policy_gradient/                # Policy gradient theory, methods, algo implementations
-│   ├── agents                      # Implementation of algorithms in agentic form
-│   ├── nets.py                     # Function approximators (PyTorch)
-│   ├── main_continuous_action.py   # Main running script for continuous action agents
-│   ├── main_discrete_action.py     # Main running script for discrete action agents
-│   ├── summary.ipynb               # Theoretical development
-│   └── README.md                   # Main landing page. Overview
+├── policy_gradient/                                # Policy gradient theory, methods, algo implementations
+│   ├── agents                                      # Implementation of algorithms in agentic form
+│   ├── nets.py                                     # Function approximators (PyTorch)
+│   ├── train.py                                    # Train and evaluation loops for PG learning
+│   ├── plot.py                                     # Result plotting
+│   ├── utils.py                                    # Utilities
+│   ├── main_continuous_action_continuing.py        # Main script for continuous action, continuing task experiments
+│   ├── main_continuous_action_episodic.py          # Main script for continuous action, episodic experiments
+│   ├── main_discrete_action_continuing.py          # Main script for discrete action, continuing task experiments
+│   ├── main_discrete_action_episodic.py            # Main script for discrete action, episodic experiments
+│   ├── summary.ipynb                               # Theoretical development
+│   └── README.md                                   # Main landing page. Overview
 │
 │
-├── shared/                         # Shared code directory
-│   └── utils.py                    # Schedules, samplers, experience 
+├── shared/                                         # Shared code directory
+│   └── utils.py                                    # Schedules, samplers, experience 
 │
-└── requirements.txt                # Python dependencies
+└── requirements.txt                                # Python dependencies
 
 ```
 
