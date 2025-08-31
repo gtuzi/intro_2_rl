@@ -15,7 +15,7 @@
 - [Policy Gradient for Continuing Problems](#policy-gradient-for-continuing-problems)
 - [Policy Parameterization for _Continuous Actions_](#policy-parameterization-for-_continuous-actions_)
 - [Experiments](#experiments)
-  - [Environments](#environments-)
+  - [Environments](#environments)
   - [Reward Shaping](#reward-shaping)
   - [Discrete-Action, Episodic Results](#discrete-action---episodic-results)
   - [Discrete Action, Continuing Task Results](#discrete-action---continuing-task-results)
@@ -190,7 +190,7 @@ were used, while 10 training seeds with 5 for evaluation were used for
 continuing task.
 
 
-### Environments 
+### Environments
 The gymnasium environments used for experiments are shown in the tables, for
 each algorithm. For the continuous task case, the episodic environment was 
 repurposed to run indefinitively by intercepting when the terminal state was
